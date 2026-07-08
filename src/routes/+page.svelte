@@ -1,6 +1,8 @@
 <script lang="ts">
   import { browser } from '$app/environment';
   import { onMount } from 'svelte';
+  import ToastContainer from '$lib/components/ui/ToastContainer.svelte';
+  import ConnectionStatus from '$lib/components/indicators/ConnectionStatus.svelte';
 
   // Dynamic imports resolved after mount
   let mounted = $state(false);
@@ -88,3 +90,6 @@
   {@const Conv = Conversation}
   <Conv />
 {/if}
+
+<ConnectionStatus />
+<ToastContainer />

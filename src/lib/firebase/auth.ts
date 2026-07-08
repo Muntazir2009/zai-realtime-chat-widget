@@ -1,14 +1,15 @@
 // ============================================================
 // Firebase Auth — thin wrapper, browser-only.
+// Fixed: onAuthStateChanged now awaits dynamic import.
 // ============================================================
 
 import { browser } from '$app/environment';
-import type { Auth, User, Unsubscribe } from 'firebase/auth';
+import type { User, Unsubscribe } from 'firebase/auth';
 import { getApp, getAuthInstance, isReady } from './config.js';
 
-let _signInWithCustomToken: (token: string) => Promise<any>;
-let _signOut: () => Promise<any>;
-let _onAuthStateChanged: (cb: (user: any) => void) => Unsubscribe;
+let _signInWithCustomToken: (auth: any, token: string) => Promise<any>;
+let _signOut: (auth: any) => Promise<any>;
+let _onAuthStateChanged: (auth: any, cb: (user: any) => void, ...args: any[]) => Unsubscribe;
 
 async function ensureLoaded() {
   if (_signInWithCustomToken) return;
@@ -41,12 +42,16 @@ export function currentUser(): User | null {
   return auth.currentUser;
 }
 
-export function onAuthStateChanged(cb: (user: User | null) => void): Unsubscribe {
+/**
+ * Subscribe to Firebase auth state changes.
+ * Now properly awaits the dynamic import before subscribing.
+ */
+export async function onAuthStateChanged(cb: (user: User | null) => void): Promise<Unsubscribe> {
   if (!browser) {
     cb(null);
     return () => {};
   }
-  // Synchronous dynamic import since the module is already loaded on client
+  await ensureLoaded();
   const auth = getAuthInstance();
-  return _onAuthStateChanged?.(cb) ?? (() => {});
+  return _onAuthStateChanged(auth, cb);
 }

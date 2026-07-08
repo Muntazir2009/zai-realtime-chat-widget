@@ -1,19 +1,24 @@
 <script lang="ts">
   import { ChevronLeft, MoreVertical, Phone, Video, Clock, Image as ImageIcon } from 'lucide-svelte';
   import MessageBubble from './MessageBubble.svelte';
+  import MessageContextMenu from './MessageContextMenu.svelte';
   import InputBar from './InputBar.svelte';
   import ReplyPreview from './ReplyPreview.svelte';
+  import ScrollToBottom from './ScrollToBottom.svelte';
   import TypingIndicator from '$lib/components/indicators/TypingIndicator.svelte';
   import Avatar from '$lib/components/ui/Avatar.svelte';
   import OnlinePill from '$lib/components/indicators/OnlinePill.svelte';
-  import BottomSheet from '$lib/components/ui/BottomSheet.svelte';
   import { chatStore } from '$lib/stores/chat.svelte';
   import { uiStore } from '$lib/stores/ui.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
-  import { format, isToday, isYesterday, isSameDay, startOfDay } from 'date-fns';
+  import { toastStore } from '$lib/stores/toast.svelte';
+  import type { Message } from '$lib/types/index';
+  import { format, isToday, isYesterday, startOfDay } from 'date-fns';
 
   let messagesContainer: HTMLDivElement | undefined = $state();
   let showMenu = $state(false);
+  let contextMenuMsg: Message | null = $state(null);
+  let showContextMenu = $state(false);
 
   // Derived: the "other" user in this direct chat
   let otherUser = $derived.by(() => {
@@ -84,16 +89,35 @@
 
   async function handleImageSend(imageUrl: string) {
     if (!chatStore.activeChatId) return;
-    // Send as image message
     await chatStore.sendImageMessage(chatStore.activeChatId, imageUrl);
   }
 
-  function handleReply(msg: any) {
+  function handleReply(msg: Message) {
     uiStore.setReplyTo(msg);
+  }
+
+  function handleLongPress(msg: Message) {
+    contextMenuMsg = msg;
+    showContextMenu = true;
+  }
+
+  function handleCopyText(text: string) {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(() => {
+        toastStore.success('Copied to clipboard');
+      }).catch(() => {
+        toastStore.error('Failed to copy');
+      });
+    }
+  }
+
+  function handleDeleteMessage(msg: Message) {
+    // For now, just show a toast. Full delete requires RTDB remove.
+    toastStore.info('Message deletion coming soon');
   }
 </script>
 
-<div class="flex flex-col h-full" style="background-color: var(--bg-page);">
+<div class="flex flex-col h-full relative" style="background-color: var(--bg-page);">
   <!-- Header -->
   <header class="glass-header safe-top flex items-center gap-3 px-3" style="height: 60px; min-height: 60px; z-index: 50;">
     <!-- Back -->
@@ -148,7 +172,7 @@
   <!-- Messages -->
   <div
     bind:this={messagesContainer}
-    class="flex-1 overflow-y-auto custom-scrollbar px-4 py-3"
+    class="flex-1 overflow-y-auto custom-scrollbar px-4 py-3 relative"
   >
     {#if chatStore.messages.length === 0}
       <div class="flex flex-col items-center justify-center h-full animate-fade-in">
@@ -163,7 +187,7 @@
           {otherUser?.displayName || 'Start the conversation'}
         </p>
         <p class="text-sm text-center max-w-[240px] leading-relaxed" style="color: var(--text-tertiary);">
-          Say hello! Your messages are end-to-end secure.
+          Say hello! Messages are delivered in real time.
         </p>
       </div>
     {:else}
@@ -171,11 +195,7 @@
         <!-- Date Separator -->
         <div class="flex items-center justify-center my-4 animate-fade-in">
           <div class="flex items-center gap-2 px-3 py-1 rounded-full" style="background: var(--bg-elevated);">
-            {#if group.isToday || group.isYesterday}
-              <Clock size={12} style="color: var(--text-tertiary);" />
-            {:else}
-              <Clock size={12} style="color: var(--text-tertiary);" />
-            {/if}
+            <Clock size={12} style="color: var(--text-tertiary);" />
             <span class="text-[11px] font-medium" style="color: var(--text-tertiary);">
               {formatDateLabel(group.date, group.isToday, group.isYesterday)}
             </span>
@@ -187,13 +207,17 @@
           <MessageBubble
             {msg}
             isOwn={msg.sid === authStore.user?.id}
-            showAvatar={!msg.isOwn}
+            showAvatar={msg.sid !== authStore.user?.id}
             senderName={chatStore.userDict.get(msg.sid)?.displayName}
             onReply={handleReply}
+            onLongPress={handleLongPress}
           />
         {/each}
       {/each}
     {/if}
+
+    <!-- Scroll to bottom FAB -->
+    <ScrollToBottom messagesContainer={messagesContainer} />
   </div>
 
   <!-- Typing indicator -->
@@ -214,15 +238,31 @@
 
   <!-- Input Bar -->
   <InputBar onSend={handleSend} onImageSend={handleImageSend} />
+
+  <!-- Message Context Menu -->
+  {#if contextMenuMsg}
+    <MessageContextMenu
+      open={showContextMenu}
+      onClose={() => { showContextMenu = false; contextMenuMsg = null; }}
+      msg={contextMenuMsg}
+      isOwn={contextMenuMsg.sid === authStore.user?.id}
+      onReply={handleReply}
+      onCopy={handleCopyText}
+      onDelete={handleDeleteMessage}
+    />
+  {/if}
 </div>
 
 <!-- Menu Overlay -->
 {#if showMenu}
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="fixed inset-0 z-40 animate-fade-in"
     style="background: var(--overlay-bg);"
     onclick={() => (showMenu = false)}
+    onkeydown={(e) => e.key === 'Escape' && (showMenu = false)}
+    role="button"
+    tabindex="-1"
+    aria-label="Close menu"
   >
     <div class="absolute top-[68px] right-4 glass rounded-[var(--radius-lg)] py-1.5 animate-scale-in min-w-[180px]" style="z-index: 41;">
       <button

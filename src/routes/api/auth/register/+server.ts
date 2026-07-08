@@ -66,6 +66,9 @@ export async function POST({ request }: { request: Request }) {
     await set(dbRef(db, `users/${username}`), userData);
     await set(dbRef(db, `user_auth/${username}`), authData);
 
+    // Create user_index for fast reverse lookups (uid → username)
+    await set(dbRef(db, `user_index/${userId}`), username);
+
     const auth = getAdminAuth();
     const customToken = await auth.createCustomToken(userId, { username });
 

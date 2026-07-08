@@ -22,16 +22,6 @@ class AuthStore {
 
   constructor() {
     this.hydrate();
-
-    // Listen for Firebase auth state changes (handles token expiry etc.)
-    onAuthStateChanged((fbUser) => {
-      if (!fbUser && this.isAuthenticated) {
-        // Token expired or revoked
-        this.user = null;
-        this.token = null;
-        this.clearStorage();
-      }
-    });
   }
 
   /** Restore session from localStorage */
@@ -49,14 +39,21 @@ class AuthStore {
         this.token = storedToken;
         this.user = JSON.parse(storedUser) as User;
 
-        // Re-authenticate with Firebase
+        // Re-authenticate with Firebase (fire-and-forget, listen for result via onAuthStateChanged)
         signInWithCustomToken(storedToken)
           .then((fbUser) => {
             if (!fbUser) {
-              // Token is no longer valid
               this.clearStorage();
               this.user = null;
               this.token = null;
+            } else {
+              // Refresh token from Firebase
+              fbUser.getIdToken().then((newToken) => {
+                this.token = newToken;
+                if (typeof localStorage !== 'undefined') {
+                  localStorage.setItem(STORAGE_TOKEN_KEY, newToken);
+                }
+              }).catch(() => {});
             }
           })
           .catch(() => {
@@ -70,6 +67,16 @@ class AuthStore {
     }
 
     this.isLoading = false;
+
+    // Listen for Firebase auth state changes (handles token expiry etc.)
+    onAuthStateChanged((fbUser) => {
+      if (!fbUser && this.isAuthenticated) {
+        // Token expired or revoked
+        this.user = null;
+        this.token = null;
+        this.clearStorage();
+      }
+    });
   }
 
   async login(username: string, password: string): Promise<void> {

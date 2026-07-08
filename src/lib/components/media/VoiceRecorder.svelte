@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { Mic, X, Send } from 'lucide-svelte';
 
   interface Props {
@@ -64,9 +65,9 @@
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
       mediaRecorder.onstop = null; // prevent sending
       mediaRecorder.stop();
-      // Stop tracks
-      mediaRecorder.stream.getTracks().forEach((t) => t.stop());
     }
+    // Stop tracks via optional chaining — mediaRecorder may be null
+    mediaRecorder?.stream?.getTracks().forEach((t) => t.stop());
     isRecording = false;
     if (timerInterval) {
       clearInterval(timerInterval);
@@ -74,11 +75,13 @@
     }
     recordingTime = 0;
     audioChunks = [];
+    mediaRecorder = null;
     onCancel();
   }
 
-  $effect(() => {
-    if (!isRecording) return;
+  onMount(() => {
+    startRecording();
+
     return () => {
       // Cleanup on unmount
       if (timerInterval) clearInterval(timerInterval);
@@ -86,11 +89,6 @@
         mediaRecorder.stream.getTracks().forEach((t) => t.stop());
       }
     };
-  });
-
-  // Auto-start when mounted
-  $effect(() => {
-    startRecording();
   });
 </script>
 

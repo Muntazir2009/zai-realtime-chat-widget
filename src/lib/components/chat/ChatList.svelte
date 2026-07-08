@@ -157,7 +157,7 @@
               <p class="text-xs" style="color: var(--text-tertiary);">@{user.username}</p>
             </div>
           </button>
-        {:else if availableUsers.length === 0}
+        {:else}
           <div class="flex flex-col items-center py-6">
             <div class="w-10 h-10 rounded-full flex items-center justify-center mb-2" style="background: var(--input-bg);">
               <Search size={18} style="color: var(--text-tertiary);" />

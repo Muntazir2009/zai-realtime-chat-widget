@@ -5,18 +5,30 @@
 // thresholds and passive event listeners.
 // ============================================================
 
-import type { GestureState, SwipeDirection } from '$lib/types/index.js';
+import type { SwipeDirection, GestureState } from '$lib/types/index.js';
 
-/** Default configuration */
-const DEFAULT_MIN_DISTANCE = 50;    // px — minimum swipe distance
-const DEFAULT_MAX_DURATION = 500;   // ms — max time for a swipe gesture
-const DEFAULT_LONG_PRESS_MS = 500;  // ms — long press threshold
-const DEFAULT_VELOCITY_THRESHOLD = 0.3; // px/ms
-
-type SwipeCallback = (direction: SwipeDirection, state: GestureState) => void;
+type SwipeCallback = (direction: SwipeDirection, deltaX: number, deltaY: number) => void;
 type LongPressCallback = (x: number, y: number) => void;
 
 class GestureManager {
+  private element: HTMLElement | null = null;
+  private startX = 0;
+  private startY = 0;
+  private startTime = 0;
+  private longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  private longPressTriggered = false;
+  private isTracking = false;
+  private swipeCallbacks: SwipeCallback[] = [];
+  private longPressCallbacks: LongPressCallback[] = [];
+
+  private SWIPE_THRESHOLD = 50;
+  private LONG_PRESS_MS = 500;
+
+  private boundTouchStart: ((e: TouchEvent) => void) | null = null;
+  private boundTouchMove: ((e: TouchEvent) => void) | null = null;
+  private boundTouchEnd: ((e: TouchEvent) => void) | null = null;
+
+  /** Reactive gesture state for UI consumers */
   gestureState: GestureState = $state({
     isSwiping: false,
     direction: null,
@@ -25,65 +37,6 @@ class GestureManager {
     deltaX: 0,
     deltaY: 0,
   });
-
-  /** When true, vertical scroll is prevented during horizontal swipes */
-  preventVerticalScroll = $state(false);
-
-  private minDistance: number;
-  private maxDuration: number;
-  private longPressMs: number;
-  private velocityThreshold: number;
-
-  private swipeCallbacks: SwipeCallback[] = [];
-  private longPressCallbacks: LongPressCallback[] = [];
-
-  private startTime: number = 0;
-  private longPressTimer: ReturnType<typeof setTimeout> | null = null;
-  private longPressTriggered: boolean = false;
-  private touchActive: boolean = false;
-
-  private boundTouchStart: ((e: TouchEvent) => void) | null = null;
-  private boundTouchMove: ((e: TouchEvent) => void) | null = null;
-  private boundTouchEnd: ((e: TouchEvent) => void) | null = null;
-
-  constructor(options?: {
-    minDistance?: number;
-    maxDuration?: number;
-    longPressMs?: number;
-    velocityThreshold?: number;
-    preventVerticalScroll?: boolean;
-  }) {
-    this.minDistance = options?.minDistance ?? DEFAULT_MIN_DISTANCE;
-    this.maxDuration = options?.maxDuration ?? DEFAULT_MAX_DURATION;
-    this.longPressMs = options?.longPressMs ?? DEFAULT_LONG_PRESS_MS;
-    this.velocityThreshold = options?.velocityThreshold ?? DEFAULT_VELOCITY_THRESHOLD;
-    this.preventVerticalScroll = options?.preventVerticalScroll ?? false;
-  }
-
-  /** Attach gesture listeners to an element */
-  attach(element: HTMLElement): void {
-    this.boundTouchStart = (e: TouchEvent) => this.handleTouchStart(e);
-    this.boundTouchMove = (e: TouchEvent) => this.handleTouchMove(e);
-    this.boundTouchEnd = (e: TouchEvent) => this.handleTouchEnd(e);
-
-    element.addEventListener('touchstart', this.boundTouchStart, { passive: true });
-    element.addEventListener('touchmove', this.boundTouchMove, { passive: !this.preventVerticalScroll });
-    element.addEventListener('touchend', this.boundTouchEnd, { passive: true });
-  }
-
-  /** Detach gesture listeners */
-  detach(): void {
-    // We need a reference to the element — use document as fallback
-    if (this.boundTouchStart) {
-      document.removeEventListener('touchstart', this.boundTouchStart);
-      document.removeEventListener('touchmove', this.boundTouchMove);
-      document.removeEventListener('touchend', this.boundTouchEnd);
-      this.boundTouchStart = null;
-      this.boundTouchMove = null;
-      this.boundTouchEnd = null;
-    }
-    this.cancelLongPress();
-  }
 
   /** Register a swipe callback. Returns an unsubscribe function. */
   onSwipe(cb: SwipeCallback): () => void {
@@ -101,21 +54,51 @@ class GestureManager {
     };
   }
 
-  // ---- Handlers ----
+  /** Attach gesture listeners to an element */
+  attach(el: HTMLElement): void {
+    this.element = el;
+
+    this.boundTouchStart = (e: TouchEvent) => this.handleTouchStart(e);
+    this.boundTouchMove = (e: TouchEvent) => this.handleTouchMove(e);
+    this.boundTouchEnd = (e: TouchEvent) => this.handleTouchEnd(e);
+
+    el.addEventListener('touchstart', this.boundTouchStart, { passive: true });
+    el.addEventListener('touchmove', this.boundTouchMove, { passive: true });
+    el.addEventListener('touchend', this.boundTouchEnd, { passive: true });
+  }
+
+  /** Detach gesture listeners and cancel any pending timers */
+  detach(): void {
+    if (this.element && this.boundTouchStart) {
+      this.element.removeEventListener('touchstart', this.boundTouchStart);
+      this.element.removeEventListener('touchmove', this.boundTouchMove!);
+      this.element.removeEventListener('touchend', this.boundTouchEnd!);
+    }
+    this.element = null;
+    this.boundTouchStart = null;
+    this.boundTouchMove = null;
+    this.boundTouchEnd = null;
+    this.cancelLongPress();
+    this.isTracking = false;
+  }
+
+  // ---- Private handlers ----
 
   private handleTouchStart(e: TouchEvent): void {
     const touch = e.touches[0];
     if (!touch) return;
 
-    this.touchActive = true;
+    this.isTracking = true;
     this.longPressTriggered = false;
     this.startTime = Date.now();
+    this.startX = touch.clientX;
+    this.startY = touch.clientY;
 
     this.gestureState = {
       isSwiping: false,
       direction: null,
-      startX: touch.clientX,
-      startY: touch.clientY,
+      startX: this.startX,
+      startY: this.startY,
       deltaX: 0,
       deltaY: 0,
     };
@@ -123,21 +106,21 @@ class GestureManager {
     // Start long-press timer
     this.cancelLongPress();
     this.longPressTimer = setTimeout(() => {
-      if (this.touchActive && !this.longPressTriggered) {
+      if (this.isTracking && !this.longPressTriggered) {
         this.longPressTriggered = true;
-        this.longPressCallbacks.forEach((cb) => cb(touch.clientX, touch.clientY));
+        this.longPressCallbacks.forEach((cb) => cb(this.startX, this.startY));
       }
-    }, this.longPressMs);
+    }, this.LONG_PRESS_MS);
   }
 
   private handleTouchMove(e: TouchEvent): void {
-    if (!this.touchActive) return;
+    if (!this.isTracking) return;
 
     const touch = e.touches[0];
     if (!touch) return;
 
-    const dx = touch.clientX - this.gestureState.startX;
-    const dy = touch.clientY - this.gestureState.startY;
+    const dx = touch.clientX - this.startX;
+    const dy = touch.clientY - this.startY;
 
     this.gestureState = {
       ...this.gestureState,
@@ -152,34 +135,22 @@ class GestureManager {
     if (distance > 10) {
       this.cancelLongPress();
     }
-
-    // Prevent vertical scroll if configured and swiping horizontally
-    if (this.preventVerticalScroll && this.gestureState.direction === 'left' || this.gestureState.direction === 'right') {
-      e.preventDefault();
-    }
   }
 
   private handleTouchEnd(_e: TouchEvent): void {
-    if (!this.touchActive) return;
-    this.touchActive = false;
+    if (!this.isTracking) return;
+    this.isTracking = false;
     this.cancelLongPress();
 
-    const elapsed = Date.now() - this.startTime;
     const dx = this.gestureState.deltaX;
     const dy = this.gestureState.deltaY;
     const distance = Math.sqrt(dx * dx + dy * dy);
-    const velocity = distance / elapsed;
 
     // Detect completed swipe
-    if (
-      !this.longPressTriggered &&
-      elapsed <= this.maxDuration &&
-      distance >= this.minDistance &&
-      velocity >= this.velocityThreshold
-    ) {
+    if (!this.longPressTriggered && distance >= this.SWIPE_THRESHOLD) {
       const direction = this.detectDirection(dx, dy);
       if (direction) {
-        this.swipeCallbacks.forEach((cb) => cb(direction, { ...this.gestureState }));
+        this.swipeCallbacks.forEach((cb) => cb(direction, dx, dy));
       }
     }
 
