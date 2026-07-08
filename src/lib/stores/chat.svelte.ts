@@ -345,6 +345,66 @@ class ChatStore {
     this.messages = [...this.messages, message].sort((a, b) => a.ts - b.ts);
   }
 
+  /** Send a voice message */
+  async sendVoiceMessage(chatId: string, voiceUrl: string, duration: number): Promise<void> {
+    const user = authStore.user;
+    if (!user) return;
+
+    const idempotencyKey = generateIdempotencyKey();
+    if (this.sentKeys.has(idempotencyKey)) return;
+    this.sentKeys.add(idempotencyKey);
+
+    const msgRef = rtdb.push(rtdb.ref(RTDB_PATHS.CHAT_MESSAGES(chatId)));
+    const messageId = msgRef.key ?? idempotencyKey;
+
+    const message: Message = {
+      id: messageId,
+      c: `🎙 Voice message (${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')})`,
+      sid: user.id,
+      t: 'voice',
+      ts: Date.now(),
+      rk: idempotencyKey,
+      rid: null,
+      mu: voiceUrl,
+      mh: null,
+      md: { duration },
+    };
+
+    const meta = this.chats.get(chatId);
+    const otherUid = meta?.participantIds.find((id) => id !== user.id);
+
+    const updates: Record<string, unknown> = {};
+    updates[RTDB_PATHS.CHAT_MESSAGES(chatId) + '/' + messageId] = message;
+    updates[RTDB_PATHS.CHAT_META(chatId)] = {
+      id: chatId,
+      type: 'direct',
+      participantIds: meta?.participantIds ?? [user.id],
+      lm: '🎙 Voice message',
+      ts: message.ts,
+      updatedAt: message.ts,
+    };
+    updates[RTDB_PATHS.USER_CHAT_ENTRY(user.id, chatId)] = {
+      chatId,
+      uid: user.id,
+      lrid: messageId,
+      uc: 0,
+      jt: Date.now(),
+    };
+    if (otherUid) {
+      const otherUC = this.userChats.get(chatId);
+      updates[RTDB_PATHS.USER_CHAT_ENTRY(otherUid, chatId)] = {
+        chatId,
+        uid: otherUid,
+        lrid: otherUC?.lrid ?? null,
+        uc: (otherUC?.uc ?? 0) + 1,
+        jt: otherUC?.jt ?? Date.now(),
+      };
+    }
+
+    await rtdb.update(rtdb.ref('/'), updates);
+    this.messages = [...this.messages, message].sort((a, b) => a.ts - b.ts);
+  }
+
   // ============================================================
   // Create direct chat
   // ============================================================
@@ -513,6 +573,11 @@ class ChatStore {
     const set = this.typingUsers.get(chatId);
     if (!set || set.size === 0) return [];
     return Array.from(set).map((uid) => this.userDict.get(uid)?.displayName ?? uid);
+  }
+
+  async deleteMessage(chatId: string, messageId: string): Promise<void> {
+    await rtdb.remove(rtdb.ref(RTDB_PATHS.CHAT_MESSAGES(chatId) + '/' + messageId));
+    this.messages = this.messages.filter((m) => m.id !== messageId);
   }
 }
 

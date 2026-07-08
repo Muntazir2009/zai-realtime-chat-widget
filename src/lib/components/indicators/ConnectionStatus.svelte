@@ -30,10 +30,10 @@
 </script>
 
 {#if state !== 'active' && iconComponent}
+  {@const Icon = iconComponent}
   <div class="conn-bar animate-fade-in safe-top" style="--bar-color: {barColor};">
     <div class="conn-bar__accent"></div>
     <span class="conn-bar__text">
-      {@const Icon = iconComponent}
       <Icon size={12} />
       {label}
     </span>

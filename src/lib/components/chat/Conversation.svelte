@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { ChevronLeft, MoreVertical, Phone, Video, Clock, Image as ImageIcon } from 'lucide-svelte';
+  import { ChevronLeft, MoreVertical, Phone, Video, Clock, Image as ImageIcon, Search, X } from 'lucide-svelte';
   import MessageBubble from './MessageBubble.svelte';
+  import Lightbox from '$lib/components/media/Lightbox.svelte';
   import MessageContextMenu from './MessageContextMenu.svelte';
   import InputBar from './InputBar.svelte';
   import ReplyPreview from './ReplyPreview.svelte';
@@ -19,6 +20,19 @@
   let showMenu = $state(false);
   let contextMenuMsg: Message | null = $state(null);
   let showContextMenu = $state(false);
+  let lightboxImages = $state<Array<{url: string; caption?: string}>>([]);
+  let lightboxIndex = $state(0);
+  let showLightbox = $state(false);
+  let showSearch = $state(false);
+  let messageSearchQuery = $state('');
+
+  let searchFilteredMessages = $derived.by(() => {
+    if (!messageSearchQuery.trim()) return null;
+    const q = messageSearchQuery.toLowerCase();
+    return chatStore.messages.filter(m =>
+      m.c?.toLowerCase().includes(q)
+    );
+  });
 
   // Derived: the "other" user in this direct chat
   let otherUser = $derived.by(() => {
@@ -111,9 +125,29 @@
     }
   }
 
-  function handleDeleteMessage(msg: Message) {
-    // For now, just show a toast. Full delete requires RTDB remove.
-    toastStore.info('Message deletion coming soon');
+  async function handleDeleteMessage(msg: Message) {
+    if (!chatStore.activeChatId) return;
+    try {
+      await chatStore.deleteMessage(chatStore.activeChatId, msg.id);
+      toastStore.success('Message deleted');
+    } catch (err) {
+      toastStore.error('Failed to delete message');
+    }
+  }
+
+  function handleImageTap(imageUrl: string, caption?: string) {
+    // Collect all image messages from the conversation
+    const imageMessages = chatStore.messages.filter(m => m.t === 'image' && m.mu);
+    lightboxImages = imageMessages.map(m => ({ url: m.mu!, caption: m.c || undefined }));
+    lightboxIndex = lightboxImages.findIndex(i => i.url === imageUrl);
+    if (lightboxIndex < 0) lightboxIndex = 0;
+    showLightbox = true;
+  }
+
+  function handleReaction(msg: Message, emoji: string) {
+    if (chatStore.activeChatId) {
+      chatStore.sendMessage(chatStore.activeChatId, emoji);
+    }
   }
 </script>
 
@@ -162,6 +196,14 @@
     <button
       class="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-[var(--radius-md)] transition-spring active:scale-90"
       style="color: var(--text-secondary);"
+      onclick={() => (showSearch = !showSearch)}
+      aria-label="Search messages"
+    >
+      <Search size={20} />
+    </button>
+    <button
+      class="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-[var(--radius-md)] transition-spring active:scale-90"
+      style="color: var(--text-secondary);"
       onclick={() => (showMenu = !showMenu)}
       aria-label="More options"
     >
@@ -169,51 +211,113 @@
     </button>
   </header>
 
+  {#if showSearch}
+    <div class="px-3 py-2 animate-slide-down" style="background: var(--glass-bg); border-bottom: 1px solid var(--border-subtle);">
+      <div class="relative">
+        <Search size={16} class="absolute left-3 top-1/2 -translate-y-1/2" style="color: var(--text-tertiary);" />
+        <input
+          type="text"
+          placeholder="Search messages..."
+          class="glass-input w-full min-h-[40px] pl-9 pr-10 rounded-[var(--radius-md)] outline-none text-sm"
+          style="color: var(--text-primary);"
+          value={messageSearchQuery}
+          oninput={(e) => messageSearchQuery = (e.target as HTMLInputElement).value}
+          autofocus
+        />
+        {#if messageSearchQuery}
+          <button
+            class="absolute right-2 top-1/2 -translate-y-1/2 min-w-[28px] min-h-[28px] flex items-center justify-center rounded-full"
+            style="color: var(--text-tertiary); background: var(--input-bg);"
+            onclick={() => { messageSearchQuery = ''; showSearch = false; }}
+            aria-label="Close search"
+          >
+            <X size={14} />
+          </button>
+        {/if}
+      </div>
+      {#if searchFilteredMessages !== null}
+        <p class="text-xs mt-1.5" style="color: var(--text-tertiary);">
+          {searchFilteredMessages.length} result{searchFilteredMessages.length !== 1 ? 's' : ''}
+        </p>
+      {/if}
+    </div>
+  {/if}
+
   <!-- Messages -->
   <div
     bind:this={messagesContainer}
     class="flex-1 overflow-y-auto custom-scrollbar px-4 py-3 relative"
   >
-    {#if chatStore.messages.length === 0}
-      <div class="flex flex-col items-center justify-center h-full animate-fade-in">
-        <div class="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style="background: linear-gradient(135deg, rgba(5, 150, 105, 0.1), rgba(16, 185, 129, 0.05));">
-          {#if otherUser}
-            <Avatar username={otherUser.username} size="lg" />
-          {:else}
-            <div class="w-14 h-14 rounded-full flex items-center justify-center font-bold text-white text-2xl" style="background: linear-gradient(135deg, #34d399, #059669);">?</div>
-          {/if}
-        </div>
-        <p class="text-sm font-semibold mb-1" style="color: var(--text-primary);">
-          {otherUser?.displayName || 'Start the conversation'}
-        </p>
-        <p class="text-sm text-center max-w-[240px] leading-relaxed" style="color: var(--text-tertiary);">
-          Say hello! Messages are delivered in real time.
-        </p>
-      </div>
-    {:else}
-      {#each messageGroups as group (group.date)}
-        <!-- Date Separator -->
-        <div class="flex items-center justify-center my-4 animate-fade-in">
-          <div class="flex items-center gap-2 px-3 py-1 rounded-full" style="background: var(--bg-elevated);">
-            <Clock size={12} style="color: var(--text-tertiary);" />
-            <span class="text-[11px] font-medium" style="color: var(--text-tertiary);">
-              {formatDateLabel(group.date, group.isToday, group.isYesterday)}
-            </span>
+    {#if searchFilteredMessages === null}
+      {#if chatStore.messages.length === 0}
+        <div class="flex flex-col items-center justify-center h-full animate-fade-in">
+          <div class="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style="background: linear-gradient(135deg, rgba(5, 150, 105, 0.1), rgba(16, 185, 129, 0.05));">
+            {#if otherUser}
+              <Avatar username={otherUser.username} size="lg" />
+            {:else}
+              <div class="w-14 h-14 rounded-full flex items-center justify-center font-bold text-white text-2xl" style="background: linear-gradient(135deg, #34d399, #059669);">?</div>
+            {/if}
           </div>
+          <p class="text-sm font-semibold mb-1" style="color: var(--text-primary);">
+            {otherUser?.displayName || 'Start the conversation'}
+          </p>
+          <p class="text-sm text-center max-w-[240px] leading-relaxed" style="color: var(--text-tertiary);">
+            Say hello! Messages are delivered in real time.
+          </p>
         </div>
+      {:else}
+        {#each messageGroups as group (group.date)}
+          <!-- Date Separator -->
+          <div class="flex items-center justify-center my-4 animate-fade-in">
+            <div class="flex items-center gap-2 px-3 py-1 rounded-full" style="background: var(--bg-elevated);">
+              <Clock size={12} style="color: var(--text-tertiary);" />
+              <span class="text-[11px] font-medium" style="color: var(--text-tertiary);">
+                {formatDateLabel(group.date, group.isToday, group.isYesterday)}
+              </span>
+            </div>
+          </div>
 
-        <!-- Messages in this date group -->
-        {#each group.messages as msg (msg.id)}
+          <!-- Messages in this date group -->
+          {#each group.messages as msg, idx (msg.id)}
+            {@const prevMsg = idx > 0 ? group.messages[idx - 1] : null}
+            {@const nextMsg = idx < group.messages.length - 1 ? group.messages[idx + 1] : null}
+            {@const isConsecutive = prevMsg?.sid === msg.sid}
+            {@const isLastInGroup = nextMsg?.sid !== msg.sid}
+            {@const showAv = !isOwn && isLastInGroup}
+            <MessageBubble
+              {msg}
+              isOwn={msg.sid === authStore.user?.id}
+              showAvatar={showAv}
+              senderName={chatStore.userDict.get(msg.sid)?.displayName}
+              onReply={handleReply}
+              onLongPress={handleLongPress}
+              onImageTap={handleImageTap}
+              onReaction={handleReaction}
+              isGrouped={isConsecutive}
+            />
+          {/each}
+        {/each}
+      {/if}
+    {:else}
+      <!-- Search results -->
+      <div class="px-4 py-3">
+        {#each searchFilteredMessages as msg (msg.id)}
           <MessageBubble
             {msg}
             isOwn={msg.sid === authStore.user?.id}
-            showAvatar={msg.sid !== authStore.user?.id}
+            showAvatar={true}
             senderName={chatStore.userDict.get(msg.sid)?.displayName}
             onReply={handleReply}
             onLongPress={handleLongPress}
+            onImageTap={handleImageTap}
+            onReaction={handleReaction}
           />
+        {:else}
+          <div class="flex flex-col items-center py-12 animate-fade-in">
+            <p class="text-sm" style="color: var(--text-tertiary);">No messages found</p>
+          </div>
         {/each}
-      {/each}
+      </div>
     {/if}
 
     <!-- Scroll to bottom FAB -->
@@ -238,6 +342,15 @@
 
   <!-- Input Bar -->
   <InputBar onSend={handleSend} onImageSend={handleImageSend} />
+
+  <!-- Lightbox -->
+  {#if showLightbox && lightboxImages.length > 0}
+    <Lightbox
+      images={lightboxImages}
+      initialIndex={lightboxIndex}
+      onClose={() => (showLightbox = false)}
+    />
+  {/if}
 
   <!-- Message Context Menu -->
   {#if contextMenuMsg}

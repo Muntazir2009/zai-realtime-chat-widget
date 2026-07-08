@@ -17,6 +17,7 @@
   let isRecording = $state(false);
   let isUploading = $state(false);
   let uploadProgress = $state(0);
+  let uploadLabel = $state('Uploading...');
   let textareaEl: HTMLTextAreaElement | null = $state(null);
   let typingTimer: ReturnType<typeof setTimeout> | null = null;
   let fileInputEl: HTMLInputElement | null = $state(null);
@@ -71,9 +72,34 @@
     isRecording = false;
   }
 
-  async function sendVoice(_blob: Blob, _duration: number) {
+  async function sendVoice(blob: Blob, duration: number) {
     isRecording = false;
-    // TODO: Upload voice blob to R2 and send message with type 'voice'
+    if (!chatStore.activeChatId || duration < 1) return;
+
+    // Create a File from the blob
+    const file = new File([blob], `voice-${Date.now()}.webm`, { type: 'audio/webm' });
+
+    isUploading = true;
+    uploadProgress = 0;
+    uploadLabel = 'Sending voice message...';
+
+    try {
+      // 1. Get presigned URL
+      const presign = await requestPresignedUpload(chatStore.activeChatId, file, 'voice');
+
+      // 2. Upload to R2
+      await uploadToR2(presign.uploadUrl, file, (pct) => {
+        uploadProgress = pct;
+      });
+
+      // 3. Send voice message via chatStore
+      await chatStore.sendVoiceMessage(chatStore.activeChatId, presign.publicUrl, duration);
+    } catch (err) {
+      console.error('Voice upload failed:', err);
+    } finally {
+      isUploading = false;
+      uploadProgress = 0;
+    }
   }
 
   function handleAttach() {
@@ -96,6 +122,7 @@
 
     isUploading = true;
     uploadProgress = 0;
+    uploadLabel = 'Uploading image...';
 
     try {
       // 1. Get presigned URL
@@ -129,7 +156,7 @@
       <div class="flex items-center gap-3">
         <Loader2 size={18} class="animate-spin flex-shrink-0" style="color: var(--color-primary);" />
         <div class="flex-1">
-          <p class="text-xs font-medium mb-1" style="color: var(--text-primary);">Uploading image...</p>
+          <p class="text-xs font-medium mb-1" style="color: var(--text-primary);">{uploadLabel}</p>
           <div class="w-full h-1.5 rounded-full overflow-hidden" style="background: var(--input-bg);">
             <div
               class="h-full rounded-full transition-all duration-300 ease-out"

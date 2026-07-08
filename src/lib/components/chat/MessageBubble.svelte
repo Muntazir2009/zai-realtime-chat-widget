@@ -3,14 +3,19 @@
   import Avatar from '$lib/components/ui/Avatar.svelte';
   import DeliveryStatus from '$lib/components/indicators/DeliveryStatus.svelte';
   import AudioPlayer from '$lib/components/media/AudioPlayer.svelte';
+  import EmojiReactions from './EmojiReactions.svelte';
+  import { SmilePlus } from 'lucide-svelte';
 
   interface Props {
     msg: Message;
     isOwn: boolean;
     showAvatar?: boolean;
     senderName?: string;
+    isGrouped?: boolean;
     onReply?: (msg: Message) => void;
     onLongPress?: (msg: Message) => void;
+    onImageTap?: (imageUrl: string, caption?: string) => void;
+    onReaction?: (msg: Message, emoji: string) => void;
   }
 
   let {
@@ -18,14 +23,32 @@
     isOwn,
     showAvatar = false,
     senderName,
+    isGrouped = false,
     onReply,
     onLongPress,
+    onImageTap,
+    onReaction,
   }: Props = $props();
 
   let longPressTimer: ReturnType<typeof setTimeout> | null = null;
   let touchStartY = $state(0);
   let touchStartX = $state(0);
+  let showReactions = $state(false);
+  let lastTapTime = 0;
   const LONG_PRESS_MS = 500;
+
+  function handleReaction(emoji: string) {
+    onReaction?.(msg, emoji);
+    showReactions = false;
+  }
+
+  function handleDoubleTap() {
+    const now = Date.now();
+    if (now - lastTapTime < 300) {
+      onReaction?.(msg, '❤️');
+    }
+    lastTapTime = now;
+  }
 
   function handleTouchStart(e: TouchEvent) {
     touchStartX = e.touches[0].clientX;
@@ -73,7 +96,7 @@
 </script>
 
 <div
-  class="flex {isOwn ? 'justify-end' : 'justify-start'} mb-1 px-3 animate-scale-in {isOwn ? 'pl-8' : 'pr-8'}"
+  class="group flex {isOwn ? 'justify-end' : 'justify-start'} {isGrouped ? 'mb-0.5' : 'mb-2'} px-3 animate-scale-in {isOwn ? 'pl-8' : 'pr-8'}"
   role="article"
   aria-label="Message from {isOwn ? 'you' : senderName || 'unknown'}"
   oncontextmenu={handleContextMenu}
@@ -112,12 +135,16 @@
 
     <!-- Bubble -->
     <div
-      class="px-3.5 py-2.5 relative"
+      class="px-3.5 py-2.5 relative" onclick={handleDoubleTap}
+      role="button"
+      tabindex="0"
+      onkeydown={(e) => { if (e.key === 'Enter') handleDoubleTap(); }}
       style="
         background: {isOwn ? 'var(--color-sent)' : 'var(--color-received)'};
         color: {isOwn ? 'var(--color-sent-foreground)' : 'var(--color-received-foreground)'};
-        border-radius: var(--radius-lg);
-        {isOwn ? 'border-bottom-right-radius: 4px;' : 'border-bottom-left-radius: 4px;'}
+        border-radius: {isGrouped
+          ? (isOwn ? 'var(--radius-sm) var(--radius-sm) 4px var(--radius-sm)' : 'var(--radius-sm) var(--radius-sm) var(--radius-sm) 4px')
+          : (isOwn ? 'var(--radius-lg) var(--radius-lg) 4px var(--radius-lg)' : 'var(--radius-lg) var(--radius-lg) var(--radius-lg) 4px')};
       "
     >
       {#if msg.t === 'text'}
@@ -127,10 +154,14 @@
       {:else if msg.t === 'image' && msg.mu}
         <img
           src={msg.mu}
-          alt="Shared image"
-          class="rounded-[var(--radius-sm)] max-w-full cursor-pointer"
+          alt={msg.c || 'Shared image'}
+          class="rounded-[var(--radius-sm)] max-w-full cursor-pointer transition-all duration-200 active:scale-[0.98]"
           loading="lazy"
           style="max-height: 240px; object-fit: cover;"
+          onclick={() => onImageTap?.(msg.mu!, msg.c || undefined)}
+          onkeydown={(e) => { if (e.key === 'Enter') onImageTap?.(msg.mu!, msg.c || undefined); }}
+          tabindex="0"
+          role="button"
         />
         {#if msg.c}
           <p class="text-[15px] break-words whitespace-pre-wrap mt-1.5">{msg.c}</p>
@@ -148,6 +179,32 @@
       <span class="text-[11px]" style="color: var(--text-tertiary);">
         {timeStr()}
       </span>
+    </div>
+
+    <!-- Quick React Button -->
+    <div class="flex justify-end mt-0.5 mr-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150" style="min-height: 24px;">
+      <button
+        class="min-w-[28px] min-h-[28px] flex items-center justify-center rounded-full"
+        style="color: var(--text-tertiary);"
+        onclick={() => (showReactions = !showReactions)}
+        aria-label="Quick react"
+      >
+        <SmilePlus size={14} />
+      </button>
+      {#if showReactions}
+        <div class="flex items-center gap-0.5 ml-1 animate-scale-in">
+          {#each ['❤️', '👍', '😂'] as emoji}
+            <button
+              class="min-w-[32px] min-h-[32px] flex items-center justify-center rounded-full text-base transition-all duration-150 hover:scale-125 active:scale-110"
+              style="background: var(--glass-bg); backdrop-filter: var(--glass-blur); border: 1px solid var(--border-subtle);"
+              onclick={(e) => { e.stopPropagation(); handleReaction(emoji); }}
+              aria-label="React with {emoji}"
+            >
+              {emoji}
+            </button>
+          {/each}
+        </div>
+      {/if}
     </div>
   </div>
 </div>

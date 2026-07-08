@@ -247,3 +247,82 @@ select {
   transition: transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1),
               opacity 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
+
+/* ============================================================
+   Additional Animations & Micro-interactions
+   ============================================================ */
+
+/* Message slide in from bottom */
+@keyframes messageIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-message-in {
+  animation: messageIn 200ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* Shimmer loading effect */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, var(--input-bg) 25%, var(--bg-elevated) 50%, var(--input-bg) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Subtle breathing animation for recording indicator */
+@keyframes breathe {
+  0%, 100% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.15); opacity: 1; }
+}
+
+.animate-breathe {
+  animation: breathe 2s ease-in-out infinite;
+}
+
+/* Chat tile entrance stagger */
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 250ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* Press effect */
+.animate-press:active {
+  transform: scale(0.96);
+  transition: transform 100ms ease;
+}
+
+/* Status badge pulse */
+@keyframes badgePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(5, 150, 105, 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(5, 150, 105, 0); }
+}
+
+.animate-badge-pulse {
+  animation: badgePulse 2s ease-in-out infinite;
+}
+
+/* Smooth height transition for input */
+.input-resize {
+  transition: height 100ms ease-out;
+}

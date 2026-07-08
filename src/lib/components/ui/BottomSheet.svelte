@@ -40,7 +40,9 @@
     class="fixed inset-0 z-50 animate-fade-in"
     style="background: var(--overlay-bg);"
     onclick={handleBackdrop}
+    onkeydown={handleKeydown}
     role="dialog"
+    tabindex="0"
     aria-modal="true"
     aria-label={title || 'Bottom sheet'}
   >

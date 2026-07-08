@@ -63,6 +63,10 @@
   function setTheme(mode: ThemeMode) {
     themeManager.setTheme(mode);
   }
+
+  let totalUnread = $derived(
+    chatStore.filteredInbox.reduce((sum, { userChat }) => sum + (userChat.uc ?? 0), 0)
+  );
 </script>
 
 <div class="flex flex-col h-full" style="background-color: var(--bg-page);">
@@ -76,6 +80,23 @@
         <h1 class="text-lg font-bold leading-tight" style="color: var(--text-primary);">Chats</h1>
         {#if chatStore.filteredInbox.length > 0}
           <p class="text-[11px] leading-tight" style="color: var(--text-tertiary);">{chatStore.filteredInbox.length} conversation{chatStore.filteredInbox.length !== 1 ? 's' : ''}</p>
+          {#if totalUnread > 0}
+            <span
+              class="inline-flex items-center justify-center rounded-full font-bold animate-badge-pulse"
+              style="
+                min-width: 18px;
+                height: 18px;
+                padding: 0 5px;
+                font-size: 11px;
+                line-height: 1;
+                background: var(--color-primary);
+                color: var(--color-primary-foreground);
+                margin-left: 6px;
+              "
+            >
+              {totalUnread > 99 ? '99+' : totalUnread}
+            </span>
+          {/if}
         {/if}
       </div>
     </div>
@@ -164,7 +185,7 @@
             </div>
             <p class="text-sm" style="color: var(--text-tertiary);">Loading users...</p>
           </div>
-        {/if}
+        {/each}
       </div>
     </div>
   {/if}

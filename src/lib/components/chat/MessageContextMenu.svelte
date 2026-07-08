@@ -58,15 +58,24 @@
       </button>
     {/if}
 
-    <!-- Delete (only own text messages) -->
-    {#if isOwn && msg?.t === 'text'}
+    <!-- Delete -->
+    {#if isOwn}
       <button
         class="flex items-center gap-3 w-full transition-spring active:scale-95 rounded-[var(--radius-md)]"
         style="min-height: 44px; padding: 8px 12px; color: var(--color-danger);"
         onclick={handleDelete}
       >
         <Trash2 size={20} />
-        <span class="text-sm font-medium">Delete</span>
+        <span class="text-sm font-medium">Delete for everyone</span>
+      </button>
+    {:else}
+      <button
+        class="flex items-center gap-3 w-full transition-spring active:scale-95 rounded-[var(--radius-md)]"
+        style="min-height: 44px; padding: 8px 12px; color: var(--color-danger);"
+        onclick={handleDelete}
+      >
+        <Trash2 size={20} />
+        <span class="text-sm font-medium">Delete for me</span>
       </button>
     {/if}
   </div>
