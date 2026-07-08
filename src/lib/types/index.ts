@@ -42,6 +42,7 @@ export interface Message {
   mu: string | null;   // mediaUrl
   mh: string | null;   // mediaHash (blurhash)
   md: Record<string, unknown> | null; // mediaDimensions / metadata
+  edited: boolean;      // whether message has been edited
 }
 
 /* ---------- Inbox (user_chats) ---------- */
@@ -126,8 +127,18 @@ export const RTDB_PATHS = {
   USER_PROFILE: (uid: string) => `users/${uid}`,
   PRESENCE: (uid: string) => `presence/${uid}`,
   TYPING: (chatId: string, uid: string) => `typing/${chatId}/${uid}`,
+  PINNED: (chatId: string) => `chats/${chatId}/pinned`,
+  STARRED: (uid: string, chatId: string) => `starred/${uid}/${chatId}`,
   SCHEMA_VERSION: '_schema/v',
 } as const;
+
+/* ---------- Pinned Message ---------- */
+export interface PinnedMessage {
+  messageId: string;
+  pinnedBy: string;
+  pinnedAt: number;
+  message: Message;
+}
 
 export const SCHEMA_VERSION = 1;
 export const MAX_MESSAGES_IN_MEMORY = 50;

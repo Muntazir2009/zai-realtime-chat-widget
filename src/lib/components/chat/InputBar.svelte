@@ -1,17 +1,22 @@
 <script lang="ts">
-  import { Send, Paperclip, Mic, Image, X, Loader2 } from 'lucide-svelte';
+  import { Send, Mic, Image, Sticker, Film } from 'lucide-svelte';
   import VoiceRecorder from '$lib/components/media/VoiceRecorder.svelte';
+  import StickerPicker from '$lib/components/pickers/StickerPicker.svelte';
+  import GIFPicker from '$lib/components/pickers/GIFPicker.svelte';
   import { presenceManager } from '$lib/managers/PresenceManager.svelte';
   import { chatStore } from '$lib/stores/chat.svelte';
-  import { requestPresignedUpload, uploadToR2, confirmUpload } from '$lib/firebase/storage';
-  import { generateIdempotencyKey } from '$lib/utils/idempotency';
+  import { requestPresignedUpload, uploadToR2 } from '$lib/firebase/storage';
 
   interface Props {
     onSend: (content: string) => void;
     onImageSend?: (imageUrl: string, blurhash?: string) => void;
+    onStickerSelect?: (sticker: string) => void;
+    onGifSelect?: (gifUrl: string) => void;
   }
 
-  let { onSend, onImageSend }: Props = $props();
+  let { onSend, onImageSend, onStickerSelect, onGifSelect }: Props = $props();
+
+  type PickerPanel = 'none' | 'sticker' | 'gif';
 
   let text = $state('');
   let isRecording = $state(false);
@@ -21,6 +26,7 @@
   let textareaEl: HTMLTextAreaElement | null = $state(null);
   let typingTimer: ReturnType<typeof setTimeout> | null = null;
   let fileInputEl: HTMLInputElement | null = $state(null);
+  let activePicker = $state<PickerPanel>('none');
 
   const canSend = $derived(text.trim().length > 0);
 
@@ -33,6 +39,10 @@
 
   function handleInput(e: Event) {
     text = (e.target as HTMLTextAreaElement).value;
+    // Close picker when typing
+    if (text.length > 0 && activePicker !== 'none') {
+      activePicker = 'none';
+    }
     emitTyping();
   }
 
@@ -54,7 +64,6 @@
     if (textareaEl) {
       textareaEl.style.height = 'auto';
     }
-    // Stop typing
     if (typingTimer) clearTimeout(typingTimer);
     if (chatStore.activeChatId) {
       presenceManager.stopTyping(chatStore.activeChatId);
@@ -68,6 +77,20 @@
     }
   }
 
+  function togglePicker(panel: PickerPanel) {
+    activePicker = activePicker === panel ? 'none' : panel;
+  }
+
+  function handleSticker(sticker: string) {
+    activePicker = 'none';
+    onStickerSelect?.(sticker);
+  }
+
+  function handleGif(gifUrl: string) {
+    activePicker = 'none';
+    onGifSelect?.(gifUrl);
+  }
+
   function cancelRecording() {
     isRecording = false;
   }
@@ -76,7 +99,6 @@
     isRecording = false;
     if (!chatStore.activeChatId || duration < 1) return;
 
-    // Create a File from the blob
     const file = new File([blob], `voice-${Date.now()}.webm`, { type: 'audio/webm' });
 
     isUploading = true;
@@ -84,15 +106,10 @@
     uploadLabel = 'Sending voice message...';
 
     try {
-      // 1. Get presigned URL
       const presign = await requestPresignedUpload(chatStore.activeChatId, file, 'voice');
-
-      // 2. Upload to R2
       await uploadToR2(presign.uploadUrl, file, (pct) => {
         uploadProgress = pct;
       });
-
-      // 3. Send voice message via chatStore
       await chatStore.sendVoiceMessage(chatStore.activeChatId, presign.publicUrl, duration);
     } catch (err) {
       console.error('Voice upload failed:', err);
@@ -111,11 +128,9 @@
     const file = input.files?.[0];
     if (!file || !chatStore.activeChatId) return;
 
-    // Reset input
     input.value = '';
 
     if (!file.type.startsWith('image/')) {
-      // For now, only support images
       console.warn('Only image uploads are supported currently');
       return;
     }
@@ -125,15 +140,10 @@
     uploadLabel = 'Uploading image...';
 
     try {
-      // 1. Get presigned URL
       const presign = await requestPresignedUpload(chatStore.activeChatId, file, 'images');
-
-      // 2. Upload to R2
       await uploadToR2(presign.uploadUrl, file, (pct) => {
         uploadProgress = pct;
       });
-
-      // 3. Send image message via chatStore
       if (onImageSend) {
         onImageSend(presign.publicUrl);
       }
@@ -154,7 +164,7 @@
   {#if isUploading}
     <div class="safe-bottom px-4 py-2.5" style="background: var(--glass-bg); backdrop-filter: var(--glass-blur); border-top: var(--border-subtle);">
       <div class="flex items-center gap-3">
-        <Loader2 size={18} class="animate-spin flex-shrink-0" style="color: var(--color-primary);" />
+        <div class="w-[18px] h-[18px] border-2 border-t-transparent rounded-full animate-spin flex-shrink-0" style="border-color: var(--color-primary); border-top-color: transparent;"></div>
         <div class="flex-1">
           <p class="text-xs font-medium mb-1" style="color: var(--text-primary);">{uploadLabel}</p>
           <div class="w-full h-1.5 rounded-full overflow-hidden" style="background: var(--input-bg);">
@@ -169,7 +179,14 @@
     </div>
   {:else}
     <div class="safe-bottom" style="background: var(--glass-bg); backdrop-filter: var(--glass-blur); border-top: var(--border-subtle);">
-      <div class="flex items-end gap-2 px-3 py-2.5">
+      <!-- Picker Panels -->
+      {#if activePicker === 'sticker'}
+        <StickerPicker onStickerSelect={handleSticker} />
+      {:else if activePicker === 'gif'}
+        <GIFPicker onGifSelect={handleGif} />
+      {/if}
+
+      <div class="flex items-end gap-1.5 px-3 py-2.5">
         <!-- Attach Button -->
         <button
           class="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-[var(--radius-md)] flex-shrink-0 transition-spring active:scale-90"
@@ -188,6 +205,26 @@
           class="hidden"
           onchange={handleFileSelect}
         />
+
+        <!-- Sticker Button -->
+        <button
+          class="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-[var(--radius-md)] flex-shrink-0 transition-spring active:scale-90"
+          style="color: {activePicker === 'sticker' ? 'var(--color-primary)' : 'var(--text-secondary)'};"
+          onclick={() => togglePicker('sticker')}
+          aria-label="Stickers"
+        >
+          <Sticker size={22} />
+        </button>
+
+        <!-- GIF Button -->
+        <button
+          class="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-[var(--radius-md)] flex-shrink-0 transition-spring active:scale-90"
+          style="color: {activePicker === 'gif' ? 'var(--color-primary)' : 'var(--text-secondary)'};"
+          onclick={() => togglePicker('gif')}
+          aria-label="GIFs"
+        >
+          <Film size={22} />
+        </button>
 
         <!-- Text Input -->
         <textarea

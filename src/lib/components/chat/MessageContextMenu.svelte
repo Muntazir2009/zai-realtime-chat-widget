@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Message } from '$lib/types/index';
-  import { Reply, Copy, Trash2 } from 'lucide-svelte';
+  import { Reply, Copy, Trash2, Pin, Star, Pencil } from 'lucide-svelte';
   import BottomSheet from '$lib/components/ui/BottomSheet.svelte';
 
   interface Props {
@@ -8,12 +8,20 @@
     onClose: () => void;
     msg: Message | null;
     isOwn: boolean;
+    isPinned?: boolean;
+    isStarred?: boolean;
     onReply: (msg: Message) => void;
     onCopy: (text: string) => void;
     onDelete: (msg: Message) => void;
+    onPin?: (msg: Message) => void;
+    onStar?: (msg: Message) => void;
+    onEdit?: (msg: Message) => void;
   }
 
-  let { open, onClose, msg, isOwn, onReply, onCopy, onDelete }: Props = $props();
+  let {
+    open, onClose, msg, isOwn, isPinned = false, isStarred = false,
+    onReply, onCopy, onDelete, onPin, onStar, onEdit,
+  }: Props = $props();
 
   function handleReply() {
     if (!msg) return;
@@ -32,10 +40,28 @@
     onDelete(msg);
     onClose();
   }
+
+  function handlePin() {
+    if (!msg) return;
+    onPin?.(msg);
+    onClose();
+  }
+
+  function handleStar() {
+    if (!msg) return;
+    onStar?.(msg);
+    onClose();
+  }
+
+  function handleEdit() {
+    if (!msg) return;
+    onEdit?.(msg);
+    onClose();
+  }
 </script>
 
 <BottomSheet {open} {onClose} title="Message options">
-  <div class="flex flex-col gap-1">
+  <div class="flex flex-col gap-0.5">
     <!-- Reply -->
     <button
       class="flex items-center gap-3 w-full transition-spring active:scale-95 rounded-[var(--radius-md)]"
@@ -46,7 +72,7 @@
       <span class="text-sm font-medium">Reply</span>
     </button>
 
-    <!-- Copy (only for text messages with content) -->
+    <!-- Copy -->
     {#if msg?.t === 'text'}
       <button
         class="flex items-center gap-3 w-full transition-spring active:scale-95 rounded-[var(--radius-md)]"
@@ -57,6 +83,41 @@
         <span class="text-sm font-medium">Copy</span>
       </button>
     {/if}
+
+    <!-- Pin / Unpin -->
+    <button
+      class="flex items-center gap-3 w-full transition-spring active:scale-95 rounded-[var(--radius-md)]"
+      style="min-height: 44px; padding: 8px 12px; color: {isPinned ? 'var(--color-primary)' : 'var(--text-primary)'};"
+      onclick={handlePin}
+    >
+      <Pin size={20} />
+      <span class="text-sm font-medium">{isPinned ? 'Unpin message' : 'Pin message'}</span>
+    </button>
+
+    <!-- Star / Unstar -->
+    <button
+      class="flex items-center gap-3 w-full transition-spring active:scale-95 rounded-[var(--radius-md)]"
+      style="min-height: 44px; padding: 8px 12px; color: {isStarred ? 'var(--color-primary)' : 'var(--text-primary)'};"
+      onclick={handleStar}
+    >
+      <Star size={20} fill={isStarred ? 'var(--color-primary)' : 'none'} />
+      <span class="text-sm font-medium">{isStarred ? 'Unstar' : 'Star message'}</span>
+    </button>
+
+    <!-- Edit (own text messages only) -->
+    {#if isOwn && msg?.t === 'text'}
+      <button
+        class="flex items-center gap-3 w-full transition-spring active:scale-95 rounded-[var(--radius-md)]"
+        style="min-height: 44px; padding: 8px 12px; color: var(--text-primary);"
+        onclick={handleEdit}
+      >
+        <Pencil size={20} />
+        <span class="text-sm font-medium">Edit</span>
+      </button>
+    {/if}
+
+    <!-- Divider -->
+    <div class="my-1.5 mx-3" style="border-top: 1px solid var(--border-subtle);"></div>
 
     <!-- Delete -->
     {#if isOwn}

@@ -7,10 +7,11 @@
 
 import * as rtdb from '$lib/firebase/rtdb.js';
 import type {
-  Message, ChatMeta, UserChat, User, PresenceState,
+  Message, ChatMeta, UserChat, User, PresenceState, PinnedMessage,
 } from '$lib/types/index.js';
 import { MAX_MESSAGES_IN_MEMORY, RTDB_PATHS } from '$lib/types/index.js';
 import { authStore } from './auth.svelte.js';
+import { toastStore } from './toast.svelte.js';
 import { networkManager } from '$lib/managers/NetworkManager.svelte.js';
 import { cacheMessages, getCachedMessages, cacheUserProfiles, getUserProfile } from '$lib/managers/CacheManager.js';
 import { generateIdempotencyKey } from '$lib/utils/idempotency.js';
@@ -39,8 +40,17 @@ class ChatStore {
   private presenceUnsubs: Map<string, () => void> = new Map();
   private typingUnsubs: Map<string, () => void> = new Map();
 
+  // ---- Pinned messages ----
+  pinnedMessages: Map<string, Message> = $state(new Map());
+  private pinnedUnsub: (() => void) | null = null;
+  private pinnedRemovedUnsub: (() => void) | null = null;
+
+  // ---- Starred messages ----
+  starredMessageIds: Set<string> = $state(new Set());
+  private starredUnsub: (() => void) | null = null;
+
   // ---- Idempotency tracking ----
-  private sentKeys = new Set<string>();
+  private sentKeys = new Set<string();
 
   /** Derive sorted inbox (most recent first) */
   sortedInbox = $derived.by(() => {
@@ -165,8 +175,9 @@ class ChatStore {
     );
 
     this.messageUnsub = rtdb.onChildAdded(msgRef, (snap) => {
-      const msg = snap.val() as Message;
-      if (!msg) return;
+      const raw = snap.val() as Message;
+      if (!raw) return;
+      const msg: Message = { ...raw, edited: raw.edited ?? false };
       if (this.messages.some((m) => m.id === msg.id)) return;
 
       this.messages = [...this.messages, msg].sort((a, b) => a.ts - b.ts);
@@ -178,6 +189,9 @@ class ChatStore {
     this.markAsRead(chatId);
     this.attachPresenceListeners(chatId);
     this.attachTypingListener(chatId);
+    this.attachPinnedListener(chatId);
+    const user = authStore.user;
+    if (user) this.attachStarredListener(user.id, chatId);
   }
 
   async closeChat(): Promise<void> {
@@ -187,6 +201,8 @@ class ChatStore {
     }
     this.detachPresenceListeners();
     this.detachTypingListener();
+    this.detachPinnedListener();
+    this.detachStarredListener();
 
     if (this.activeChatId && this.messages.length > 0) {
       cacheMessages(this.activeChatId, this.messages);
@@ -223,6 +239,7 @@ class ChatStore {
       mu: null,
       mh: null,
       md: null,
+      edited: false,
     };
 
     const meta = this.chats.get(chatId);
@@ -294,6 +311,7 @@ class ChatStore {
       mu: imageUrl,
       mh: null,
       md: null,
+      edited: false,
     };
 
     const meta = this.chats.get(chatId);
@@ -354,6 +372,7 @@ class ChatStore {
       mu: voiceUrl,
       mh: null,
       md: { duration },
+      edited: false,
     };
 
     const meta = this.chats.get(chatId);
@@ -560,6 +579,161 @@ class ChatStore {
     if (!set || set.size === 0) return [];
     return Array.from(set).map((uid) => this.userDict.get(uid)?.displayName ?? uid);
   }
+
+  // ============================================================
+  // Pinned messages
+  // ============================================================
+
+  attachPinnedListener(chatId: string): void {
+    this.detachPinnedListener();
+    const r = rtdb.ref(RTDB_PATHS.PINNED(chatId));
+
+    this.pinnedUnsub = rtdb.onChildAdded(r, (snap) => {
+      const data = snap.val() as PinnedMessage | null;
+      if (!data?.message) return;
+      const msg: Message = { ...data.message, edited: data.message.edited ?? false };
+      const newMap = new Map(this.pinnedMessages);
+      newMap.set(data.messageId, msg);
+      // Enforce max 3 — remove oldest if over limit
+      if (newMap.size > 3) {
+        const sorted = Array.from(newMap.entries()).sort((a, b) => (a[1].ts ?? 0) - (b[1].ts ?? 0));
+        for (let i = 0; i < sorted.length - 3; i++) {
+          newMap.delete(sorted[i][0]);
+        }
+      }
+      this.pinnedMessages = newMap;
+    });
+
+    this.pinnedRemovedUnsub = rtdb.onChildRemoved(r, (snap) => {
+      const data = snap.val() as PinnedMessage | null;
+      if (!data) return;
+      const newMap = new Map(this.pinnedMessages);
+      newMap.delete(data.messageId);
+      this.pinnedMessages = newMap;
+    });
+  }
+
+  detachPinnedListener(): void {
+    if (this.pinnedUnsub) {
+      this.pinnedUnsub();
+      this.pinnedUnsub = null;
+    }
+    if (this.pinnedRemovedUnsub) {
+      this.pinnedRemovedUnsub();
+      this.pinnedRemovedUnsub = null;
+    }
+    this.pinnedMessages = new Map();
+  }
+
+  async togglePin(chatId: string, msg: Message): Promise<void> {
+    const user = authStore.user;
+    if (!user) return;
+
+    try {
+      if (this.pinnedMessages.has(msg.id)) {
+        // Unpin
+        await rtdb.remove(rtdb.ref(RTDB_PATHS.PINNED(chatId) + '/' + msg.id));
+        toastStore.success('Message unpinned');
+      } else if (this.pinnedMessages.size < 3) {
+        // Pin
+        const pinned: PinnedMessage = {
+          messageId: msg.id,
+          pinnedBy: user.id,
+          pinnedAt: Date.now(),
+          message: msg,
+        };
+        await rtdb.set(rtdb.ref(RTDB_PATHS.PINNED(chatId) + '/' + msg.id), pinned);
+        toastStore.success('Message pinned');
+      } else {
+        toastStore.warning('Maximum 3 pinned messages');
+      }
+    } catch (err) {
+      console.error('[togglePin]', err);
+      toastStore.error('Failed to update pin');
+    }
+  }
+
+  // ============================================================
+  // Starred messages
+  // ============================================================
+
+  attachStarredListener(uid: string, chatId: string): void {
+    this.detachStarredListener();
+    const r = rtdb.ref(RTDB_PATHS.STARRED(uid, chatId));
+
+    this.starredUnsub = rtdb.onChildAdded(r, (snap) => {
+      const data = snap.val() as { messageId: string } | null;
+      if (!data?.messageId) return;
+      const newSet = new Set(this.starredMessageIds);
+      newSet.add(data.messageId);
+      this.starredMessageIds = newSet;
+    });
+  }
+
+  detachStarredListener(): void {
+    if (this.starredUnsub) {
+      this.starredUnsub();
+      this.starredUnsub = null;
+    }
+    this.starredMessageIds = new Set();
+  }
+
+  async toggleStar(chatId: string, msg: Message): Promise<void> {
+    const user = authStore.user;
+    if (!user) return;
+
+    const starRef = rtdb.ref(RTDB_PATHS.STARRED(user.id, chatId) + '/' + msg.id);
+
+    try {
+      if (this.starredMessageIds.has(msg.id)) {
+        // Unstar
+        await rtdb.remove(starRef);
+        const newSet = new Set(this.starredMessageIds);
+        newSet.delete(msg.id);
+        this.starredMessageIds = newSet;
+        toastStore.success('Message unstarred');
+      } else {
+        // Star
+        await rtdb.set(starRef, {
+          messageId: msg.id,
+          starredAt: Date.now(),
+          message: { id: msg.id, c: msg.c, t: msg.t, ts: msg.ts, sid: msg.sid },
+        });
+        const newSet = new Set(this.starredMessageIds);
+        newSet.add(msg.id);
+        this.starredMessageIds = newSet;
+        toastStore.success('Message starred');
+      }
+    } catch (err) {
+      console.error('[toggleStar]', err);
+      toastStore.error('Failed to update star');
+    }
+  }
+
+  // ============================================================
+  // Edit message
+  // ============================================================
+
+  async editMessage(chatId: string, messageId: string, newContent: string): Promise<void> {
+    try {
+      await rtdb.update(rtdb.ref('/'), {
+        [`chats/${chatId}/messages/${messageId}/c`]: newContent,
+        [`chats/${chatId}/messages/${messageId}/edited`]: true,
+      });
+      // Update local messages array
+      this.messages = this.messages.map((m) =>
+        m.id === messageId ? { ...m, c: newContent, edited: true } : m,
+      );
+      toastStore.success('Message edited');
+    } catch (err) {
+      console.error('[editMessage]', err);
+      toastStore.error('Failed to edit message');
+    }
+  }
+
+  // ============================================================
+  // Delete message
+  // ============================================================
 
   async deleteMessage(chatId: string, messageId: string): Promise<void> {
     await rtdb.remove(rtdb.ref(RTDB_PATHS.CHAT_MESSAGES(chatId) + '/' + messageId));

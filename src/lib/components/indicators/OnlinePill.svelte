@@ -29,25 +29,46 @@
     },
   }[status]);
 
-  const relativeTime = $derived(
-    status === 'offline'
-      ? `Last seen ${formatDistanceToNow(lastSeen, { addSuffix: true })}`
-      : ''
-  );
+  const relativeTime = $derived.by(() => {
+    if (status === 'offline' && lastSeen > 0) {
+      return `Last seen ${formatDistanceToNow(lastSeen, { addSuffix: true })}`;
+    }
+    if (status === 'away') {
+      return `Last seen ${formatDistanceToNow(lastSeen, { addSuffix: true })}`;
+    }
+    return '';
+  });
 </script>
 
 <span
-  class="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium"
+  class="online-pill inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium transition-all duration-300 ease-out"
   style="background: {config.bg}; color: {config.text};"
+  role="status"
+  aria-label={status === 'online' ? 'Online' : relativeTime || status}
+  aria-live="polite"
 >
   <!-- Status Dot -->
   <span
-    class="inline-block w-[6px] h-[6px] rounded-full flex-shrink-0"
+    class="inline-block w-[6px] h-[6px] rounded-full flex-shrink-0 transition-colors duration-300"
+    class:online-pulse={status === 'online'}
     style="background: {config.text};"
   ></span>
-  {#if status === 'offline'}
-    {relativeTime}
-  {:else}
-    {config.label}
-  {/if}
+  <span class="transition-opacity duration-200">
+    {#if status === 'offline' || status === 'away'}
+      {relativeTime || config.label}
+    {:else}
+      {config.label}
+    {/if}
+  </span>
 </span>
+
+<style>
+  .online-pulse {
+    animation: onlinePulse 2s ease-in-out infinite;
+  }
+
+  @keyframes onlinePulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5); }
+    50% { box-shadow: 0 0 0 4px rgba(34, 197, 94, 0); }
+  }
+</style>

@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Message } from '$lib/types/index';
-  import { X } from 'lucide-svelte';
+  import { X, Image as ImageIcon, Mic } from 'lucide-svelte';
 
   interface Props {
     message: Message;
@@ -9,20 +9,37 @@
   }
 
   let { message, senderName, onCancel }: Props = $props();
+
+  function getMessagePreview(msg: Message): string {
+    if (msg.t === 'image') return '📷 Photo';
+    if (msg.t === 'voice') return '🎙 Voice message';
+    return msg.c.slice(0, 80);
+  }
+
+  function getMessageTypeIcon(msg: Message) {
+    if (msg.t === 'image') return ImageIcon;
+    if (msg.t === 'voice') return Mic;
+    return null;
+  }
 </script>
 
-<div class="flex items-center gap-2 px-4 py-2 animate-fade-in" style="background: var(--bg-elevated);">
+<div class="flex items-center gap-2.5 px-4 py-2.5 animate-fade-in" style="background: var(--bg-elevated); border-top: 1px solid var(--border-subtle);">
   <!-- Accent Bar -->
   <div class="w-[3px] self-stretch rounded-full flex-shrink-0" style="background: var(--color-primary);"></div>
 
   <!-- Content -->
   <div class="flex-1 min-w-0">
-    <p class="text-sm font-semibold truncate" style="color: var(--text-primary);">
+    <p class="text-xs font-semibold truncate mb-0.5" style="color: var(--color-primary);">
       {senderName}
     </p>
-    <p class="text-sm truncate" style="color: var(--text-secondary);">
-      {message.c}
-    </p>
+    <div class="flex items-center gap-1.5 min-w-0">
+      {#if getMessageTypeIcon(message)}
+        <svelte:component this={getMessageTypeIcon(message)} size={12} style="color: var(--text-tertiary); flex-shrink: 0;" />
+      {/if}
+      <p class="text-sm truncate" style="color: var(--text-secondary);">
+        {getMessagePreview(message)}
+      </p>
+    </div>
   </div>
 
   <!-- Cancel -->
