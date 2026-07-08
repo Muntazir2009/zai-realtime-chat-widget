@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Search, Plus, MessageSquare, LogOut, Settings, X, Check, Moon, Sun, Smartphone } from 'lucide-svelte';
+  import { Plus, MessageSquare, LogOut, Settings, X, Check, Moon, Sun, Smartphone, Loader2 } from 'lucide-svelte';
   import ChatTile from './ChatTile.svelte';
   import BottomSheet from '$lib/components/ui/BottomSheet.svelte';
   import { chatStore } from '$lib/stores/chat.svelte';
@@ -65,7 +65,7 @@
   }
 
   let totalUnread = $derived(
-    chatStore.filteredInbox.reduce((sum, { userChat }) => sum + (userChat.uc ?? 0), 0)
+    chatStore.sortedInbox.reduce((sum, { userChat }) => sum + (userChat.uc ?? 0), 0)
   );
 </script>
 
@@ -78,8 +78,8 @@
       </div>
       <div>
         <h1 class="text-lg font-bold leading-tight" style="color: var(--text-primary);">Chats</h1>
-        {#if chatStore.filteredInbox.length > 0}
-          <p class="text-[11px] leading-tight" style="color: var(--text-tertiary);">{chatStore.filteredInbox.length} conversation{chatStore.filteredInbox.length !== 1 ? 's' : ''}</p>
+        {#if chatStore.sortedInbox.length > 0}
+          <p class="text-[11px] leading-tight" style="color: var(--text-tertiary);">{chatStore.sortedInbox.length} conversation{chatStore.sortedInbox.length !== 1 ? 's' : ''}</p>
           {#if totalUnread > 0}
             <span
               class="inline-flex items-center justify-center rounded-full font-bold animate-badge-pulse"
@@ -120,30 +120,7 @@
     </div>
   </header>
 
-  <!-- Search -->
-  <div class="px-4 pt-3 pb-2">
-    <div class="relative group">
-      <Search size={16} class="absolute left-3 top-1/2 -translate-y-1/2 transition-colors" style="color: var(--text-tertiary);" />
-      <input
-        type="text"
-        placeholder="Search conversations..."
-        class="glass-input w-full min-h-[44px] pl-9 pr-4 rounded-[var(--radius-md)] outline-none text-sm transition-all duration-200"
-        style="color: var(--text-primary);"
-        value={chatStore.searchQuery}
-        oninput={(e) => chatStore.searchQuery = (e.target as HTMLInputElement).value}
-      />
-      {#if chatStore.searchQuery}
-        <button
-          class="absolute right-2 top-1/2 -translate-y-1/2 min-w-[28px] min-h-[28px] flex items-center justify-center rounded-full transition-spring"
-          style="color: var(--text-tertiary); background: var(--input-bg);"
-          onclick={() => chatStore.searchQuery = ''}
-          aria-label="Clear search"
-        >
-          <X size={14} />
-        </button>
-      {/if}
-    </div>
-  </div>
+
 
   <!-- New Chat Sheet -->
   {#if showNewChat}
@@ -181,7 +158,7 @@
         {:else}
           <div class="flex flex-col items-center py-6">
             <div class="w-10 h-10 rounded-full flex items-center justify-center mb-2" style="background: var(--input-bg);">
-              <Search size={18} style="color: var(--text-tertiary);" />
+              <Loader2 size={18} style="color: var(--text-tertiary);" class="animate-spin" />
             </div>
             <p class="text-sm" style="color: var(--text-tertiary);">Loading users...</p>
           </div>
@@ -192,7 +169,7 @@
 
   <!-- Chat List -->
   <div class="flex-1 overflow-y-auto custom-scrollbar">
-    {#if chatStore.filteredInbox.length === 0}
+    {#if chatStore.sortedInbox.length === 0}
       <div class="flex flex-col items-center justify-center px-8 pt-20 animate-fade-in">
         <div class="w-20 h-20 rounded-3xl flex items-center justify-center mb-5" style="background: linear-gradient(135deg, rgba(5, 150, 105, 0.1), rgba(16, 185, 129, 0.05));">
           <MessageSquare size={36} style="color: var(--color-primary); opacity: 0.6;" />
@@ -203,7 +180,7 @@
         </p>
       </div>
     {:else}
-      {#each chatStore.filteredInbox as { chatId, userChat, meta } (chatId)}
+      {#each chatStore.sortedInbox as { chatId, userChat, meta } (chatId)}
         <ChatTile
           {chatId}
           chatMeta={meta!}

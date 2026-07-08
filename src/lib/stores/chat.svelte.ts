@@ -42,23 +42,9 @@ class ChatStore {
   // ---- Idempotency tracking ----
   private sentKeys = new Set<string>();
 
-  // ---- Search ----
-  searchQuery = $state('');
-
-  /** Derive filtered+sorted inbox */
-  filteredInbox = $derived.by(() => {
-    let entries = Array.from(this.userChats.entries());
-    if (this.searchQuery) {
-      const q = this.searchQuery.toLowerCase();
-      entries = entries.filter(([, uc]) => {
-        const meta = this.chats.get(uc.chatId);
-        if (!meta) return false;
-        const other = this.getOtherParticipant(meta);
-        return other?.displayName.toLowerCase().includes(q) ||
-               other?.username.toLowerCase().includes(q) ||
-               (meta.lm ?? '').toLowerCase().includes(q);
-      });
-    }
+  /** Derive sorted inbox (most recent first) */
+  sortedInbox = $derived.by(() => {
+    const entries = Array.from(this.userChats.entries());
     entries.sort((a, b) => {
       const metaA = this.chats.get(a[1].chatId);
       const metaB = this.chats.get(b[1].chatId);

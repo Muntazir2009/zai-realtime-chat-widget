@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ChevronLeft, MoreVertical, Phone, Video, Clock, Image as ImageIcon, Search, X } from 'lucide-svelte';
+  import { ChevronLeft, MoreVertical, Phone, Video, Clock, Image as ImageIcon } from 'lucide-svelte';
   import MessageBubble from './MessageBubble.svelte';
   import Lightbox from '$lib/components/media/Lightbox.svelte';
   import MessageContextMenu from './MessageContextMenu.svelte';
@@ -23,16 +23,6 @@
   let lightboxImages = $state<Array<{url: string; caption?: string}>>([]);
   let lightboxIndex = $state(0);
   let showLightbox = $state(false);
-  let showSearch = $state(false);
-  let messageSearchQuery = $state('');
-
-  let searchFilteredMessages = $derived.by(() => {
-    if (!messageSearchQuery.trim()) return null;
-    const q = messageSearchQuery.toLowerCase();
-    return chatStore.messages.filter(m =>
-      m.c?.toLowerCase().includes(q)
-    );
-  });
 
   // Derived: the "other" user in this direct chat
   let otherUser = $derived.by(() => {
@@ -196,14 +186,6 @@
     <button
       class="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-[var(--radius-md)] transition-spring active:scale-90"
       style="color: var(--text-secondary);"
-      onclick={() => (showSearch = !showSearch)}
-      aria-label="Search messages"
-    >
-      <Search size={20} />
-    </button>
-    <button
-      class="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-[var(--radius-md)] transition-spring active:scale-90"
-      style="color: var(--text-secondary);"
       onclick={() => (showMenu = !showMenu)}
       aria-label="More options"
     >
@@ -211,45 +193,12 @@
     </button>
   </header>
 
-  {#if showSearch}
-    <div class="px-3 py-2 animate-slide-down" style="background: var(--glass-bg); border-bottom: 1px solid var(--border-subtle);">
-      <div class="relative">
-        <Search size={16} class="absolute left-3 top-1/2 -translate-y-1/2" style="color: var(--text-tertiary);" />
-        <input
-          type="text"
-          placeholder="Search messages..."
-          class="glass-input w-full min-h-[40px] pl-9 pr-10 rounded-[var(--radius-md)] outline-none text-sm"
-          style="color: var(--text-primary);"
-          value={messageSearchQuery}
-          oninput={(e) => messageSearchQuery = (e.target as HTMLInputElement).value}
-          autofocus
-        />
-        {#if messageSearchQuery}
-          <button
-            class="absolute right-2 top-1/2 -translate-y-1/2 min-w-[28px] min-h-[28px] flex items-center justify-center rounded-full"
-            style="color: var(--text-tertiary); background: var(--input-bg);"
-            onclick={() => { messageSearchQuery = ''; showSearch = false; }}
-            aria-label="Close search"
-          >
-            <X size={14} />
-          </button>
-        {/if}
-      </div>
-      {#if searchFilteredMessages !== null}
-        <p class="text-xs mt-1.5" style="color: var(--text-tertiary);">
-          {searchFilteredMessages.length} result{searchFilteredMessages.length !== 1 ? 's' : ''}
-        </p>
-      {/if}
-    </div>
-  {/if}
-
   <!-- Messages -->
   <div
     bind:this={messagesContainer}
     class="flex-1 overflow-y-auto custom-scrollbar px-4 py-3 relative"
   >
-    {#if searchFilteredMessages === null}
-      {#if chatStore.messages.length === 0}
+    {#if chatStore.messages.length === 0}
         <div class="flex flex-col items-center justify-center h-full animate-fade-in">
           <div class="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style="background: linear-gradient(135deg, rgba(5, 150, 105, 0.1), rgba(16, 185, 129, 0.05));">
             {#if otherUser}
@@ -298,27 +247,6 @@
           {/each}
         {/each}
       {/if}
-    {:else}
-      <!-- Search results -->
-      <div class="px-4 py-3">
-        {#each searchFilteredMessages as msg (msg.id)}
-          <MessageBubble
-            {msg}
-            isOwn={msg.sid === authStore.user?.id}
-            showAvatar={true}
-            senderName={chatStore.userDict.get(msg.sid)?.displayName}
-            onReply={handleReply}
-            onLongPress={handleLongPress}
-            onImageTap={handleImageTap}
-            onReaction={handleReaction}
-          />
-        {:else}
-          <div class="flex flex-col items-center py-12 animate-fade-in">
-            <p class="text-sm" style="color: var(--text-tertiary);">No messages found</p>
-          </div>
-        {/each}
-      </div>
-    {/if}
 
     <!-- Scroll to bottom FAB -->
     <ScrollToBottom messagesContainer={messagesContainer} />
