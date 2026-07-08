@@ -1,0 +1,15 @@
+<script lang="ts">
+  import { browser } from '$app/environment';
+  import { onMount } from 'svelte';
+
+  let { children }: { children: any } = $props();
+  let mounted = $state(false);
+
+  onMount(() => {
+    mounted = true;
+  });
+</script>
+
+{#if mounted || !browser}
+  {@render children()}
+{/if}
