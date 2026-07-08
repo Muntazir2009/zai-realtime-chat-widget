@@ -74,6 +74,8 @@
 
 <div
   class="flex {isOwn ? 'justify-end' : 'justify-start'} mb-1 px-3 animate-scale-in {isOwn ? 'pl-8' : 'pr-8'}"
+  role="article"
+  aria-label="Message from {isOwn ? 'you' : senderName || 'unknown'}"
   oncontextmenu={handleContextMenu}
   ontouchstart={handleTouchStart}
   ontouchmove={handleTouchMove}
@@ -110,7 +112,7 @@
 
     <!-- Bubble -->
     <div
-      class="px-3 py-2 {isOwn ? 'rounded-tl-sm rounded-bl-sm' : 'rounded-tr-sm rounded-br-sm'}"
+      class="px-3.5 py-2.5 relative"
       style="
         background: {isOwn ? 'var(--color-sent)' : 'var(--color-received)'};
         color: {isOwn ? 'var(--color-sent-foreground)' : 'var(--color-received-foreground)'};
@@ -119,19 +121,19 @@
       "
     >
       {#if msg.t === 'text'}
-        <p class="text-base break-words whitespace-pre-wrap">{msg.c}</p>
+        <p class="text-[15px] break-words whitespace-pre-wrap leading-relaxed">{msg.c}</p>
       {:else if msg.t === 'voice' && msg.mu}
         <AudioPlayer url={msg.mu} duration={(msg.md?.duration as number) || 0} />
       {:else if msg.t === 'image' && msg.mu}
         <img
           src={msg.mu}
-          alt="Image"
-          class="rounded-[var(--radius-sm)] max-w-full"
+          alt="Shared image"
+          class="rounded-[var(--radius-sm)] max-w-full cursor-pointer"
           loading="lazy"
           style="max-height: 240px; object-fit: cover;"
         />
         {#if msg.c}
-          <p class="text-base break-words whitespace-pre-wrap mt-1">{msg.c}</p>
+          <p class="text-[15px] break-words whitespace-pre-wrap mt-1.5">{msg.c}</p>
         {/if}
       {:else if msg.t === 'system'}
         <p class="text-sm italic opacity-70 text-center">{msg.c}</p>
@@ -143,7 +145,7 @@
       {#if isOwn}
         <DeliveryStatus status={deliveryStatus} />
       {/if}
-      <span class="text-xs" style="color: var(--text-tertiary);">
+      <span class="text-[11px]" style="color: var(--text-tertiary);">
         {timeStr()}
       </span>
     </div>

@@ -34,6 +34,7 @@ class ChatStore {
 
   // ---- Listener unsubscribes ----
   private inboxUnsub: (() => void) | null = null;
+  private inboxChangedUnsub: (() => void) | null = null;
   private messageUnsub: (() => void) | null = null;
   private presenceUnsubs: Map<string, () => void> = new Map();
   private typingUnsubs: Map<string, () => void> = new Map();
@@ -91,7 +92,7 @@ class ChatStore {
     });
 
     // Listen for changes
-    rtdb.onChildChanged(r, (snap) => {
+    this.inboxChangedUnsub = rtdb.onChildChanged(r, (snap) => {
       const data = snap.val() as UserChat | null;
       if (!data) return;
       this.userChats.set(data.chatId, data);
@@ -284,6 +285,66 @@ class ChatStore {
     this.messages = [...this.messages, message].sort((a, b) => a.ts - b.ts);
   }
 
+  /** Send an image message */
+  async sendImageMessage(chatId: string, imageUrl: string, caption?: string): Promise<void> {
+    const user = authStore.user;
+    if (!user) return;
+
+    const idempotencyKey = generateIdempotencyKey();
+    if (this.sentKeys.has(idempotencyKey)) return;
+    this.sentKeys.add(idempotencyKey);
+
+    const msgRef = rtdb.push(rtdb.ref(RTDB_PATHS.CHAT_MESSAGES(chatId)));
+    const messageId = msgRef.key ?? idempotencyKey;
+
+    const message: Message = {
+      id: messageId,
+      c: caption ?? '📷 Photo',
+      sid: user.id,
+      t: 'image',
+      ts: Date.now(),
+      rk: idempotencyKey,
+      rid: null,
+      mu: imageUrl,
+      mh: null,
+      md: null,
+    };
+
+    const meta = this.chats.get(chatId);
+    const otherUid = meta?.participantIds.find((id) => id !== user.id);
+
+    const updates: Record<string, unknown> = {};
+    updates[RTDB_PATHS.CHAT_MESSAGES(chatId) + '/' + messageId] = message;
+    updates[RTDB_PATHS.CHAT_META(chatId)] = {
+      id: chatId,
+      type: 'direct',
+      participantIds: meta?.participantIds ?? [user.id],
+      lm: '📷 Photo',
+      ts: message.ts,
+      updatedAt: message.ts,
+    };
+    updates[RTDB_PATHS.USER_CHAT_ENTRY(user.id, chatId)] = {
+      chatId,
+      uid: user.id,
+      lrid: messageId,
+      uc: 0,
+      jt: Date.now(),
+    };
+    if (otherUid) {
+      const otherUC = this.userChats.get(chatId);
+      updates[RTDB_PATHS.USER_CHAT_ENTRY(otherUid, chatId)] = {
+        chatId,
+        uid: otherUid,
+        lrid: otherUC?.lrid ?? null,
+        uc: (otherUC?.uc ?? 0) + 1,
+        jt: otherUC?.jt ?? Date.now(),
+      };
+    }
+
+    await rtdb.update(rtdb.ref('/'), updates);
+    this.messages = [...this.messages, message].sort((a, b) => a.ts - b.ts);
+  }
+
   // ============================================================
   // Create direct chat
   // ============================================================
@@ -421,6 +482,10 @@ class ChatStore {
     if (this.inboxUnsub) {
       this.inboxUnsub();
       this.inboxUnsub = null;
+    }
+    if (this.inboxChangedUnsub) {
+      this.inboxChangedUnsub();
+      this.inboxChangedUnsub = null;
     }
   }
 

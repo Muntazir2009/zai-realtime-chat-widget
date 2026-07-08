@@ -137,11 +137,11 @@
     {/if}
 
     <!-- Image -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <img
       src={currentItem.url}
-      alt=""
-      class="max-w-full max-h-full object-contain animate-scale-in"
-      onclick|stopPropagation
+      alt="Media {selectedIndex + 1}"
+      class="max-w-full max-h-full object-contain animate-scale-in pointer-events-none"
     />
 
     <!-- Next -->

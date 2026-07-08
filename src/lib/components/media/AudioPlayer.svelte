@@ -48,11 +48,20 @@
 
   function handleSeek(e: MouseEvent) {
     if (!audioEl) return;
-    const rect = e.currentTarget.getBoundingClientRect();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const x = e.clientX - rect.left;
     const pct = x / rect.width;
     audioEl.currentTime = pct * duration;
     currentTime = audioEl.currentTime;
+  }
+
+  function handleKeySeek(e: KeyboardEvent) {
+    if (!audioEl) return;
+    if (e.key === 'ArrowRight') {
+      audioEl.currentTime = Math.min(audioEl.currentTime + 5, duration);
+    } else if (e.key === 'ArrowLeft') {
+      audioEl.currentTime = Math.max(audioEl.currentTime - 5, 0);
+    }
   }
 </script>
 
@@ -74,9 +83,11 @@
   <!-- Waveform / Progress Bar -->
   <div class="flex-1 flex flex-col gap-1">
     <div
-      class="h-6 flex items-center gap-[2px] cursor-pointer"
+      class="h-6 flex items-center gap-[2px] cursor-pointer rounded-[var(--radius-sm)] px-1"
       onclick={handleSeek}
+      onkeydown={handleKeySeek}
       role="slider"
+      tabindex="0"
       aria-label="Audio progress"
       aria-valuenow={currentTime}
       aria-valuemin={0}
