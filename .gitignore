@@ -24,8 +24,8 @@ Thumbs.db
 firebase-service-account*.json
 service-account*.json
 
-# Upload
-upload/
+# Upload artifacts (root upload folder only, NOT src/routes/api/upload/)
+/upload/
 
 # Dev artifacts
 dev.log

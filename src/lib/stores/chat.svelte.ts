@@ -149,29 +149,36 @@ class ChatStore {
   }
 
   private async fetchUser(uid: string): Promise<void> {
-    // 1. Check IndexedDB cache first
+    // 1. Check IndexedDB cache — validate it's a real User (not corrupt proxy remnant)
     const cached = await getUserProfile(uid);
-    if (cached) {
+    if (cached && cached.displayName && cached.username) {
       this.userDict.set(uid, cached);
       return;
     }
 
-    // 2. Try direct lookup: users/{uid}  (matches RTDB_PATHS.USER_PROFILE)
-    const directSnap = await rtdb.get(await rtdb.ref(RTDB_PATHS.USER_PROFILE(uid)));
-    if (directSnap.exists()) {
-      const user = directSnap.val() as User;
-      this.userDict.set(uid, user);
-      cacheUserProfiles([user]);
-      return;
-    }
-
-    // 3. Fallback: indirect lookup via user_index/{uid} → username → users/{username}
+    // 2. Primary lookup: user_index/{uid} → username → users/{username}
+    //    (users are stored under their username, NOT their uid)
     const indexSnap = await rtdb.get(await rtdb.ref(`user_index/${uid}`));
     if (indexSnap.exists()) {
       const username = indexSnap.val() as string;
-      const userSnap = await rtdb.get(await rtdb.ref(`users/${username}`));
-      if (userSnap.exists()) {
-        const user = userSnap.val() as User;
+      if (username) {
+        const userSnap = await rtdb.get(await rtdb.ref(`users/${username}`));
+        if (userSnap.exists()) {
+          const user = userSnap.val() as User;
+          if (user && user.displayName) {
+            this.userDict.set(uid, user);
+            cacheUserProfiles([user]);
+            return;
+          }
+        }
+      }
+    }
+
+    // 3. Fallback: try direct users/{uid} path (for alternative schemas)
+    const directSnap = await rtdb.get(await rtdb.ref(RTDB_PATHS.USER_PROFILE(uid)));
+    if (directSnap.exists()) {
+      const user = directSnap.val() as User;
+      if (user && user.displayName) {
         this.userDict.set(uid, user);
         cacheUserProfiles([user]);
         return;
@@ -183,7 +190,7 @@ class ChatStore {
     if (allSnap.exists()) {
       allSnap.forEach((childSnap: any) => {
         const u = childSnap.val() as User;
-        if (u.id === uid) {
+        if (u && u.id === uid && u.displayName) {
           this.userDict.set(uid, u);
           cacheUserProfiles([u]);
         }

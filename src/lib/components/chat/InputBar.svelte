@@ -17,12 +17,10 @@
 
   let { onSend, onImageSend, onStickerSelect, onGifSelect }: Props = $props();
 
-  type PickerPanel = 'none' | 'sticker' | 'gif' | 'emoji';
-
   let message = $state('');
   let isRecording = $state(false);
   let isTrayOpen = $state(false);
-  let isEmojiOpen = $state(false);
+  let isGifOpen = $state(false);
   let isUploading = $state(false);
   let uploadProgress = $state(0);
   let uploadLabel = $state('Uploading...');
@@ -31,11 +29,6 @@
   let fileInputEl: HTMLInputElement | null = $state(null);
 
   let hasText = $derived(message.trim().length > 0);
-  let activePicker = $derived.by(() => {
-    if (isEmojiOpen) return 'emoji' as const;
-    if (isTrayOpen) return 'sticker' as const;
-    return 'none' as const;
-  });
 
   // ── Auto-resize ──
   $effect(() => {
@@ -86,23 +79,6 @@
     }
   }
 
-  // ── Emoji ──
-  function handleEmojiSelect(emoji: string) {
-    if (textareaEl) {
-      const start = textareaEl.selectionStart;
-      const end = textareaEl.selectionEnd;
-      message = message.slice(0, start) + emoji + message.slice(end);
-      requestAnimationFrame(() => {
-        const pos = start + emoji.length;
-        textareaEl?.setSelectionRange(pos, pos);
-        textareaEl?.focus();
-      });
-    } else {
-      message += emoji;
-    }
-    emitTyping();
-  }
-
   // ── Sticker ──
   function handleSticker(sticker: string) {
     isTrayOpen = false;
@@ -111,7 +87,7 @@
 
   // ── GIF ──
   function handleGif(gifUrl: string) {
-    isTrayOpen = false;
+    isGifOpen = false;
     onGifSelect?.(gifUrl);
   }
 
@@ -173,17 +149,6 @@
       uploadProgress = 0;
     }
   }
-
-  // ── Emoji data ──
-  const emojiCategories = [
-    { label: '😀', emojis: ['😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃','😉','😊','😇','🥰','😍','🤩','😘','😗','😚','😙','🥲','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫','🤔','😐','😑','😶','😏','😒','🙄','😬','😌','😔','😪','🤤','😴','🥵','🥶','🥴','😵','🤯','🤠','🥳','😎','🤓','🧐','😤','😠','😡','🤬','😈','👿','💀','☠️','💩','🤡','👹','👺','👻','👽','🤖'] },
-    { label: '👋', emojis: ['👋','🤚','✋','🖐️','👌','🤌','🤏','✌️','🤞','🫰','🤟','🤘','🤙','👈','👉','👆','👇','☝️','🫵','👍','👎','✊','👊','🤛','🤜','👏','🙌','🫶','👐','🤲','🤝','🙏','💪','🦾','🦿','🦵','🦶'] },
-    { label: '❤️', emojis: ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❤️‍🔥','💕','💗','💖','💝','💘','💟','♥️','❣️','💞','💓','💗','💞'] },
-    { label: '🎉', emojis: ['🎉','🎊','🎁','🏆','⭐','🌟','💫','✨','⚡','🔥','💥','💢','💦','💤','🌈','☀️','🌙','💎','🎵','🎶','☕','🍕','🎮','📱','💡','🚀','💰','💵','💎','👑'] },
-    { label: '🐱', emojis: ['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐵','🐔','🐧','🦅','🦆','🦉','🐴','🦄','🐝','🦋','🐌','🐞','🐢','🐍','🦎','🦖'] },
-  ];
-  let activeEmojiCategory = $state(0);
-  const currentEmojis = $derived(emojiCategories[activeEmojiCategory]?.emojis ?? []);
 </script>
 
 {#if isRecording}
@@ -203,32 +168,10 @@
     {/if}
 
     <!-- Picker panels -->
-    {#if activePicker === 'sticker'}
+    {#if isTrayOpen}
       <StickerPicker onStickerSelect={handleSticker} />
-    {:else if activePicker === 'emoji'}
-      <div class="animate-slide-up" style="background: var(--bg-surface); border-top: 1px solid rgba(255,255,255,0.06);">
-        <div class="flex items-center gap-0.5 px-2 pt-2 pb-1 overflow-x-auto" style="scrollbar-width: none;">
-          {#each emojiCategories as cat, i}
-            <button
-              class="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-lg text-lg transition-all duration-150 active:scale-90"
-              style="background: {activeEmojiCategory === i ? 'var(--input-bg)' : 'transparent'}; opacity: {activeEmojiCategory === i ? '1' : '0.45'};"
-              onclick={() => (activeEmojiCategory = i)}
-            >
-              {cat.label}
-            </button>
-          {/each}
-        </div>
-        <div class="grid grid-cols-8 gap-0 px-1 pb-2 pt-1" style="max-height: 180px; overflow-y: auto;">
-          {#each currentEmojis as emoji}
-            <button
-              class="w-full aspect-square flex items-center justify-center text-xl rounded-lg transition-all duration-150 active:scale-90"
-              onclick={() => handleEmojiSelect(emoji)}
-            >
-              {emoji}
-            </button>
-          {/each}
-        </div>
-      </div>
+    {:else if isGifOpen}
+      <GIFPicker onGifSelect={handleGif} />
     {/if}
 
     <!-- Hidden file input -->
@@ -240,9 +183,7 @@
       onchange={handleFileSelect}
     />
 
-    <!-- ═══════════════════════════════════════════════════════ -->
-    <!-- Input Row — exact MessageInput.svelte visual            -->
-    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- Input Row -->
     <div class="flex items-end gap-1.5 bg-[#111114]/90 backdrop-blur-md
                 border border-white/[0.06] rounded-[1.6rem] px-2 py-1.5
                 transition-all duration-200">
@@ -266,19 +207,12 @@
         style="color: var(--text-primary);"
       ></textarea>
 
-      <button onclick={() => { isTrayOpen = !isTrayOpen; isEmojiOpen = false; }}
+      <button onclick={() => { isTrayOpen = !isTrayOpen; isGifOpen = false; }}
         class="active:scale-95 transition-all duration-200
                px-1.5 h-11 flex items-center justify-center rounded-full
                text-[11px] font-bold tracking-wide"
         style="color: {isTrayOpen ? 'var(--color-primary)' : 'var(--text-tertiary)'};">
         GIF
-      </button>
-
-      <button onclick={() => { isEmojiOpen = !isEmojiOpen; isTrayOpen = false; }}
-        class="active:scale-95 transition-all duration-200
-               w-11 h-11 flex items-center justify-center rounded-full text-lg"
-        style="color: {isEmojiOpen ? 'var(--color-primary)' : 'var(--text-tertiary)'};">
-        😊
       </button>
 
       {#if hasText}
@@ -291,7 +225,6 @@
       {:else}
         <button
           onclick={handleVoiceRecord}
-          class:animate-pulse={isRecording}
           class="w-11 h-11 rounded-full active:scale-95 transition-all duration-200
                  flex items-center justify-center text-lg"
           style="color: var(--text-tertiary);">
