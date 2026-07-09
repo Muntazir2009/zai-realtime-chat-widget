@@ -3,6 +3,9 @@ compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = ".svelte-kit/cloudflare"
 
+[build]
+command = "npm install && npm run build"
+
 # ---------------------------------------------------------------------------
 # Public environment variables (exposed to client via import.meta.env)
 # Set these via Cloudflare Dashboard or wrangler pages secret put
