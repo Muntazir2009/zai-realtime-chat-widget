@@ -15,6 +15,7 @@ let _app: FirebaseApp;
 let _auth: Auth;
 let _database: Database;
 let _storage: FirebaseStorage;
+let _initPromise: Promise<void> | null = null;
 
 async function initFirebase() {
   if (!browser) return;
@@ -45,8 +46,13 @@ async function initFirebase() {
   _storage = getStorage(_app);
 }
 
-// Initialize immediately in browser
-if (browser) initFirebase();
+// Start initialization immediately in browser
+if (browser) _initPromise = initFirebase();
+
+/** Wait for Firebase to finish initializing */
+export async function ensureReady(): Promise<void> {
+  if (_initPromise) await _initPromise;
+}
 
 /** Get the app (browser only) */
 export function getApp(): FirebaseApp {
