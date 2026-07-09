@@ -62,7 +62,7 @@ export async function POST({ request, platform }: { request: Request; platform: 
     const now = Date.now();
 
     // Step 3: Write to RTDB
-    const userData = { id: userId, username, displayName: trimmedName, avatarUrl: null, status: 'online', lastSeen: now, createdAt: now };
+    const userData = { id: userId, username, displayName: trimmedName, avatarUrl: null, status: 'offline', lastSeen: now, createdAt: now };
     const authData = { passwordHash, userId };
 
     console.log(`[register] step 3: writing user to RTDB (userId=${userId})`);

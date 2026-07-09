@@ -157,7 +157,7 @@ class AuthStore {
       username: authResp.username,
       displayName: authResp.displayName,
       avatarUrl: null,
-      status: 'online',
+      status: 'offline',
       lastSeen: Date.now(),
       createdAt: Date.now(),
     };

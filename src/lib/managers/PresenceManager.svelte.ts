@@ -22,17 +22,48 @@ class PresenceManager {
   private lastTypingEmit: Map<string, number> = new Map();
 
   private visibilityHandler: (() => void) | null = null;
+  private beforeUnloadHandler: (() => void) | null = null;
   private disconnectQueued = false;
 
   constructor() {
     if (typeof window !== 'undefined') {
-      // Only handle visibility change for typing — presence is handled by onDisconnect
+      // Handle visibility change for typing — presence is handled by onDisconnect
       this.visibilityHandler = () => {
         if (document.hidden) {
           this.stopAllTyping();
         }
       };
       document.addEventListener('visibilitychange', this.visibilityHandler);
+
+      // Force-remove presence on tab close / navigation away.
+      // onDisconnect is the primary safety net, but it can fail if
+      // the RTDB WebSocket was already torn down (e.g. by NetworkManager).
+      // This fire-and-forget .remove() is the bulletproof backup.
+      this.beforeUnloadHandler = () => {
+        const uid = this.uid;
+        if (!uid) return;
+        // Use sendBeacon-style: fire a synchronous-looking remove.
+        // navigator.sendBeacon doesn't work for RTDB, but we can use
+        // the keepalive flag on fetch to ensure the request outlives the page.
+        try {
+          const body = JSON.stringify({
+            path: RTDB_PATHS.PRESENCE(uid),
+            value: { uid, status: 'offline', lastSeen: Date.now(), typing: false },
+          });
+          // Best-effort: if this fails, onDisconnect still fires
+          fetch('/api/presence/cleanup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body,
+            keepalive: true,
+          }).catch(() => {});
+        } catch {
+          // Silently fail — onDisconnect is the real safety net
+        }
+      };
+      window.addEventListener('beforeunload', this.beforeUnloadHandler);
+      // pagehide is more reliable on mobile Safari
+      window.addEventListener('pagehide', this.beforeUnloadHandler);
     }
   }
 
@@ -204,6 +235,11 @@ class PresenceManager {
       document.removeEventListener('visibilitychange', this.visibilityHandler);
       this.visibilityHandler = null;
     }
+    if (this.beforeUnloadHandler && typeof window !== 'undefined') {
+      window.removeEventListener('beforeunload', this.beforeUnloadHandler);
+      window.removeEventListener('pagehide', this.beforeUnloadHandler);
+      this.beforeUnloadHandler = null;
+    }
   }
 
   private stopHeartbeat(): void {
@@ -217,7 +253,7 @@ class PresenceManager {
     rtdb.set(await rtdb.ref(RTDB_PATHS.PRESENCE(uid)), {
       uid,
       status,
-      lastSeen: Date.now(),
+      lastSeen: rtdb.serverTimestamp(),
       typing: false,
     }).catch((err) => {
       console.warn('[PresenceManager] Failed to write presence:', err);
@@ -228,7 +264,7 @@ class PresenceManager {
     rtdb.set(await rtdb.ref(RTDB_PATHS.PRESENCE(uid)), {
       uid,
       status: this.onlineStatus,
-      lastSeen: Date.now(),
+      lastSeen: rtdb.serverTimestamp(),
       typing: false,
     }).catch(() => {});
   }

@@ -91,6 +91,7 @@
     }
     if (v === 'auth') {
       chatStore?.detachAllListeners();
+      presenceManager?.disconnect();
     }
   });
 </script>

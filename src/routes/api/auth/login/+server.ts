@@ -38,10 +38,10 @@ export async function POST({ request, platform }: { request: Request; platform: 
     }
     console.log('[login] step 2: password verified');
 
-    // Step 3: Update online status
+    // Step 3: Update lastSeen (but NOT status — presence is managed client-side via PresenceManager)
     const now = Date.now();
-    await rtdbUpdate(env, `users/${username}`, { status: 'online', lastSeen: now });
-    console.log('[login] step 3: online status updated');
+    await rtdbUpdate(env, `users/${username}`, { lastSeen: now });
+    console.log('[login] step 3: lastSeen updated');
 
     // Step 4: Generate custom token
     console.log('[login] step 4: generating custom token');

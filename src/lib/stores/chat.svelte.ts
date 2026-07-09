@@ -41,6 +41,7 @@ class ChatStore {
   private messageChangedUnsub: (() => void) | null = null;
   private messageRemovedUnsub: (() => void) | null = null;
   private presenceUnsubs: Map<string, () => void> = new Map();
+  private presenceStaleTimer: ReturnType<typeof setInterval> | null = null;
   private typingUnsubs: Map<string, () => void> = new Map();
   private typingSafetyTimeouts: Map<string, Map<string, ReturnType<typeof setTimeout>>> = new Map();
 
@@ -293,7 +294,8 @@ class ChatStore {
     });
 
     this.markAsRead(chatId);
-    this.attachPresenceListeners(chatId);
+    await this.attachPresenceListeners(chatId);
+    this.startPresenceStaleCheck();
     this.attachTypingListener(chatId);
     this.attachPinnedListener(chatId);
     this.attachReactionListeners(chatId);
@@ -535,8 +537,26 @@ class ChatStore {
       const r = await rtdb.ref(RTDB_PATHS.PRESENCE(uid));
       const unsub = await rtdb.onValue(r, (snap) => {
         if (snap.exists()) {
+          const raw = snap.val() as PresenceState;
           const newMap = new Map(this.presence);
-          newMap.set(uid, snap.val() as PresenceState);
+          // Client-side stale detection: if lastSeen > 90s ago, treat as offline.
+          // This catches orphaned presence nodes from crashes/disconnects
+          // where onDisconnect failed to fire.
+          if (raw.status === 'online' && raw.lastSeen) {
+            const age = Date.now() - raw.lastSeen;
+            if (age > 90_000) {
+              newMap.set(uid, { ...raw, status: 'offline' });
+            } else {
+              newMap.set(uid, raw);
+            }
+          } else {
+            newMap.set(uid, raw);
+          }
+          this.presence = newMap;
+        } else {
+          // Presence node removed entirely — treat as offline
+          const newMap = new Map(this.presence);
+          newMap.delete(uid);
           this.presence = newMap;
         }
       });
@@ -547,6 +567,34 @@ class ChatStore {
   private detachPresenceListeners(): void {
     for (const [, unsub] of this.presenceUnsubs) unsub();
     this.presenceUnsubs.clear();
+    this.presence = new Map();
+    this.stopPresenceStaleCheck();
+  }
+
+  /** Periodically re-evaluate presence entries for staleness (>90s = offline) */
+  private startPresenceStaleCheck(): void {
+    this.stopPresenceStaleCheck();
+    this.presenceStaleTimer = setInterval(() => {
+      if (this.presence.size === 0) return;
+      let changed = false;
+      const newMap = new Map(this.presence);
+      for (const [uid, state] of newMap) {
+        if (state.status === 'online' && state.lastSeen) {
+          if (Date.now() - state.lastSeen > 90_000) {
+            newMap.set(uid, { ...state, status: 'offline' });
+            changed = true;
+          }
+        }
+      }
+      if (changed) this.presence = newMap;
+    }, 15_000);
+  }
+
+  private stopPresenceStaleCheck(): void {
+    if (this.presenceStaleTimer) {
+      clearInterval(this.presenceStaleTimer);
+      this.presenceStaleTimer = null;
+    }
   }
 
   // ============================================================

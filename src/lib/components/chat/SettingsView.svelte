@@ -4,6 +4,7 @@
   import { authStore } from '$lib/stores/auth.svelte';
   import { chatStore } from '$lib/stores/chat.svelte';
   import { uiStore } from '$lib/stores/ui.svelte';
+  import { presenceManager } from '$lib/managers/PresenceManager.svelte';
   import type { ThemeMode } from '$lib/types/index';
 
   const themes: { mode: ThemeMode; label: string; desc: string; icon: typeof Sun }[] = [
@@ -18,6 +19,7 @@
 
   function handleLogout() {
     chatStore.detachAllListeners();
+    presenceManager?.disconnect();
     authStore.logout();
     uiStore.setView('auth');
   }
