@@ -134,7 +134,7 @@
         <MessageCircle size={28} class="text-white" />
       </div>
       <h1 class="text-2xl font-bold" style="color: var(--text-primary);">
-        Z.ai <span style="color: var(--color-primary);">Chat</span>
+        <span style="color: var(--color-primary);">Chat</span>
       </h1>
       <p class="text-sm mt-1" style="color: var(--text-tertiary);">
         {mode === 'login' ? 'Welcome back' : 'Create your account'}

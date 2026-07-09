@@ -7,7 +7,7 @@
 import { openDB, type IDBPDatabase } from 'idb';
 import type { Message, User } from '$lib/types/index.js';
 
-const DB_NAME = 'zai-chat-cache';
+const DB_NAME = 'chat-cache';
 const DB_VERSION = 1;
 
 const STORE_MESSAGES = 'messages';

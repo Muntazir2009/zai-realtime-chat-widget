@@ -10,8 +10,8 @@ import type { User } from '$lib/types/index.js';
 import { signInWithCustomToken, signOut as fbSignOut, onAuthStateChanged, currentUser } from '$lib/firebase/auth.js';
 import { clearAll as clearAllCache } from '$lib/managers/CacheManager.js';
 
-const STORAGE_TOKEN_KEY = 'zai-chat-token';
-const STORAGE_USER_KEY = 'zai-chat-user';
+const STORAGE_TOKEN_KEY = 'chat-auth-token';
+const STORAGE_USER_KEY = 'chat-auth-user';
 
 class AuthStore {
   user: User | null = $state(null);

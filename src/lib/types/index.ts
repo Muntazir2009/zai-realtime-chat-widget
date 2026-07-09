@@ -1,5 +1,5 @@
 // ============================================================
-// Z.ai Chat — Canonical Type Definitions
+// Chat — Canonical Type Definitions
 // PRD §IV.2 — Schema Architecture mirrors these types 1:1
 // ============================================================
 

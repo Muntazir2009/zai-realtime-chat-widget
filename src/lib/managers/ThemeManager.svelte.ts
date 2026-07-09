@@ -6,7 +6,7 @@
 
 import type { ThemeMode } from '$lib/types/index.js';
 
-const STORAGE_KEY = 'zai-chat-theme';
+const STORAGE_KEY = 'chat-theme';
 const THEME_ORDER: ThemeMode[] = ['light', 'dark', 'amoled'];
 
 function detectSystemPreference(): ThemeMode {
