@@ -149,35 +149,45 @@ class ChatStore {
   }
 
   private async fetchUser(uid: string): Promise<void> {
+    // 1. Check IndexedDB cache first
     const cached = await getUserProfile(uid);
     if (cached) {
       this.userDict.set(uid, cached);
       return;
     }
 
-    // Try looking up by user ID or username
-    const snap = await rtdb.get(await rtdb.ref(`user_index/${uid}`));
-    if (!snap.exists()) {
-      // Fallback: scan users node
-      const allSnap = await rtdb.get(await rtdb.ref('users'));
-      if (allSnap.exists()) {
-        allSnap.forEach((childSnap: any) => {
-          const u = childSnap.val() as User;
-          if (u.id === uid) {
-            this.userDict.set(uid, u);
-            cacheUserProfiles([u]);
-          }
-        });
-      }
+    // 2. Try direct lookup: users/{uid}  (matches RTDB_PATHS.USER_PROFILE)
+    const directSnap = await rtdb.get(await rtdb.ref(RTDB_PATHS.USER_PROFILE(uid)));
+    if (directSnap.exists()) {
+      const user = directSnap.val() as User;
+      this.userDict.set(uid, user);
+      cacheUserProfiles([user]);
       return;
     }
 
-    const username = snap.val() as string;
-    const userSnap = await rtdb.get(await rtdb.ref(`users/${username}`));
-    if (userSnap.exists()) {
-      const user = userSnap.val() as User;
-      this.userDict.set(uid, user);
-      cacheUserProfiles([user]);
+    // 3. Fallback: indirect lookup via user_index/{uid} → username → users/{username}
+    const indexSnap = await rtdb.get(await rtdb.ref(`user_index/${uid}`));
+    if (indexSnap.exists()) {
+      const username = indexSnap.val() as string;
+      const userSnap = await rtdb.get(await rtdb.ref(`users/${username}`));
+      if (userSnap.exists()) {
+        const user = userSnap.val() as User;
+        this.userDict.set(uid, user);
+        cacheUserProfiles([user]);
+        return;
+      }
+    }
+
+    // 4. Last resort: scan the entire users node (expensive, rarely needed)
+    const allSnap = await rtdb.get(await rtdb.ref('users'));
+    if (allSnap.exists()) {
+      allSnap.forEach((childSnap: any) => {
+        const u = childSnap.val() as User;
+        if (u.id === uid) {
+          this.userDict.set(uid, u);
+          cacheUserProfiles([u]);
+        }
+      });
     }
   }
 

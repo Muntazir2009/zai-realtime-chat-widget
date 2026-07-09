@@ -72,9 +72,13 @@ export function cacheMessages(chatId: string, messages: Message[]): void {
       ? messages.slice(-MAX_CACHED_MESSAGES)
       : messages;
 
+    // Deep-clone to strip Svelte reactive proxies — IDB structured clone
+    // cannot handle Proxy objects ($state / $derived backings).
+    const plain: Message[] = JSON.parse(JSON.stringify(trimmed));
+
     const entry: CachedMessageEntry = {
       chatId,
-      messages: trimmed,
+      messages: plain,
       updatedAt: Date.now(),
     };
 
@@ -97,7 +101,9 @@ export function cacheUserProfiles(users: User[]): void {
     const tx = db.transaction(STORE_USERS, 'readwrite');
     const store = tx.objectStore(STORE_USERS);
     for (const user of users) {
-      await store.put(user);
+      // Deep-clone to strip any reactive proxy wrappers
+      const plain = JSON.parse(JSON.stringify(user)) as User;
+      await store.put(plain);
     }
     await tx.done;
   });
