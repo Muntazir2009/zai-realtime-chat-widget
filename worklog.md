@@ -841,3 +841,61 @@ Work Log:
 Stage Summary:
 - File: src/lib/components/chat/InputBar.svelte completely rewritten
 - Premium floating glass input matching iMessage/Telegram quality
+---
+Task ID: 21 (Massive UI Overhaul)
+Agent: Main
+Task: Complete UI overhaul - production quality polish for chat app
+
+Work Log:
+- Redesigned MessageBubble.svelte with:
+  - Premium glass material (layered shadows, inner highlight overlay, subtle borders)
+  - CSS bubble tails using ::after pseudo-elements with clip-path
+  - Inline meta (time, status, edited, pin/star badges) inside the bubble
+  - Improved grouping (reduced spacing for consecutive messages from same sender)
+  - Better image handling (dedicated wrap div, min-height, filter transitions)
+  - Enhanced swipe-to-reply physics (damped spring, ease-in approach curve, lower threshold 70px)
+  - Link cards with icon, domain extraction
+  - Voice message type in reply previews
+- Redesigned Conversation.svelte with:
+  - Premium glass header (blur 24px, saturate 190%, subtle shadow)
+  - Compact header (56px) with phone call button and improved online dot pulse
+  - Smart last-seen formatting (just now, Xm ago, Xh ago, date)
+  - Custom scroll-to-bottom FAB (glass material, spring animation, message count badge)
+  - isNearBottom tracking for smart auto-scroll behavior
+  - ChatList header with glass material and improved styling
+  - ChatList empty state with floating animation
+  - New chat sheet with glass material and smooth animation
+- Redesigned InputBar.svelte with:
+  - Glass pill shell (blur 20px, saturate 180%, glass border)
+  - Animated action buttons (collapse/expand with spring)
+  - Send button with rotation animation (0deg → -45deg on appear)
+  - Improved upload progress with gradient fill
+  - Reduced typing debounce (2s stop timer, 2s emit throttle)
+- Redesigned TypingIndicator with:
+  - Compact bubble matching received message style
+  - Slide-up entrance animation
+  - Simpler label (just name + "is typing")
+- Redesigned ReplyPreview with:
+  - Glass material backdrop-filter
+  - Spring slide-up animation
+  - Better layout with dashed reply line
+- Improved ParticleRain with:
+  - More particles (24 hearts, 18 kisses)
+  - Better sway physics with per-particle rotation
+  - 85% opacity peak with gradual fade
+- Fixed typing safety timeout (5s → 3s in chat store)
+- Fixed PresenceManager stop timer (2.5s → 2s)
+- Disabled text selection on entire conversation shell
+- Native scrolling improvements (hidden scrollbar, momentum, overscroll contain)
+- Fixed SVG compilation error in Conversation menu (replaced with text-only button)
+- Added a11y svelte-ignore for image click handler in MessageBubble
+
+Stage Summary:
+- All major visual components redesigned with premium glassmorphism
+- Bubble tails, inline meta, glass highlights, spring animations
+- Swipe physics improved with damped spring
+- Typing indicator more responsive (2s debounce)
+- Scroll-to-bottom FAB with unread count
+- Smart auto-scroll (only when near bottom)
+- Presence last-seen formatting improved
+- Compilation errors fixed, app renders auth screen correctly

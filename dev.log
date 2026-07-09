@@ -1,5 +1,24 @@
 
-  VITE v6.4.3  ready in 1429 ms
+  VITE v6.4.3  ready in 1945 ms
 
   ➜  Local:   http://localhost:3000/
-  ➜  Network: http://21.0.10.203:3000/
+  ➜  Network: http://21.0.13.218:3000/
+Using secrets defined in .env
+11:25:53 AM [vite-plugin-svelte] src/lib/components/chat/MessageBubble.svelte:272:10 Visible, non-interactive element `<img>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events
+11:25:53 AM [vite-plugin-svelte] src/lib/components/chat/MessageBubble.svelte:272:10 Non-interactive element `<img>` should not be assigned mouse or keyboard event listeners
+https://svelte.dev/e/a11y_no_noninteractive_element_interactions
+11:25:53 AM [vite-plugin-svelte] src/lib/components/chat/InputBar.svelte:347:2 Unused CSS selector ".upload-spinner"
+https://svelte.dev/e/css_unused_selector
+11:25:53 AM [vite-plugin-svelte] src/lib/components/chat/ReplyPreview.svelte:100:2 Unused CSS selector ".reply-type-icon"
+https://svelte.dev/e/css_unused_selector
+11:25:53 AM [vite-plugin-svelte] src/lib/components/chat/ChatTile.svelte:161:2 Unused CSS selector ".tile-preview-icon"
+https://svelte.dev/e/css_unused_selector
+11:25:53 AM [vite-plugin-svelte] src/lib/components/ui/BottomNavBar.svelte:16:0 Non-interactive element `<nav>` cannot have interactive role 'tablist'
+https://svelte.dev/e/a11y_no_noninteractive_element_to_interactive_role
+11:25:53 AM [vite-plugin-svelte] src/lib/components/ui/BottomNavBar.svelte:89:2 Unused CSS selector ".nav-pill-icon"
+https://svelte.dev/e/css_unused_selector
+11:25:53 AM [vite-plugin-svelte] src/lib/components/ui/BottomNavBar.svelte:105:2 Unused CSS selector ".nav-pill-active .nav-pill-icon"
+https://svelte.dev/e/css_unused_selector
+11:26:37 AM [vite-plugin-svelte] src/lib/components/chat/MessageBubble.svelte:272:10 Non-interactive element `<img>` should not be assigned mouse or keyboard event listeners
+https://svelte.dev/e/a11y_no_noninteractive_element_interactions

@@ -490,7 +490,7 @@ class ChatStore {
         set.add(uid);
         this.typingUsers.set(chatId, set);
 
-        // Set a 5-second safety timeout to auto-remove (in case RTDB removal is delayed/lost)
+        // Set a 3-second safety timeout to auto-remove (in case RTDB removal is delayed/lost)
         this.clearTypingSafetyTimeout(chatId, uid);
         const timeout = setTimeout(() => {
           const s = this.typingUsers.get(chatId);
@@ -500,7 +500,7 @@ class ChatStore {
           }
           const timeouts = this.typingSafetyTimeouts.get(chatId);
           if (timeouts) timeouts.delete(uid);
-        }, 5000);
+        }, 3000);
         this.typingSafetyTimeouts.get(chatId)!.set(uid, timeout);
       });
       this.typingUnsubs.set(uid, unsub);

@@ -83,7 +83,7 @@ class PresenceManager {
     const existingTimer = this.typingTimers.get(chatId);
     if (existingTimer) clearTimeout(existingTimer);
 
-    const timer = setTimeout(() => this.stopTyping(chatId), TYPING_DEBOUNCE_MS + 500);
+    const timer = setTimeout(() => this.stopTyping(chatId), TYPING_DEBOUNCE_MS);
     this.typingTimers.set(chatId, timer);
   }
 

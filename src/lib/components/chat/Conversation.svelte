@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ChevronLeft, MoreVertical, Clock, Image as ImageIcon, Pin } from 'lucide-svelte';
+  import { ChevronLeft, MoreVertical, Clock, Image as ImageIcon, Pin, Phone, Video, X } from 'lucide-svelte';
   import MessageBubble from './MessageBubble.svelte';
   import Lightbox from '$lib/components/media/Lightbox.svelte';
   import MessageContextMenu from './MessageContextMenu.svelte';
@@ -16,8 +16,6 @@
   import type { Message } from '$lib/types/index';
   import { format, isToday, isYesterday, startOfDay } from 'date-fns';
 
-  const EASTER_TRIGGERS = ['i love you', 'love you', 'love u', 'mwah', 'muah', 'muahh', 'mwahh', 'kiss', '❤️', '💋'];
-
   let messagesContainer: HTMLDivElement | undefined = $state();
   let showMenu = $state(false);
   let contextMenuMsg: Message | null = $state(null);
@@ -31,6 +29,9 @@
   let triggerKissRain = $state(false);
   let isNearBottom = $state(true);
   let prevMsgCount = 0;
+  let showScrollFab = $state(false);
+  let newMsgWhileScrolled = $state(0);
+  let prevScrollHeight = 0;
 
   let otherUser = $derived.by(() => {
     const meta = chatStore.activeChatId ? chatStore.chats.get(chatStore.activeChatId) : undefined;
@@ -77,6 +78,22 @@
     return chatStore.messages.find(m => m.id === msg.rid) ?? null;
   }
 
+  // Scroll tracking
+  function updateScrollState() {
+    if (!messagesContainer) return;
+    const { scrollTop, scrollHeight, clientHeight } = messagesContainer;
+    const distFromBottom = scrollHeight - scrollTop - clientHeight;
+    const wasNearBottom = isNearBottom;
+    isNearBottom = distFromBottom < 120;
+    showScrollFab = distFromBottom > 200;
+
+    // Count new messages while scrolled up
+    if (scrollHeight > prevScrollHeight + 40 && !wasNearBottom) {
+      newMsgWhileScrolled++;
+    }
+    prevScrollHeight = scrollHeight;
+  }
+
   // Smart auto-scroll: only if user was already near bottom
   $effect(() => {
     const len = chatStore.messages.length;
@@ -85,10 +102,22 @@
       requestAnimationFrame(() => {
         if (messagesContainer) {
           messagesContainer.scrollTo({ top: messagesContainer.scrollHeight, behavior: 'smooth' });
+          newMsgWhileScrolled = 0;
         }
       });
     }
     prevMsgCount = len;
+  });
+
+  // Initial scroll to bottom on chat open
+  $effect(() => {
+    if (chatStore.activeChatId && messagesContainer) {
+      requestAnimationFrame(() => {
+        if (messagesContainer) {
+          messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+      });
+    }
   });
 
   function goBack() {
@@ -185,17 +214,34 @@
   function handleGifSelect(gifUrl: string) {
     if (chatStore.activeChatId) chatStore.sendImageMessage(chatStore.activeChatId, gifUrl, 'GIF');
   }
+
+  function scrollToBottom() {
+    if (!messagesContainer) return;
+    newMsgWhileScrolled = 0;
+    messagesContainer.scrollTo({ top: messagesContainer.scrollHeight, behavior: 'smooth' });
+  }
+
+  function formatLastSeen(ts: number): string {
+    const now = Date.now();
+    const diff = now - ts;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric' });
+  }
 </script>
 
-<div class="flex flex-col h-full relative" style="background-color: var(--bg-page);">
+<div class="conv-shell" style="background-color: var(--bg-page);">
   <ParticleRain type="heart" trigger={triggerHeartRain} />
   <ParticleRain type="kiss" trigger={triggerKissRain} />
 
-  <!-- Premium Header -->
+  <!-- Premium Glass Header -->
   <header class="header-glass safe-top">
     <div class="header-inner">
       <button class="h-btn" onclick={goBack} aria-label="Back">
-        <ChevronLeft size={24} />
+        <ChevronLeft size={22} />
       </button>
 
       <button class="header-center" onclick={() => {}}>
@@ -207,35 +253,40 @@
             avatarUrl={otherUser?.avatarUrl}
           />
           {#if otherPresence?.status === 'online'}
-            <span class="online-ring"></span>
+            <span class="online-dot"></span>
           {/if}
         </div>
         <div class="header-info">
           <p class="header-name">{otherUser?.displayName ?? 'Unknown'}</p>
           {#if typingNames.length > 0}
-            <p class="header-sub typing-sub">
-              {typingNames.length === 1 ? 'typing' : 'typing'}
-              <span class="typing-dots">
-                <span class="td"></span><span class="td"></span><span class="td"></span>
+            <div class="header-sub header-typing">
+              <span class="typing-text">typing</span>
+              <span class="h-typing-dots">
+                <span class="htd"></span><span class="htd"></span><span class="htd"></span>
               </span>
-            </p>
+            </div>
           {:else if otherPresence?.status === 'online'}
-            <p class="header-sub" style="color: var(--color-primary);">Online</p>
+            <p class="header-sub header-online">Online</p>
           {:else if otherPresence}
-            <p class="header-sub" style="color: var(--text-tertiary);">
+            <p class="header-sub header-away">
               {otherPresence.status === 'offline' && otherPresence.lastSeen > 0
-                ? `Last seen ${new Date(otherPresence.lastSeen).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`
+                ? `Last seen ${formatLastSeen(otherPresence.lastSeen)}`
                 : otherPresence.status === 'away' ? 'Away' : 'Offline'}
             </p>
           {:else}
-            <p class="header-sub" style="color: var(--text-tertiary);">Tap for info</p>
+            <p class="header-sub header-default">Tap for info</p>
           {/if}
         </div>
       </button>
 
-      <button class="h-btn" onclick={() => (showMenu = !showMenu)} aria-label="More options">
-        <MoreVertical size={20} />
-      </button>
+      <div class="header-actions">
+        <button class="h-btn h-btn-sm" aria-label="Voice call" onclick={() => toastStore.info('Coming soon')}>
+          <Phone size={18} />
+        </button>
+        <button class="h-btn h-btn-sm" onclick={() => (showMenu = !showMenu)} aria-label="More options">
+          <MoreVertical size={18} />
+        </button>
+      </div>
     </div>
   </header>
 
@@ -243,7 +294,7 @@
   {#if sortedPinned.length > 0}
     <div class="pin-banner">
       <div class="pin-inner">
-        <Pin size={13} style="color: var(--color-primary); flex-shrink: 0;" />
+        <Pin size={12} style="color: var(--color-primary); flex-shrink: 0;" />
         <div class="pin-content">
           <p class="pin-label">Pinned{sortedPinned.length > 1 ? ` (${sortedPinned.length})` : ''}</p>
           <p class="pin-text">{sortedPinned[0].msg.t === 'image' ? '📷 Photo' : sortedPinned[0].msg.c.slice(0, 80)}</p>
@@ -255,7 +306,8 @@
   <!-- Messages -->
   <div
     bind:this={messagesContainer}
-    class="msg-scroll scroll-momentum"
+    class="msg-scroll"
+    onscroll={updateScrollState}
   >
     {#if chatStore.messages.length === 0}
       <div class="empty-state">
@@ -273,7 +325,7 @@
       {#each messageGroups as group (group.date)}
         <div class="date-separator">
           <div class="date-chip">
-            <Clock size={11} />
+            <Clock size={10} />
             <span>{formatDateLabel(group.date, group.isToday, group.isYesterday)}</span>
           </div>
         </div>
@@ -303,8 +355,19 @@
       {/each}
     {/if}
 
-    <ScrollToBottom messagesContainer={messagesContainer} />
+    <!-- Scroll padding at bottom -->
+    <div class="scroll-bottom-pad"></div>
   </div>
+
+  <!-- Scroll to Bottom FAB -->
+  {#if showScrollFab}
+    <button class="scroll-fab" onclick={scrollToBottom} aria-label="Scroll to bottom">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      {#if newMsgWhileScrolled > 0}
+        <span class="fab-count">{newMsgWhileScrolled > 9 ? '9+' : newMsgWhileScrolled}</span>
+      {/if}
+    </button>
+  {/if}
 
   <!-- Typing indicator -->
   {#if typingNames.length > 0}
@@ -326,7 +389,7 @@
       ></textarea>
       <button class="edit-save" onclick={saveEdit}>Save</button>
       <button class="edit-cancel" onclick={cancelEdit} aria-label="Cancel edit">
-        ✕
+        <X size={14} />
       </button>
     </div>
   {/if}
@@ -378,47 +441,80 @@
   <div class="menu-overlay" style="background: var(--overlay-bg);" onclick={() => (showMenu = false)} onkeydown={(e) => e.key === 'Escape' && (showMenu = false)} role="button" tabindex="-1">
     <div class="menu-sheet">
       <button class="menu-item" onclick={() => { showMenu = false; }}>
-        <ImageIcon size={18} style="color: var(--text-secondary);" />
+        <ImageIcon size={17} style="color: var(--text-secondary);" />
         <span>View media</span>
+      </button>
+      <button class="menu-item" onclick={() => { showMenu = false; toastStore.info('Coming soon'); }}>
+        <Phone size={17} style="color: var(--text-secondary);" />
+        <span>Voice call</span>
+      </button>
+      <div class="menu-divider"></div>
+      <button class="menu-item menu-item-danger" onclick={() => { showMenu = false; toastStore.info('Coming soon'); }}>
+        <span>Mute notifications</span>
       </button>
     </div>
   </div>
 {/if}
 
 <style>
+  /* === SHELL === */
+  .conv-shell {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    position: relative;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
   /* === PREMIUM HEADER === */
   .header-glass {
     background: var(--glass-bg);
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
-    box-shadow: 0 1px 0 var(--border-subtle), 0 4px 16px rgba(0,0,0,0.04);
+    backdrop-filter: blur(24px) saturate(190%);
+    -webkit-backdrop-filter: blur(24px) saturate(190%);
+    box-shadow: 0 0.5px 0 var(--border-subtle), 0 4px 24px rgba(0,0,0,0.03);
     z-index: 50;
     position: relative;
+    flex-shrink: 0;
   }
 
   .header-inner {
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 0 8px;
-    height: 60px;
-    min-height: 60px;
+    gap: 2px;
+    padding: 0 6px;
+    height: 56px;
+    min-height: 56px;
   }
 
   .h-btn {
-    min-width: 44px;
-    min-height: 44px;
+    min-width: 40px;
+    min-height: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
     border-radius: var(--radius-md, 12px);
     color: var(--text-primary);
-    transition: transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1), background 150ms ease;
+    transition: transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1), background 150ms ease;
     border: none;
     background: transparent;
     cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
   }
   .h-btn:active { transform: scale(0.88); background: var(--input-bg); }
+
+  .h-btn-sm {
+    min-width: 36px;
+    min-height: 36px;
+    width: 36px;
+    height: 36px;
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
 
   .header-center {
     flex: 1;
@@ -426,13 +522,14 @@
     align-items: center;
     gap: 10px;
     min-width: 0;
-    padding: 4px 8px;
+    padding: 6px 8px;
     border-radius: var(--radius-md, 12px);
     border: none;
     background: transparent;
     cursor: pointer;
     text-align: left;
-    transition: transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1), background 150ms ease;
+    transition: transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1), background 150ms ease;
+    -webkit-tap-highlight-color: transparent;
   }
   .header-center:active { transform: scale(0.98); background: var(--input-bg); }
 
@@ -441,27 +538,28 @@
     flex-shrink: 0;
   }
 
-  .online-ring {
+  .online-dot {
     position: absolute;
     bottom: -1px;
     right: -1px;
-    width: 12px;
-    height: 12px;
+    width: 11px;
+    height: 11px;
     border-radius: 50%;
     border: 2px solid var(--bg-surface, #fff);
     background: #22c55e;
-    animation: statusRing 2s ease-in-out infinite;
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4);
+    animation: dotPulse 2s ease-in-out infinite;
   }
 
-  @keyframes statusRing {
+  @keyframes dotPulse {
     0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
-    50% { box-shadow: 0 0 0 3px rgba(34, 197, 94, 0); }
+    50% { box-shadow: 0 0 0 4px rgba(34, 197, 94, 0); }
   }
 
-  .header-info { min-width: 0; }
+  .header-info { min-width: 0; flex: 1; }
 
   .header-name {
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 600;
     line-height: 1.3;
     color: var(--text-primary);
@@ -469,57 +567,68 @@
     overflow: hidden;
     text-overflow: ellipsis;
     margin: 0;
+    letter-spacing: -0.01em;
   }
 
   .header-sub {
     font-size: 12px;
     line-height: 1.3;
-    color: var(--text-tertiary);
     margin: 0;
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 1px;
+    margin-top: 1px;
   }
 
-  .typing-sub { color: var(--color-primary) !important; font-weight: 500; }
+  .header-online { color: var(--color-primary); font-weight: 500; }
+  .header-away { color: var(--text-tertiary); }
+  .header-default { color: var(--text-tertiary); font-style: italic; }
 
-  .typing-dots {
+  .header-typing {
+    color: var(--color-primary) !important;
+    font-weight: 500;
+  }
+
+  .typing-text { font-size: 12px; }
+
+  .h-typing-dots {
     display: inline-flex;
     align-items: center;
     gap: 2px;
     margin-left: 1px;
   }
-  .td {
+  .htd {
     display: inline-block;
     width: 4px;
     height: 4px;
     border-radius: 50%;
     background: var(--color-primary);
-    animation: typingBounce 1.4s ease-in-out infinite;
+    animation: hTypingBounce 1.4s ease-in-out infinite;
   }
-  .td:nth-child(2) { animation-delay: 0.15s; }
-  .td:nth-child(3) { animation-delay: 0.3s; }
+  .htd:nth-child(2) { animation-delay: 0.15s; }
+  .htd:nth-child(3) { animation-delay: 0.3s; }
 
-  @keyframes typingBounce {
-    0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  @keyframes hTypingBounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
     30% { transform: translateY(-4px); opacity: 1; }
   }
 
   /* === PINNED BANNER === */
   .pin-banner {
-    padding: 6px 12px;
+    padding: 4px 10px;
     background: var(--glass-bg);
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
-    border-bottom: 1px solid var(--border-subtle);
+    border-bottom: 0.5px solid var(--border-subtle);
     animation: slideDown 250ms ease both;
+    flex-shrink: 0;
   }
 
   .pin-inner {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 8px 12px;
+    padding: 7px 10px;
     border-radius: var(--radius-md, 12px);
     background: var(--input-bg);
   }
@@ -532,7 +641,7 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: var(--text-tertiary);
-    margin: 0 0 2px 0;
+    margin: 0 0 1px 0;
   }
 
   .pin-text {
@@ -548,32 +657,95 @@
   .msg-scroll {
     flex: 1;
     overflow-y: auto;
-    padding: 8px 0 12px;
+    padding: 4px 0 0;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
+    scroll-behavior: smooth;
   }
-  .msg-scroll::-webkit-scrollbar { width: 3px; }
-  .msg-scroll::-webkit-scrollbar-track { background: transparent; }
-  .msg-scroll::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.2); border-radius: 99px; }
+  .msg-scroll::-webkit-scrollbar { width: 0px; }
+
+  .scroll-bottom-pad {
+    height: 8px;
+    flex-shrink: 0;
+  }
 
   /* === DATE SEPARATOR === */
   .date-separator {
     display: flex;
     justify-content: center;
-    margin: 16px 0 12px;
+    margin: 12px 0 8px;
   }
 
   .date-chip {
     display: flex;
     align-items: center;
     gap: 5px;
-    padding: 4px 12px;
+    padding: 3px 10px;
     border-radius: 99px;
     background: var(--bg-elevated);
     color: var(--text-tertiary);
     font-size: 11px;
     font-weight: 500;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04), inset 0 0.5px 0 rgba(255,255,255,0.6);
+  }
+
+  /* === SCROLL FAB === */
+  .scroll-fab {
+    position: absolute;
+    bottom: 80px;
+    right: 12px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    z-index: 20;
+    padding: 0;
+    background: var(--glass-bg);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border: var(--glass-border);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1), 0 1px 3px rgba(0,0,0,0.06);
+    color: var(--text-secondary);
+    min-width: 40px;
+    min-height: 40px;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: fabIn 250ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    transition: transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 200ms ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .scroll-fab:active { transform: scale(0.9); }
+
+  @keyframes fabIn {
+    from { opacity: 0; transform: scale(0.6) translateY(10px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  .fab-count {
+    position: absolute;
+    top: -5px;
+    right: -7px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 8px;
+    background: var(--color-primary);
+    color: var(--color-primary-foreground);
+    font-size: 10px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 6px rgba(5, 150, 105, 0.4);
+    animation: badgePulse 2s ease-in-out infinite;
+    line-height: 1;
+  }
+
+  @keyframes badgePulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.08); }
   }
 
   /* === EMPTY STATE === */
@@ -618,7 +790,7 @@
   }
 
   .empty-title {
-    font-size: 15px;
+    font-size: 16px;
     font-weight: 600;
     color: var(--text-primary);
     margin: 0 0 6px 0;
@@ -635,8 +807,9 @@
 
   /* === TYPING AREA === */
   .typing-area {
-    padding: 0 16px 4px;
+    padding: 0 12px 2px;
     animation: fadeIn 200ms ease both;
+    flex-shrink: 0;
   }
 
   /* === EDIT BAR === */
@@ -644,10 +817,11 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 10px 16px;
+    padding: 8px 12px;
     background: var(--bg-elevated);
-    border-top: 1px solid var(--border-subtle);
+    border-top: 0.5px solid var(--border-subtle);
     animation: fadeIn 200ms ease both;
+    flex-shrink: 0;
   }
 
   .edit-accent {
@@ -680,6 +854,7 @@
     background: var(--input-bg);
     border: 1px solid var(--border-subtle);
     color: var(--text-primary);
+    font-family: var(--font-sans, inherit);
   }
   .edit-input:focus {
     box-shadow: 0 0 0 2px var(--color-primary);
@@ -689,6 +864,7 @@
   .edit-save {
     min-width: 44px;
     min-height: 34px;
+    padding: 0 12px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -701,6 +877,7 @@
     cursor: pointer;
     transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
     flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
   }
   .edit-save:active { transform: scale(0.9); }
 
@@ -711,13 +888,13 @@
     align-items: center;
     justify-content: center;
     border-radius: var(--radius-sm, 8px);
-    font-size: 12px;
     color: var(--text-tertiary);
     background: transparent;
     border: none;
     cursor: pointer;
     transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
     flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
   }
   .edit-cancel:active { transform: scale(0.9); }
 
@@ -725,23 +902,23 @@
   .menu-overlay {
     position: fixed;
     inset: 0;
-    z-index: 40;
+    z-index: 60;
     animation: fadeIn 150ms ease both;
   }
 
   .menu-sheet {
     position: absolute;
-    top: 68px;
-    right: 12px;
+    top: 62px;
+    right: 10px;
     min-width: 180px;
-    padding: 6px;
+    padding: 5px;
     border-radius: var(--radius-lg, 16px);
     background: var(--glass-bg);
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(24px) saturate(190%);
+    -webkit-backdrop-filter: blur(24px) saturate(190%);
     border: var(--glass-border);
     box-shadow: var(--shadow-float, 0 8px 32px rgba(0,0,0,0.12));
-    z-index: 41;
+    z-index: 61;
     animation: scaleIn 200ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
   }
 
@@ -750,8 +927,8 @@
     align-items: center;
     gap: 10px;
     width: 100%;
-    padding: 10px 12px;
-    min-height: 44px;
+    padding: 9px 12px;
+    min-height: 42px;
     border: none;
     background: transparent;
     color: var(--text-primary);
@@ -760,6 +937,29 @@
     border-radius: var(--radius-md, 12px);
     cursor: pointer;
     transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1), background 150ms ease;
+    -webkit-tap-highlight-color: transparent;
   }
   .menu-item:active { transform: scale(0.96); background: var(--input-bg); }
+
+  .menu-divider {
+    height: 0.5px;
+    background: var(--border-subtle);
+    margin: 4px 8px;
+  }
+
+  .menu-item-danger {
+    color: #ef4444;
+  }
+
+  /* === UTILITIES === */
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes scaleIn {
+    from { opacity: 0; transform: scale(0.9) translateY(-4px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-100%); }
+    to { opacity: 1; transform: translateY(0); }
+  }
 </style>
+
