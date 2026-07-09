@@ -13,6 +13,7 @@
   }
 </script>
 
+<!-- svelte-ignore a11y_no_noninteractive_element_interactive_role -->
 <nav
   class="nav-bar glass-header safe-bottom"
   role="tablist"

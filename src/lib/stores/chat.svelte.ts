@@ -36,6 +36,7 @@ class ChatStore {
   // ---- Listener unsubscribes ----
   private inboxUnsub: (() => void) | null = null;
   private inboxChangedUnsub: (() => void) | null = null;
+  private chatMetaUnsubs: Map<string, () => void> = new Map();
   private messageUnsub: (() => void) | null = null;
   private messageChangedUnsub: (() => void) | null = null;
   private messageRemovedUnsub: (() => void) | null = null;
@@ -69,19 +70,19 @@ class ChatStore {
     return true;
   }
 
-  /** Derive sorted inbox (most recent first, only entries with valid meta) */
+  /** Derive sorted inbox (most recent first). Shows all user_chats entries, even before meta loads. */
   sortedInbox = $derived.by(() => {
-    const entries = Array.from(this.userChats.entries())
-      .filter(([, uc]) => this.chats.has(uc.chatId));
+    const entries = Array.from(this.userChats.entries());
     entries.sort((a, b) => {
       const metaA = this.chats.get(a[1].chatId);
       const metaB = this.chats.get(b[1].chatId);
-      return (metaB?.ts ?? 0) - (metaA?.ts ?? 0);
+      // If no meta, use joinedAt timestamp as fallback
+      return (metaB?.ts ?? b[1].jt) - (metaA?.ts ?? a[1].jt);
     });
     return entries.map(([chatId, uc]) => ({
       chatId,
       userChat: uc,
-      meta: this.chats.get(chatId)!,
+      meta: this.chats.get(chatId) ?? null,
     }));
   });
 
@@ -89,7 +90,7 @@ class ChatStore {
   // Inbox
   // ============================================================
 
-  /** Attach RTDB listener to /user_chats/{uid} */
+  /** Attach RTDB listener to /user_chats/{uid} and /chats/{chatId}/meta for each */
   async loadInbox(uid: string): Promise<void> {
     this.detachInboxListener();
 
@@ -103,6 +104,8 @@ class ChatStore {
       if (!this.chats.has(data.chatId)) {
         this.fetchChatMeta(data.chatId);
       }
+      // Also attach a meta listener so the inbox re-sorts when the other user sends
+      this.attachChatMetaListener(data.chatId);
     });
 
     // Listen for changes
@@ -111,6 +114,25 @@ class ChatStore {
       if (!data) return;
       this.userChats.set(data.chatId, data);
     });
+  }
+
+  /** Listen for chat meta changes so inbox stays sorted when new messages arrive */
+  private async attachChatMetaListener(chatId: string): Promise<void> {
+    if (this.chatMetaUnsubs.has(chatId)) return;
+    const metaRef = await rtdb.ref(RTDB_PATHS.CHAT_META(chatId));
+    const unsub = await rtdb.onValue(metaRef, (snap) => {
+      if (snap.exists()) {
+        const meta = snap.val() as ChatMeta;
+        this.chats.set(chatId, meta);
+        // Fetch participant profiles if not cached
+        for (const pid of meta.participantIds) {
+          if (!this.userDict.has(pid)) {
+            this.fetchUser(pid);
+          }
+        }
+      }
+    });
+    this.chatMetaUnsubs.set(chatId, unsub);
   }
 
   private async fetchChatMeta(chatId: string): Promise<void> {
@@ -568,6 +590,8 @@ class ChatStore {
       this.inboxChangedUnsub();
       this.inboxChangedUnsub = null;
     }
+    for (const [, unsub] of this.chatMetaUnsubs) unsub();
+    this.chatMetaUnsubs.clear();
   }
 
   detachAllListeners(): void {

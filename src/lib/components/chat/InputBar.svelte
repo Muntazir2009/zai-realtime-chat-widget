@@ -303,7 +303,8 @@
   .input-shell {
     flex-shrink: 0;
     margin: 0 6px 6px;
-    padding: 4px 4px 4px 4px;
+    padding: 4px;
+    padding-bottom: max(4px, env(safe-area-inset-bottom, 0px) + 4px);
     border-radius: var(--radius-pill);
     background: var(--glass-bg);
     backdrop-filter: blur(20px) saturate(180%);

@@ -335,13 +335,12 @@
     padding-top: 6px;
   }
 
-  /* === AVATAR COLUMN — aligns top of avatar with top of bubble === */
+  /* === AVATAR COLUMN — aligned with bottom of the message stack === */
   .msg-avatar-col {
     width: 32px;
     flex-shrink: 0;
     margin-right: 6px;
-    align-self: flex-start;
-    padding-top: 2px;
+    align-self: flex-end;
   }
 
   /* Spacer to align bubbles in grouped messages with avatar rows */
@@ -365,7 +364,7 @@
 
   /* === BUBBLE MATERIALS === */
   .msg-bubble {
-    padding: 8px 10px 4px 10px;
+    padding: 10px 14px 6px 14px;
     position: relative;
     overflow: hidden;
     transition: transform 120ms cubic-bezier(0.34, 1.56, 0.64, 1),
@@ -382,18 +381,13 @@
   .bbl-sent {
     background: var(--color-sent);
     color: var(--color-sent-foreground);
-    border-radius: 18px 18px 4px 18px;
-    box-shadow:
-      0 1px 2px rgba(5, 150, 105, 0.08),
-      0 2px 8px rgba(5, 150, 105, 0.1),
-      0 0 0 0.5px rgba(5, 150, 105, 0.15);
+    border-radius: 16px 16px 4px 16px;
+    box-shadow: 0 1px 3px rgba(5, 150, 105, 0.12);
   }
 
   .bbl-sent.bbl-grouped {
-    border-radius: 18px 18px 4px 18px;
-    box-shadow:
-      0 1px 3px rgba(5, 150, 105, 0.06),
-      0 0 0 0.5px rgba(5, 150, 105, 0.1);
+    border-radius: 16px 16px 4px 16px;
+    box-shadow: 0 1px 2px rgba(5, 150, 105, 0.08);
   }
 
   /* Sent bubble tail */
@@ -410,24 +404,17 @@
     opacity: 0.9;
   }
 
-  /* Received bubble — frosted glass */
+  /* Received bubble — clean solid */
   .bbl-recv {
     background: var(--color-received);
     color: var(--color-received-foreground);
-    border-radius: 18px 18px 18px 4px;
-    box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.04),
-      0 2px 6px rgba(0, 0, 0, 0.03),
-      inset 0 1px 0 rgba(255, 255, 255, 0.7),
-      inset 0 0 0 0.5px rgba(0, 0, 0, 0.04);
+    border-radius: 16px 16px 16px 4px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   }
 
   .bbl-recv.bbl-grouped {
-    border-radius: 18px 18px 18px 4px;
-    box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.03),
-      inset 0 1px 0 rgba(255, 255, 255, 0.6),
-      inset 0 0 0 0.5px rgba(0, 0, 0, 0.03);
+    border-radius: 16px 16px 16px 4px;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.03);
   }
 
   /* Received bubble tail */

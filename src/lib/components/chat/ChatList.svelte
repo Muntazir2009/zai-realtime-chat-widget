@@ -136,9 +136,9 @@
       {#each chatStore.sortedInbox as { chatId, userChat, meta } (chatId)}
         <ChatTile
           {chatId}
-          chatMeta={meta!}
+          chatMeta={meta}
           {userChat}
-          otherUser={chatStore.getOtherParticipant(meta!) ?? null}
+          otherUser={meta ? (chatStore.getOtherParticipant(meta) ?? null) : null}
           isActive={chatStore.activeChatId === chatId}
           onclick={handleChatClick}
         />

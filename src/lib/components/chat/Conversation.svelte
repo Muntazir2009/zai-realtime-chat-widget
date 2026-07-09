@@ -665,7 +665,7 @@
   .msg-scroll::-webkit-scrollbar { width: 0px; }
 
   .scroll-bottom-pad {
-    height: 72px;
+    height: 16px;
     flex-shrink: 0;
   }
 
@@ -692,7 +692,7 @@
   /* === SCROLL FAB === */
   .scroll-fab {
     position: absolute;
-    bottom: 148px;
+    bottom: 100px;
     right: 12px;
     border-radius: 50%;
     border: none;

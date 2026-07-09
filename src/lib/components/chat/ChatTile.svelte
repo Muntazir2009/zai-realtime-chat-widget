@@ -5,7 +5,7 @@
 
   interface Props {
     chatId: string;
-    chatMeta: ChatMeta;
+    chatMeta: ChatMeta | null;
     userChat: UserChat;
     otherUser: User | null;
     isActive: boolean;
@@ -28,6 +28,7 @@
   }
 
   function lastMessagePreview(): string {
+    if (!chatMeta) return 'Loading...';
     const lm = chatMeta.lm;
     if (!lm) return 'No messages yet';
     if (lm.startsWith('📷')) return 'Photo';
@@ -56,11 +57,11 @@
   <div class="tile-content">
     <div class="tile-top">
       <span class="tile-name">{otherUser?.displayName || 'Unknown'}</span>
-      <span class="tile-time">{chatMeta.ts ? formatTime(chatMeta.ts) : ''}</span>
+      <span class="tile-time">{chatMeta?.ts ? formatTime(chatMeta.ts) : ''}</span>
     </div>
     <div class="tile-bottom">
       <p class="tile-preview">
-        {#if chatMeta.lm?.startsWith('📷')}
+        {#if chatMeta?.lm?.startsWith('📷')
           <Camera size={13} class="tile-preview-icon" />
         {/if}
         {lastMessagePreview()}

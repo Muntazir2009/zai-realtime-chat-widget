@@ -26,6 +26,8 @@ let fbQuery: (ref: DatabaseReference, ...constraints: any[]) => any;
 let fbStartAt: (value: any, key?: string) => any;
 let fbTransaction: ((r: any, fn: (current: any) => any) => Promise<{ committed: boolean; snapshot: DataSnapshot }>) | undefined;
 let fbOff: ((r: any, event?: string, ...args: any[]) => void) | undefined;
+let fbOnDisconnect: ((r: any) => { set: (val: any) => Promise<void>; remove: () => Promise<void>; cancel: () => Promise<void> }) | undefined;
+let fbServerTimestamp: () => any;
 
 let _loadPromise: Promise<void> | null = null;
 let _rtdbLoaded = false;
@@ -54,6 +56,8 @@ async function _doLoad() {
   fbStartAt = db.startAt;
   fbTransaction = db.runTransaction as any;
   fbOff = db.off as any;
+  fbOnDisconnect = db.onDisconnect as any;
+  fbServerTimestamp = db.serverTimestamp;
   _rtdbLoaded = true;
 }
 
@@ -141,4 +145,27 @@ export async function transaction(
 ): Promise<{ committed: boolean; snapshot: DataSnapshot }> {
   await ensureLoaded();
   return fbTransaction!(r, updateFn);
+}
+
+export async function onDisconnectSet(r: DatabaseReference, value: unknown): Promise<void> {
+  await ensureLoaded();
+  if (!fbOnDisconnect) return;
+  return fbOnDisconnect(r).set(value);
+}
+
+export async function onDisconnectRemove(r: DatabaseReference): Promise<void> {
+  await ensureLoaded();
+  if (!fbOnDisconnect) return;
+  return fbOnDisconnect(r).remove();
+}
+
+export async function onDisconnectCancel(r: DatabaseReference): Promise<void> {
+  await ensureLoaded();
+  if (!fbOnDisconnect) return;
+  return fbOnDisconnect(r).cancel();
+}
+
+export function serverTimestamp(): any {
+  if (!fbServerTimestamp) return Date.now();
+  return fbServerTimestamp();
 }

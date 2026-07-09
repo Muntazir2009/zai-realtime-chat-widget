@@ -1,7 +1,7 @@
 // ============================================================
 // PresenceManager — Svelte 5 runes class
 // Manages online/away/offline status and typing indicators.
-// Writes directly to Firebase RTDB.
+// Uses Firebase RTDB onDisconnect() for reliable cleanup.
 // Heartbeat every 30s updates lastSeen.
 // ============================================================
 
@@ -21,10 +21,11 @@ class PresenceManager {
   private lastTypingEmit: Map<string, number> = new Map();
 
   private visibilityHandler: (() => void) | null = null;
+  private disconnectQueued = false;
 
   constructor() {
     if (typeof window !== 'undefined') {
-      window.addEventListener('beforeunload', () => this.disconnect());
+      // Only handle visibility change for typing — presence is handled by onDisconnect
       this.visibilityHandler = () => {
         if (document.hidden) {
           this.stopAllTyping();
@@ -43,13 +44,33 @@ class PresenceManager {
     if (!uid) return;
 
     this.onlineStatus = 'online';
-    this.writePresence(uid, 'online');
+
+    // Queue the onDisconnect cleanup FIRST — this is the critical fix.
+    // Firebase guarantees this fires even if the client crashes or loses network.
+    const presenceRef = rtdb.ref(RTDB_PATHS.PRESENCE(uid));
+    presenceRef.then((ref) => {
+      rtdb.onDisconnectSet(ref, {
+        uid,
+        status: 'offline',
+        lastSeen: rtdb.serverTimestamp(),
+        typing: false,
+      }).then(() => {
+        // Only set to online AFTER the disconnect hook is successfully queued
+        this.writePresence(uid, 'online');
+      }).catch((err) => {
+        console.warn('[PresenceManager] Failed to queue onDisconnect:', err);
+        // Still try to write online status
+        this.writePresence(uid, 'online');
+      });
+    });
 
     if (!this.heartbeatTimer) {
       this.heartbeatTimer = setInterval(() => {
         this.updateLastSeen(uid);
       }, HEARTBEAT_INTERVAL_MS);
     }
+
+    this.disconnectQueued = true;
   }
 
   goAway(): void {
@@ -130,10 +151,14 @@ class PresenceManager {
   async disconnect(): Promise<void> {
     const uid = this.uid;
     if (uid) {
-      rtdb.remove(await rtdb.ref(RTDB_PATHS.PRESENCE(uid))).catch(() => {});
+      const ref = await rtdb.ref(RTDB_PATHS.PRESENCE(uid));
+      // Cancel the onDisconnect hook and explicitly remove
+      rtdb.onDisconnectCancel(ref).catch(() => {});
+      rtdb.remove(ref).catch(() => {});
     }
     this.stopHeartbeat();
     this.onlineStatus = 'offline';
+    this.disconnectQueued = false;
 
     this.stopAllTyping();
 
