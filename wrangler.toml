@@ -1,31 +1,27 @@
 name = "zai-chat"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
-
-# Build output directory (set by adapter-cloudflare)
-# [site]
-# bucket = ".svelte-kit/cloudflare"
+pages_build_output_dir = ".svelte-kit/cloudflare"
 
 # ---------------------------------------------------------------------------
 # Public environment variables (exposed to client via import.meta.env)
+# Set these via Cloudflare Dashboard or wrangler pages secret put
 # ---------------------------------------------------------------------------
-[vars]
-PUBLIC_FIREBASE_API_KEY = ""
-PUBLIC_FIREBASE_AUTH_DOMAIN = ""
-PUBLIC_FIREBASE_DATABASE_URL = ""
-PUBLIC_FIREBASE_PROJECT_ID = ""
-PUBLIC_FIREBASE_STORAGE_BUCKET = ""
-PUBLIC_FIREBASE_MESSAGING_SENDER_ID = ""
-PUBLIC_FIREBASE_APP_ID = ""
-PUBLIC_R2_PUBLIC_URL = ""
+# [vars]
+# PUBLIC_FIREBASE_API_KEY = ""
+# PUBLIC_FIREBASE_AUTH_DOMAIN = ""
+# PUBLIC_FIREBASE_DATABASE_URL = ""
+# PUBLIC_FIREBASE_PROJECT_ID = ""
+# PUBLIC_FIREBASE_STORAGE_BUCKET = ""
+# PUBLIC_FIREBASE_MESSAGING_SENDER_ID = ""
+# PUBLIC_FIREBASE_APP_ID = ""
+# PUBLIC_R2_PUBLIC_URL = ""
 
 # ---------------------------------------------------------------------------
-# Secrets (set via `wrangler secret put` or Cloudflare Dashboard)
-#   FIREBASE_PROJECT_ID
-#   FIREBASE_CLIENT_EMAIL
-#   FIREBASE_PRIVATE_KEY
-#   R2_ACCOUNT_ID
-#   R2_ACCESS_KEY_ID
-#   R2_SECRET_ACCESS_KEY
-#   R2_BUCKET_NAME
+# Secrets (set via Cloudflare Dashboard → Pages → Settings → Environment Variables)
+#   PUBLIC_FIREBASE_API_KEY, PUBLIC_FIREBASE_AUTH_DOMAIN, PUBLIC_FIREBASE_DATABASE_URL,
+#   PUBLIC_FIREBASE_PROJECT_ID, PUBLIC_FIREBASE_STORAGE_BUCKET,
+#   PUBLIC_FIREBASE_MESSAGING_SENDER_ID, PUBLIC_FIREBASE_APP_ID, PUBLIC_R2_PUBLIC_URL,
+#   FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY,
+#   R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME
 # ---------------------------------------------------------------------------
