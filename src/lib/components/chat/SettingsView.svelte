@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { LogOut, Check, Moon, Sun, Smartphone, Shield, Bell, Palette, Info, Settings } from 'lucide-svelte';
+  import { LogOut, Check, Moon, Sun, Smartphone, Shield, Palette, Info, Settings } from 'lucide-svelte';
   import { themeManager } from '$lib/managers/ThemeManager.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
   import { chatStore } from '$lib/stores/chat.svelte';
@@ -57,10 +57,6 @@
             @{authStore.user?.username || 'unknown'}
           </p>
         </div>
-        <div class="flex items-center gap-1.5 rounded-full px-3 py-1.5" style="background: rgba(34, 197, 94, 0.12);">
-          <span class="w-2 h-2 rounded-full online-pulse" style="background: #22c55e;"></span>
-          <span class="text-xs font-semibold" style="color: #22c55e;">Online</span>
-        </div>
       </div>
     </section>
 
@@ -96,28 +92,14 @@
     <!-- Preferences Section -->
     <section class="animate-fade-in" style="animation-delay: 100ms;">
       <div class="flex items-center gap-2 mb-3 px-1">
-        <Bell size={14} style="color: var(--text-tertiary);" />
-        <p class="text-xs font-semibold uppercase tracking-wider" style="color: var(--text-tertiary);">Preferences</p>
+        <Shield size={14} style="color: var(--text-tertiary);" />
+        <p class="text-xs font-semibold uppercase tracking-wider" style="color: var(--text-tertiary);">About</p>
       </div>
-      <div class="glass rounded-[var(--radius-lg)] divide-y" style="border-color: var(--border-subtle);">
-        <div class="flex items-center justify-between p-3.5">
-          <div class="flex items-center gap-3">
-            <Bell size={18} style="color: var(--text-secondary);" />
-            <span class="text-sm font-medium" style="color: var(--text-primary);">Notifications</span>
-          </div>
-          <span class="text-xs" style="color: var(--text-tertiary);">On</span>
-        </div>
-        <div class="flex items-center justify-between p-3.5">
-          <div class="flex items-center gap-3">
-            <Shield size={18} style="color: var(--text-secondary);" />
-            <span class="text-sm font-medium" style="color: var(--text-primary);">Privacy</span>
-          </div>
-          <span class="text-xs" style="color: var(--text-tertiary);">Default</span>
-        </div>
+      <div class="glass rounded-[var(--radius-lg)]" style="border-color: var(--border-subtle);">
         <div class="flex items-center justify-between p-3.5">
           <div class="flex items-center gap-3">
             <Info size={18} style="color: var(--text-secondary);" />
-            <span class="text-sm font-medium" style="color: var(--text-primary);">About</span>
+            <span class="text-sm font-medium" style="color: var(--text-primary);">Version</span>
           </div>
           <span class="text-xs" style="color: var(--text-tertiary);">v1.0.0</span>
         </div>
@@ -138,4 +120,3 @@
 
   </div>
 </div>
-

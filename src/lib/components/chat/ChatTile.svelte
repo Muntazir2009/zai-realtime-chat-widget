@@ -49,7 +49,6 @@
     <Avatar
       username={otherUser?.username || '?'}
       size="md"
-      status={otherUser?.status}
       avatarUrl={otherUser?.avatarUrl}
     />
   </div>

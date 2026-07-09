@@ -75,8 +75,8 @@
   // Determine which tab content to show when in chatList view
   const activeTab = $derived(uiStore?.tab ?? 'dms');
 
-  // Whether to show the bottom nav bar
-  const showNav = $derived(view !== 'loading' && view !== 'auth' && view !== 'conversation');
+  // Whether to show the bottom nav bar — persistent everywhere except loading/auth
+  const showNav = $derived(view !== 'loading' && view !== 'auth');
 
   // Watch for view changes to trigger side effects (load inbox, go online)
   $effect(() => {
@@ -108,9 +108,9 @@
   {@const Auth = AuthScreen}
   <Auth />
 {:else}
-  <!-- Authenticated shell: content + bottom nav -->
+  <!-- Authenticated shell: content + bottom nav (always visible) -->
   <div class="h-full flex flex-col" style="background-color: var(--bg-page);">
-    <div class="flex-1 min-h-0">
+    <div class="flex-1 min-h-0" class:has-nav={showNav}>
       {#if view === 'conversation' && Conversation}
         {@const Conv = Conversation}
         <Conv />

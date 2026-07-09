@@ -356,7 +356,7 @@
   .cl-scroll {
     flex: 1;
     overflow-y: auto;
-    padding-bottom: 72px;
+    padding-bottom: 80px;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
   }

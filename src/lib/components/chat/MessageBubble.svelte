@@ -31,7 +31,6 @@
   let touchStartX = 0;
   let touchStartY = 0;
   let currentOffset = 0;
-  let touchStartTime = 0;
   let lastTouchX = 0;
   let lastTouchTime = 0;
   let velocityX = 0;
@@ -41,6 +40,7 @@
   let longPressTimer: ReturnType<typeof setTimeout> | null = null;
   let springRaf: number | null = null;
   let lastTapTime = 0;
+  let touchStartTime = 0;
 
   const SWIPE_THRESHOLD = 70;
   const ELASTIC_FACTOR = 0.25;
@@ -53,10 +53,10 @@
   function springBack() {
     const step = (lastTime: number) => {
       const now = performance.now();
-      const dt = Math.min((now - lastTime) / 1000, 0.032); // cap at ~30fps minimum
+      const dt = Math.min((now - lastTime) / 1000, 0.032);
       const force = -SPRING_STIFFNESS * currentOffset - SPRING_DAMPING * (currentOffset !== 0 ? 1 : 0) * (currentOffset > 0 ? 1 : -1);
       velocityX += force * dt * 0.001;
-      velocityX *= 0.92; // damping
+      velocityX *= 0.92;
       currentOffset += velocityX;
       if (Math.abs(currentOffset) < 0.3 && Math.abs(velocityX) < 0.3) {
         currentOffset = 0;
@@ -110,19 +110,16 @@
       isSwiping = true;
       if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
 
-      // Rubber band / elastic physics
       let effectiveDx: number;
       if (rawDx > SWIPE_THRESHOLD) {
         const beyond = rawDx - SWIPE_THRESHOLD;
         effectiveDx = SWIPE_THRESHOLD + beyond * ELASTIC_FACTOR;
       } else {
-        // Ease-in curve for the approach
         effectiveDx = rawDx * (0.6 + 0.4 * (rawDx / SWIPE_THRESHOLD));
       }
       currentOffset = effectiveDx * (isOwn ? -1 : 1);
       displayOffset = currentOffset;
 
-      // Haptic-like visual feedback at threshold
       if (rawDx >= SWIPE_THRESHOLD && !swipeTriggered) swipeTriggered = true;
     } else if (dy > 10 && rawDx < 15) {
       if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
@@ -186,6 +183,11 @@
   });
 
   const replyIndicatorOpacity = $derived(Math.min(Math.abs(displayOffset) / SWIPE_THRESHOLD, 1));
+
+  // Detect if message is emoji-only for larger display
+  const isEmojiOnly = $derived(
+    msg.t === 'text' && /^[\p{Emoji_Presentation}\p{Extended_Pictographic}\u{FE0F}\u{200D}\u{20E3}]+$/u.test(msg.c.trim()) && msg.c.trim().length <= 8
+  );
 </script>
 
 <div
@@ -211,95 +213,92 @@
     </div>
   {/if}
 
-  <!-- Avatar -->
+  <!-- Avatar — aligned with bubble top -->
   {#if !isOwn && showAvatar}
-    <div class="msg-avatar">
+    <div class="msg-avatar-col">
       <Avatar username={senderName || '?'} size="sm" />
     </div>
+  {:else if !isOwn && !showAvatar}
+    <!-- Spacer to keep alignment with avatar rows -->
+    <div class="msg-avatar-spacer"></div>
   {/if}
 
-  <!-- Bubble Column -->
-  <div class="msg-col">
-    <!-- Sender Name -->
-    {#if !isOwn && senderName && showAvatar}
-      <span class="msg-sender">{senderName}</span>
+  <!-- Sender Name (above bubble, aligned with avatar) -->
+  {#if !isOwn && senderName && showAvatar}
+    <span class="msg-sender">{senderName}</span>
+  {/if}
+
+  <!-- Bubble -->
+  <div
+    class="msg-bubble {isOwn ? 'bbl-sent' : 'bbl-recv'} {isGrouped ? 'bbl-grouped' : ''} {isPinned ? 'bbl-pinned' : ''} {isEmojiOnly ? 'bbl-emoji' : ''}"
+    onclick={handleDoubleTap}
+    role="button"
+    tabindex="0"
+    onkeydown={(e) => { if (e.key === 'Enter') handleDoubleTap(); }}
+  >
+    <!-- Reply Preview -->
+    {#if msg.rid}
+      <div class="rply-bar">
+        <div class="rply-accent"></div>
+        <div class="rply-body">
+          {#if replyPreviewMsg}
+            <p class="rply-who">{isOwn ? 'You' : (senderName || 'Unknown')}</p>
+            <p class="rply-text">{replyPreviewMsg.t === 'image' ? '📷 Photo' : replyPreviewMsg.t === 'voice' ? '🎙 Voice' : replyPreviewMsg.c.slice(0, 60)}</p>
+          {:else}
+            <p class="rply-text rply-fallback">↩ Reply</p>
+          {/if}
+        </div>
+      </div>
     {/if}
 
-    <!-- Bubble -->
-    <div
-      class="msg-bubble {isOwn ? 'bbl-sent' : 'bbl-recv'} {isGrouped ? 'bbl-grouped' : ''} {isPinned ? 'bbl-pinned' : ''}"
-      onclick={handleDoubleTap}
-      role="button"
-      tabindex="0"
-      onkeydown={(e) => { if (e.key === 'Enter') handleDoubleTap(); }}
-    >
-      <!-- Glass highlight overlay -->
-      <div class="bbl-glass-highlight"></div>
-
-      <!-- Reply Preview -->
-      {#if msg.rid}
-        <div class="rply-bar">
-          <div class="rply-accent"></div>
-          <div class="rply-body">
-            {#if replyPreviewMsg}
-              <p class="rply-who">{isOwn ? 'You' : (senderName || 'Unknown')}</p>
-              <p class="rply-text">{replyPreviewMsg.t === 'image' ? '📷 Photo' : replyPreviewMsg.t === 'voice' ? '🎙 Voice' : replyPreviewMsg.c.slice(0, 60)}</p>
-            {:else}
-              <p class="rply-text rply-fallback">↩ Reply</p>
-            {/if}
+    <!-- Content -->
+    {#if msg.t === 'text'}
+      <p class="bbl-text {isEmojiOnly ? 'bbl-emoji-text' : ''}">{msg.c}</p>
+      {#if urlMatch()}
+        <a href={urlMatch()!} target="_blank" rel="noopener noreferrer" class="link-card">
+          <div class="link-icon-wrap">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
           </div>
-        </div>
+          <div class="link-body">
+            <p class="link-domain">{urlMatch()?.replace(/^https?:\/\//, '').replace(/\/$/, '').slice(0, 40)}</p>
+          </div>
+        </a>
       {/if}
-
-      <!-- Content -->
-      {#if msg.t === 'text'}
-        <p class="bbl-text">{msg.c}</p>
-        {#if urlMatch()}
-          <a href={urlMatch()!} target="_blank" rel="noopener noreferrer" class="link-card">
-            <div class="link-icon-wrap">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-            </div>
-            <div class="link-body">
-              <p class="link-domain">{urlMatch()?.replace(/^https?:\/\//, '').replace(/\/$/, '').slice(0, 40)}</p>
-            </div>
-          </a>
-        {/if}
-      {:else if msg.t === 'voice' && msg.mu}
-        <AudioPlayer url={msg.mu} duration={(msg.md?.duration as number) || 0} />
-      {:else if msg.t === 'image' && msg.mu}
-        <div class="bbl-img-wrap">
-          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
-          <img
-            src={msg.mu}
-            alt={msg.c || 'Shared image'}
-            class="bbl-img"
-            loading="lazy"
-            onclick={(e) => { e.stopPropagation(); onImageTap?.(msg.mu!, msg.c || undefined); }}
-          />
-        </div>
-        {#if msg.c}
-          <p class="bbl-text bbl-caption">{msg.c}</p>
-        {/if}
-      {:else if msg.t === 'system'}
-        <p class="bbl-sys">{msg.c}</p>
-      {/if}
-
-      <!-- Inline Meta (time + status inside bubble) -->
-      <div class="bbl-meta">
-        {#if isPinned}
-          <span class="bbl-badge bbl-pinned-badge">📌</span>
-        {/if}
-        {#if isStarred}
-          <span class="bbl-badge">⭐</span>
-        {/if}
-        {#if msg.edited}
-          <span class="bbl-edited">edited</span>
-        {/if}
-        <span class="bbl-time">{timeStr()}</span>
-        {#if isOwn}
-          <DeliveryStatus status={deliveryStatus} />
-        {/if}
+    {:else if msg.t === 'voice' && msg.mu}
+      <AudioPlayer url={msg.mu} duration={(msg.md?.duration as number) || 0} />
+    {:else if msg.t === 'image' && msg.mu}
+      <div class="bbl-img-wrap">
+        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+        <img
+          src={msg.mu}
+          alt={msg.c || 'Shared image'}
+          class="bbl-img"
+          loading="lazy"
+          onclick={(e) => { e.stopPropagation(); onImageTap?.(msg.mu!, msg.c || undefined); }}
+        />
       </div>
+      {#if msg.c}
+        <p class="bbl-text bbl-caption">{msg.c}</p>
+      {/if}
+    {:else if msg.t === 'system'}
+      <p class="bbl-sys">{msg.c}</p>
+    {/if}
+
+    <!-- Inline Meta (time + status inside bubble) -->
+    <div class="bbl-meta">
+      {#if isPinned}
+        <span class="bbl-badge bbl-pinned-badge">📌</span>
+      {/if}
+      {#if isStarred}
+        <span class="bbl-badge">⭐</span>
+      {/if}
+      {#if msg.edited}
+        <span class="bbl-edited">edited</span>
+      {/if}
+      <span class="bbl-time">{timeStr()}</span>
+      {#if isOwn}
+        <DeliveryStatus status={deliveryStatus} />
+      {/if}
     </div>
   </div>
 </div>
@@ -313,18 +312,19 @@
     user-select: none;
     will-change: transform;
     padding: 1px 0;
+    align-items: flex-end;
   }
 
   .msg-own {
     justify-content: flex-end;
-    padding-left: 60px;
+    padding-left: 64px;
     padding-right: 10px;
   }
 
   .msg-other {
     justify-content: flex-start;
     padding-left: 10px;
-    padding-right: 60px;
+    padding-right: 64px;
   }
 
   .msg-grouped {
@@ -335,30 +335,32 @@
     padding-top: 6px;
   }
 
-  /* === AVATAR === */
-  .msg-avatar {
-    margin-right: 6px;
-    margin-bottom: 18px;
+  /* === AVATAR COLUMN — aligns top of avatar with top of bubble === */
+  .msg-avatar-col {
+    width: 32px;
     flex-shrink: 0;
-    align-self: flex-end;
+    margin-right: 6px;
+    align-self: flex-start;
+    padding-top: 2px;
   }
 
-  /* === BUBBLE COLUMN === */
-  .msg-col {
-    display: flex;
-    flex-direction: column;
-    max-width: 82%;
-    min-width: 60px;
-    position: relative;
+  /* Spacer to align bubbles in grouped messages with avatar rows */
+  .msg-avatar-spacer {
+    width: 38px;
+    flex-shrink: 0;
   }
 
+  /* === SENDER NAME === */
   .msg-sender {
     font-size: 12px;
     font-weight: 600;
-    margin-bottom: 3px;
-    margin-left: 4px;
+    margin-bottom: 2px;
+    margin-left: 2px;
     color: var(--color-primary);
     letter-spacing: 0.01em;
+    line-height: 1;
+    align-self: flex-end;
+    padding-bottom: 2px;
   }
 
   /* === BUBBLE MATERIALS === */
@@ -368,13 +370,15 @@
     overflow: hidden;
     transition: transform 120ms cubic-bezier(0.34, 1.56, 0.64, 1),
                 box-shadow 200ms ease;
+    max-width: min(82%, 320px);
+    min-width: fit-content;
   }
 
   .msg-bubble:active {
     transform: scale(0.985);
   }
 
-  /* Sent bubble — emerald with layered glass */
+  /* Sent bubble — emerald */
   .bbl-sent {
     background: var(--color-sent);
     color: var(--color-sent-foreground);
@@ -440,25 +444,26 @@
     opacity: 0.9;
   }
 
-  /* Glass highlight overlay */
-  .bbl-glass-highlight {
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 40%;
-    background: linear-gradient(180deg, rgba(255,255,255,0.12) 0%, transparent 100%);
-    border-radius: inherit;
-    pointer-events: none;
-  }
-
-  .bbl-recv .bbl-glass-highlight {
-    background: linear-gradient(180deg, rgba(255,255,255,0.5) 0%, transparent 100%);
-  }
-
   /* Pinned ring highlight */
   .bbl-pinned {
     box-shadow:
       0 0 0 1.5px color-mix(in srgb, var(--color-primary) 40%, transparent),
       0 1px 3px rgba(5, 150, 105, 0.1) !important;
+  }
+
+  /* === EMOJI-ONLY BUBBLE === */
+  .bbl-emoji {
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 4px 6px 2px !important;
+  }
+  .bbl-emoji::after {
+    display: none;
+  }
+
+  .bbl-emoji-text {
+    font-size: 40px;
+    line-height: 1.2;
   }
 
   /* === CONTENT === */

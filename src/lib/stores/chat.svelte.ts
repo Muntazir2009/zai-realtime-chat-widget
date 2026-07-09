@@ -69,9 +69,10 @@ class ChatStore {
     return true;
   }
 
-  /** Derive sorted inbox (most recent first) */
+  /** Derive sorted inbox (most recent first, only entries with valid meta) */
   sortedInbox = $derived.by(() => {
-    const entries = Array.from(this.userChats.entries());
+    const entries = Array.from(this.userChats.entries())
+      .filter(([, uc]) => this.chats.has(uc.chatId));
     entries.sort((a, b) => {
       const metaA = this.chats.get(a[1].chatId);
       const metaB = this.chats.get(b[1].chatId);
@@ -80,7 +81,7 @@ class ChatStore {
     return entries.map(([chatId, uc]) => ({
       chatId,
       userChat: uc,
-      meta: this.chats.get(chatId),
+      meta: this.chats.get(chatId)!,
     }));
   });
 
@@ -318,8 +319,13 @@ class ChatStore {
     };
 
     const updates = this.buildFanOutUpdates(chatId, messageId, message, content.slice(0, 100));
-    await rtdb.update(await rtdb.ref('/'), updates);
+    // Optimistic: add to local array immediately so UI updates instantly
     this.messages = [...this.messages, message].sort((a, b) => a.ts - b.ts);
+    await rtdb.update(await rtdb.ref('/'), updates).catch((err) => {
+      console.error('[sendMessage] RTDB write failed:', err);
+      // Remove the optimistic message on failure
+      this.messages = this.messages.filter((m) => m.id !== messageId);
+    });
   }
 
   /** Send an image message */
@@ -339,8 +345,12 @@ class ChatStore {
     };
 
     const updates = this.buildFanOutUpdates(chatId, messageId, message, '📷 Photo');
-    await rtdb.update(await rtdb.ref('/'), updates);
+    // Optimistic: add to local array immediately
     this.messages = [...this.messages, message].sort((a, b) => a.ts - b.ts);
+    await rtdb.update(await rtdb.ref('/'), updates).catch((err) => {
+      console.error('[sendImageMessage] RTDB write failed:', err);
+      this.messages = this.messages.filter((m) => m.id !== messageId);
+    });
   }
 
   /** Send a voice message */
@@ -362,8 +372,12 @@ class ChatStore {
     };
 
     const updates = this.buildFanOutUpdates(chatId, messageId, message, '🎙 Voice message');
-    await rtdb.update(await rtdb.ref('/'), updates);
+    // Optimistic: add to local array immediately
     this.messages = [...this.messages, message].sort((a, b) => a.ts - b.ts);
+    await rtdb.update(await rtdb.ref('/'), updates).catch((err) => {
+      console.error('[sendVoiceMessage] RTDB write failed:', err);
+      this.messages = this.messages.filter((m) => m.id !== messageId);
+    });
   }
 
   // ============================================================

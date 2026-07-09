@@ -2,11 +2,12 @@
   interface Props {
     username: string;
     size?: 'sm' | 'md' | 'lg';
+    showStatus?: boolean;
     status?: 'online' | 'offline' | 'away';
     avatarUrl?: string | null;
   }
 
-  let { username, size = 'md', status, avatarUrl = null }: Props = $props();
+  let { username, size = 'md', showStatus = false, status, avatarUrl = null }: Props = $props();
 
   const sizeMap = $derived({
     sm: 32,
@@ -54,8 +55,8 @@
     <span class="font-bold text-white" style="font-size: {fontSizeMap};">{initial}</span>
   {/if}
 
-  <!-- Status Dot -->
-  {#if status}
+  <!-- Status Dot — only shown when explicitly requested with real-time data -->
+  {#if showStatus && status}
     <span
       class="absolute rounded-full border-2"
       style="

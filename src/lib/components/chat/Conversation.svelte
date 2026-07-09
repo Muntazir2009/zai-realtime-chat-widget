@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ChevronLeft, MoreVertical, Clock, Image as ImageIcon, Pin, Phone, Video, X } from 'lucide-svelte';
+  import { ChevronLeft, MoreVertical, Clock, Image as ImageIcon, Pin, X } from 'lucide-svelte';
   import MessageBubble from './MessageBubble.svelte';
   import Lightbox from '$lib/components/media/Lightbox.svelte';
   import MessageContextMenu from './MessageContextMenu.svelte';
@@ -121,6 +121,7 @@
   });
 
   function goBack() {
+    showMenu = false;
     chatStore.closeChat();
     uiStore.setView('chatList');
   }
@@ -231,7 +232,18 @@
     if (hours < 24) return `${hours}h ago`;
     return new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric' });
   }
+
+  // Close menu on any touch that isn't a deliberate tap on the menu button
+  function handleGlobalTouchStart(e: TouchEvent) {
+    if (!showMenu) return;
+    const target = e.target as HTMLElement;
+    if (!target.closest('.menu-trigger-btn') && !target.closest('.menu-sheet')) {
+      showMenu = false;
+    }
+  }
 </script>
+
+<svelte:window ontouchstart={handleGlobalTouchStart} />
 
 <div class="conv-shell" style="background-color: var(--bg-page);">
   <ParticleRain type="heart" trigger={triggerHeartRain} />
@@ -249,7 +261,6 @@
           <Avatar
             username={otherUser?.username ?? '?'}
             size="sm"
-            status={otherPresence?.status ?? otherUser?.status}
             avatarUrl={otherUser?.avatarUrl}
           />
           {#if otherPresence?.status === 'online'}
@@ -280,10 +291,7 @@
       </button>
 
       <div class="header-actions">
-        <button class="h-btn h-btn-sm" aria-label="Voice call" onclick={() => toastStore.info('Coming soon')}>
-          <Phone size={18} />
-        </button>
-        <button class="h-btn h-btn-sm" onclick={() => (showMenu = !showMenu)} aria-label="More options">
+        <button class="h-btn h-btn-sm menu-trigger-btn" onclick={() => (showMenu = !showMenu)} aria-label="More options">
           <MoreVertical size={18} />
         </button>
       </div>
@@ -355,7 +363,7 @@
       {/each}
     {/if}
 
-    <!-- Scroll padding at bottom -->
+    <!-- Scroll padding at bottom for nav bar -->
     <div class="scroll-bottom-pad"></div>
   </div>
 
@@ -435,22 +443,14 @@
   {/if}
 </div>
 
-<!-- Menu Overlay -->
+<!-- Menu Overlay — no notifications -->
 {#if showMenu}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div class="menu-overlay" style="background: var(--overlay-bg);" onclick={() => (showMenu = false)} onkeydown={(e) => e.key === 'Escape' && (showMenu = false)} role="button" tabindex="-1">
     <div class="menu-sheet">
-      <button class="menu-item" onclick={() => { showMenu = false; }}>
+      <button class="menu-item" onclick={() => { showMenu = false; uiStore.openMediaGallery(); }}">
         <ImageIcon size={17} style="color: var(--text-secondary);" />
         <span>View media</span>
-      </button>
-      <button class="menu-item" onclick={() => { showMenu = false; toastStore.info('Coming soon'); }}>
-        <Phone size={17} style="color: var(--text-secondary);" />
-        <span>Voice call</span>
-      </button>
-      <div class="menu-divider"></div>
-      <button class="menu-item menu-item-danger" onclick={() => { showMenu = false; toastStore.info('Coming soon'); }}>
-        <span>Mute notifications</span>
       </button>
     </div>
   </div>
@@ -665,7 +665,7 @@
   .msg-scroll::-webkit-scrollbar { width: 0px; }
 
   .scroll-bottom-pad {
-    height: 8px;
+    height: 72px;
     flex-shrink: 0;
   }
 
@@ -692,7 +692,7 @@
   /* === SCROLL FAB === */
   .scroll-fab {
     position: absolute;
-    bottom: 80px;
+    bottom: 148px;
     right: 12px;
     border-radius: 50%;
     border: none;
@@ -941,16 +941,6 @@
   }
   .menu-item:active { transform: scale(0.96); background: var(--input-bg); }
 
-  .menu-divider {
-    height: 0.5px;
-    background: var(--border-subtle);
-    margin: 4px 8px;
-  }
-
-  .menu-item-danger {
-    color: #ef4444;
-  }
-
   /* === UTILITIES === */
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
   @keyframes scaleIn {
@@ -962,4 +952,3 @@
     to { opacity: 1; transform: translateY(0); }
   }
 </style>
-
