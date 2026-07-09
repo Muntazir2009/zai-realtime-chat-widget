@@ -35,32 +35,35 @@ class ThemeManager {
   currentTheme: ThemeMode = $state(readStoredTheme());
 
   constructor() {
-    // Apply immediately on construction
+    // Apply immediately on construction (no $effect — module-level singleton)
     if (typeof document !== 'undefined') {
       applyThemeClass(this.currentTheme);
     }
+  }
 
-    $effect(() => {
-      if (typeof document === 'undefined') return;
-      applyThemeClass(this.currentTheme);
-      localStorage.setItem(STORAGE_KEY, this.currentTheme);
-    });
+  /** Persist and apply theme change */
+  private apply(mode: ThemeMode): void {
+    this.currentTheme = mode;
+    if (typeof document !== 'undefined') {
+      applyThemeClass(mode);
+      localStorage.setItem(STORAGE_KEY, mode);
+    }
   }
 
   /** Set theme to a specific mode */
   setTheme(mode: ThemeMode): void {
-    this.currentTheme = mode;
+    this.apply(mode);
   }
 
   /** Toggle between light and dark */
   toggleTheme(): void {
-    this.currentTheme = this.currentTheme === 'light' ? 'dark' : 'light';
+    this.apply(this.currentTheme === 'light' ? 'dark' : 'light');
   }
 
   /** Cycle through light → dark → amoled → light */
   cycleTheme(): void {
     const idx = THEME_ORDER.indexOf(this.currentTheme);
-    this.currentTheme = THEME_ORDER[(idx + 1) % THEME_ORDER.length];
+    this.apply(THEME_ORDER[(idx + 1) % THEME_ORDER.length]);
   }
 }
 
