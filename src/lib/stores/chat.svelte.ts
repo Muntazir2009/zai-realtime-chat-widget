@@ -38,8 +38,10 @@ class ChatStore {
   private inboxChangedUnsub: (() => void) | null = null;
   private messageUnsub: (() => void) | null = null;
   private messageChangedUnsub: (() => void) | null = null;
+  private messageRemovedUnsub: (() => void) | null = null;
   private presenceUnsubs: Map<string, () => void> = new Map();
   private typingUnsubs: Map<string, () => void> = new Map();
+  private typingSafetyTimeouts: Map<string, Map<string, ReturnType<typeof setTimeout>>> = new Map();
 
   // ---- Pinned messages ----
   pinnedMessages: Map<string, Message> = $state(new Map());
@@ -212,6 +214,14 @@ class ChatStore {
       }
     });
 
+    // Listen for message deletions (realtime removal)
+    this.messageRemovedUnsub = await rtdb.onChildRemoved(msgRef, (snap) => {
+      const msgId = snap.key;
+      if (msgId) {
+        this.messages = this.messages.filter(m => m.id !== msgId);
+      }
+    });
+
     this.markAsRead(chatId);
     this.attachPresenceListeners(chatId);
     this.attachTypingListener(chatId);
@@ -228,6 +238,10 @@ class ChatStore {
     if (this.messageChangedUnsub) {
       this.messageChangedUnsub();
       this.messageChangedUnsub = null;
+    }
+    if (this.messageRemovedUnsub) {
+      this.messageRemovedUnsub();
+      this.messageRemovedUnsub = null;
     }
     this.detachPresenceListeners();
     this.detachTypingListener();
@@ -448,23 +462,69 @@ class ChatStore {
     this.detachTypingListener();
     const meta = this.chats.get(chatId);
     if (!meta) return;
+    this.typingSafetyTimeouts.set(chatId, new Map());
     for (const uid of meta.participantIds) {
       const r = await rtdb.ref(RTDB_PATHS.TYPING(chatId, uid));
       const unsub = await rtdb.onValue(r, (snap) => {
-        if (!snap.exists()) return;
-        const isTyping = snap.val() as boolean;
+        if (!snap.exists()) {
+          // Node removed — clear typing state
+          const set = this.typingUsers.get(chatId) ?? new Set();
+          set.delete(uid);
+          this.typingUsers.set(chatId, set);
+          this.clearTypingSafetyTimeout(chatId, uid);
+          return;
+        }
+
+        const data = snap.val() as { typing: boolean; ts: number } | null;
+        if (!data || !data.typing) {
+          // Not typing — remove from set
+          const set = this.typingUsers.get(chatId) ?? new Set();
+          set.delete(uid);
+          this.typingUsers.set(chatId, set);
+          this.clearTypingSafetyTimeout(chatId, uid);
+          return;
+        }
+
+        // User is typing — add to set
         const set = this.typingUsers.get(chatId) ?? new Set();
-        if (isTyping) set.add(uid);
-        else set.delete(uid);
+        set.add(uid);
         this.typingUsers.set(chatId, set);
+
+        // Set a 5-second safety timeout to auto-remove (in case RTDB removal is delayed/lost)
+        this.clearTypingSafetyTimeout(chatId, uid);
+        const timeout = setTimeout(() => {
+          const s = this.typingUsers.get(chatId);
+          if (s) {
+            s.delete(uid);
+            this.typingUsers.set(chatId, s);
+          }
+          const timeouts = this.typingSafetyTimeouts.get(chatId);
+          if (timeouts) timeouts.delete(uid);
+        }, 5000);
+        this.typingSafetyTimeouts.get(chatId)!.set(uid, timeout);
       });
       this.typingUnsubs.set(uid, unsub);
+    }
+  }
+
+  private clearTypingSafetyTimeout(chatId: string, uid: string): void {
+    const chatTimeouts = this.typingSafetyTimeouts.get(chatId);
+    if (!chatTimeouts) return;
+    const t = chatTimeouts.get(uid);
+    if (t) {
+      clearTimeout(t);
+      chatTimeouts.delete(uid);
     }
   }
 
   private detachTypingListener(): void {
     for (const [, unsub] of this.typingUnsubs) unsub();
     this.typingUnsubs.clear();
+    // Clear all safety timeouts
+    for (const [, chatTimeouts] of this.typingSafetyTimeouts) {
+      for (const [, t] of chatTimeouts) clearTimeout(t);
+    }
+    this.typingSafetyTimeouts.clear();
   }
 
   // ============================================================
@@ -658,7 +718,7 @@ class ChatStore {
 
   async editMessage(chatId: string, messageId: string, newContent: string): Promise<void> {
     try {
-      await rtdb.update(rtdb.ref('/'), {
+      await rtdb.update(await rtdb.ref('/'), {
         [`chats/${chatId}/messages/${messageId}/c`]: newContent,
         [`chats/${chatId}/messages/${messageId}/edited`]: true,
       });

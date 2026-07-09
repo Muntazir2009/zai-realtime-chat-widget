@@ -761,3 +761,83 @@ Stage Summary:
 - [messageId] directory correctly named (verified via hex: 5b6d65737361676549645d)
 - Critical blocker remains: FIREBASE_CLIENT_EMAIL and FIREBASE_PRIVATE_KEY needed for Cloudflare deployment
 - Environment limitation noted: Cloudflare platformProxy prevents dev server from running in this sandbox
+
+---
+Task ID: 21
+Agent: Main
+Task: Add bottom pill bar navigation (Global | DMs | Settings)
+
+Work Log:
+- Updated `ui.svelte.ts` store: added `TabId` type (`'global' | 'dms' | 'settings'`), `tab` reactive state, and `setTab()` method
+- Created `src/lib/components/ui/BottomNavBar.svelte`: fixed-bottom pill track with 3 tab buttons (Globe/MessageCircle/Settings icons), active pill gets primary color bg with shadow, spring transition on tap, safe-area-bottom padding, ARIA tablist/tab roles
+- Created `src/lib/components/chat/GlobalView.svelte`: placeholder view with Globe header + "Coming Soon" empty state
+- Created `src/lib/components/chat/SettingsView.svelte`: full-page settings extracted from old ChatList bottom sheet — profile card, 3-column theme picker (Light/Dark/AMOLED), preferences section (Notifications/Privacy/About), Sign Out button
+- Updated `+page.svelte`: added dynamic imports for GlobalView, SettingsView, BottomNavBar; added `activeTab` derived; added `showNav` derived (hides in auth/conversation); wrapped authenticated views in flex column with BottomNavBar
+- Updated `ChatList.svelte`: removed Settings button from header, removed BottomSheet settings panel, removed unused imports (Settings, LogOut, Check, Moon, Sun, Smartphone, BottomSheet, themeManager, ThemeMode), added `padding-bottom: 72px` to chat list scroll area for nav clearance
+
+Stage Summary:
+- Bottom pill bar navigation fully implemented and verified via agent-browser
+- All 3 tabs switch correctly: Global (placeholder), DMs (chat list), Settings (full-page settings)
+- Navigation bar hides automatically in auth screen and conversation view
+- Zero console errors in testing
+- Files modified: ui.svelte.ts, +page.svelte, ChatList.svelte
+- Files created: BottomNavBar.svelte, GlobalView.svelte, SettingsView.svelte
+
+---
+Task ID: 22-a
+Agent: CSS Foundation Agent
+Task: Production CSS design system upgrade
+
+Work Log:
+- Added user-select: none globally (text inputs excluded)
+- Added 4-level elevation system (.elevation-1 through .elevation-4)
+- Added premium glass variants (.glass-float, .glass-surface, .glass-input-premium)
+- Added message bubble material system (.bubble-sent, .bubble-received, tails, grouped)
+- Added spring animations (messageAppear, bubbleSpring, slideUpSoft, fadeInScale, etc.)
+- Added typing bubble with bounce wave animation
+- Added premium input bar glass styles
+- Added enhanced FAB, chat tile, header glass styles
+- Added scroll behavior utilities
+- Added particle drift + sparkle animations
+- Added dark/amoled mode refinements
+- Added date chip, empty state float, status ring animations
+
+Stage Summary:
+- Complete CSS foundation for production polish
+- All new classes added without breaking existing ones
+- File: src/app.css
+
+---
+Task ID: 22-b
+Agent: Logic Fixes Agent
+Task: Fix typing/presence/realtime logic bugs
+
+Work Log:
+- Fixed PresenceManager: added visibility change handler, stopAllTyping(), immediate typing node removal
+- Fixed ChatStore typing detection: was reading RTDB object as boolean (always true), now properly parses {typing, ts} object
+- Added 5s safety timeout for typing indicators in ChatStore
+- Added onChildRemoved listener for message deletion realtime
+- Fixed editMessage missing await on rtdb.ref('/')
+
+Stage Summary:
+- Typing indicators no longer get stuck forever
+- Deleted messages now disappear in realtime
+- Edit messages work correctly
+- Page visibility changes properly stop typing
+
+---
+Task ID: 22-d
+Agent: InputBar Rewrite Agent
+Task: Complete InputBar production redesign
+
+Work Log:
+- Rewrote InputBar with floating glass pill design
+- Premium action buttons (attachment, sticker, GIF) with circle shape
+- Animated send button with spring pop-in/out morph
+- Improved textarea with smooth auto-resize and transparent background
+- Upload progress bar with gradient fill
+- Better spacing, glass material, shadow system
+
+Stage Summary:
+- File: src/lib/components/chat/InputBar.svelte completely rewritten
+- Premium floating glass input matching iMessage/Telegram quality

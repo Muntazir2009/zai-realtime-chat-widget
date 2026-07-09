@@ -20,9 +20,17 @@ class PresenceManager {
   private typingTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
   private lastTypingEmit: Map<string, number> = new Map();
 
+  private visibilityHandler: (() => void) | null = null;
+
   constructor() {
     if (typeof window !== 'undefined') {
       window.addEventListener('beforeunload', () => this.disconnect());
+      this.visibilityHandler = () => {
+        if (document.hidden) {
+          this.stopAllTyping();
+        }
+      };
+      document.addEventListener('visibilitychange', this.visibilityHandler);
     }
   }
 
@@ -84,6 +92,13 @@ class PresenceManager {
     if (!uid) return;
 
     this.isTyping = false;
+
+    // Immediately remove the RTDB typing node (don't wait for the 3s safety net)
+    rtdb.ref(RTDB_PATHS.TYPING(chatId, uid)).then((ref) => {
+      rtdb.remove(ref).catch(() => {});
+    });
+
+    // 3s delayed removal as a safety net (idempotent remove)
     this.writeTyping(chatId, uid, false);
 
     const timer = this.typingTimers.get(chatId);
@@ -91,6 +106,25 @@ class PresenceManager {
       clearTimeout(timer);
       this.typingTimers.delete(chatId);
     }
+  }
+
+  /** Stop typing in ALL chats and clean up all timers / RTDB nodes */
+  stopAllTyping(): void {
+    const uid = this.uid;
+    if (!uid) return;
+
+    this.isTyping = false;
+
+    // Clear all timers
+    for (const [chatId, timer] of this.typingTimers) {
+      clearTimeout(timer);
+      // Immediately remove the RTDB typing node
+      rtdb.ref(RTDB_PATHS.TYPING(chatId, uid)).then((ref) => {
+        rtdb.remove(ref).catch(() => {});
+      });
+    }
+    this.typingTimers.clear();
+    this.lastTypingEmit.clear();
   }
 
   async disconnect(): Promise<void> {
@@ -101,9 +135,13 @@ class PresenceManager {
     this.stopHeartbeat();
     this.onlineStatus = 'offline';
 
-    for (const [, timer] of this.typingTimers) clearTimeout(timer);
-    this.typingTimers.clear();
-    this.lastTypingEmit.clear();
+    this.stopAllTyping();
+
+    // Clean up visibility listener
+    if (this.visibilityHandler && typeof window !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.visibilityHandler);
+      this.visibilityHandler = null;
+    }
   }
 
   private stopHeartbeat(): void {

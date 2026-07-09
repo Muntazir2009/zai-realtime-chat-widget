@@ -13,6 +13,9 @@
   let AuthScreen: any = $state(null);
   let ChatList: any = $state(null);
   let Conversation: any = $state(null);
+  let GlobalView: any = $state(null);
+  let SettingsView: any = $state(null);
+  let BottomNavBar: any = $state(null);
 
   let _prevView: string | null = null;
 
@@ -27,6 +30,9 @@
       authComp,
       chatListComp,
       convComp,
+      globalComp,
+      settingsComp,
+      navComp,
     ] = await Promise.all([
       import('$lib/stores/auth.svelte'),
       import('$lib/stores/chat.svelte'),
@@ -35,6 +41,9 @@
       import('$lib/components/auth/AuthScreen.svelte'),
       import('$lib/components/chat/ChatList.svelte'),
       import('$lib/components/chat/Conversation.svelte'),
+      import('$lib/components/chat/GlobalView.svelte'),
+      import('$lib/components/chat/SettingsView.svelte'),
+      import('$lib/components/ui/BottomNavBar.svelte'),
     ]);
 
     authStore = authMod.authStore;
@@ -45,6 +54,9 @@
     AuthScreen = authComp.default;
     ChatList = chatListComp.default;
     Conversation = convComp.default;
+    GlobalView = globalComp.default;
+    SettingsView = settingsComp.default;
+    BottomNavBar = navComp.default;
 
     mounted = true;
 
@@ -59,6 +71,12 @@
     !authStore?.isAuthenticated ? 'auth' :
     (uiStore?.view === 'auth' ? 'chatList' : uiStore?.view ?? 'chatList')
   );
+
+  // Determine which tab content to show when in chatList view
+  const activeTab = $derived(uiStore?.tab ?? 'dms');
+
+  // Whether to show the bottom nav bar
+  const showNav = $derived(view !== 'loading' && view !== 'auth' && view !== 'conversation');
 
   // Watch for view changes to trigger side effects (load inbox, go online)
   $effect(() => {
@@ -89,12 +107,30 @@
 {:else if view === 'auth' && AuthScreen}
   {@const Auth = AuthScreen}
   <Auth />
-{:else if view === 'chatList' && ChatList}
-  {@const List = ChatList}
-  <List />
-{:else if view === 'conversation' && Conversation}
-  {@const Conv = Conversation}
-  <Conv />
+{:else}
+  <!-- Authenticated shell: content + bottom nav -->
+  <div class="h-full flex flex-col" style="background-color: var(--bg-page);">
+    <div class="flex-1 min-h-0">
+      {#if view === 'conversation' && Conversation}
+        {@const Conv = Conversation}
+        <Conv />
+      {:else if activeTab === 'dms' && ChatList}
+        {@const List = ChatList}
+        <List />
+      {:else if activeTab === 'global' && GlobalView}
+        {@const Global = GlobalView}
+        <Global />
+      {:else if activeTab === 'settings' && SettingsView}
+        {@const Settings = SettingsView}
+        <Settings />
+      {/if}
+    </div>
+
+    {#if showNav && BottomNavBar}
+      {@const Nav = BottomNavBar}
+      <Nav />
+    {/if}
+  </div>
 {/if}
 
 <ConnectionStatus />

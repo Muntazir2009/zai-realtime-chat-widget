@@ -510,3 +510,738 @@ select {
 .online-pulse {
   animation: onlinePulse 2s ease-in-out infinite;
 }
+
+/* ============================================================
+   §22-a — Production Design System Upgrades
+   ============================================================ */
+
+/* --- 1. Text Selection Control --- */
+/* Disable text selection everywhere except inputs/textareas */
+* {
+  -webkit-user-select: none;
+  user-select: none;
+}
+input, textarea, [contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* --- 2. Depth / Elevation System --- */
+.elevation-1 {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 1px 3px rgba(0, 0, 0, 0.06),
+    0 2px 4px rgba(0, 0, 0, 0.03);
+}
+
+.elevation-2 {
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.04),
+    0 3px 6px rgba(0, 0, 0, 0.05),
+    0 4px 12px rgba(0, 0, 0, 0.06),
+    0 1px 3px rgba(5, 150, 105, 0.04);
+}
+
+.elevation-3 {
+  box-shadow:
+    0 3px 6px rgba(0, 0, 0, 0.05),
+    0 6px 12px rgba(0, 0, 0, 0.06),
+    0 8px 24px rgba(0, 0, 0, 0.08),
+    0 2px 4px rgba(5, 150, 105, 0.06);
+}
+
+.elevation-4 {
+  box-shadow:
+    0 4px 8px rgba(0, 0, 0, 0.05),
+    0 8px 16px rgba(0, 0, 0, 0.07),
+    0 12px 32px rgba(0, 0, 0, 0.1),
+    0 2px 6px rgba(5, 150, 105, 0.08);
+}
+
+/* --- 3. Premium Glass Variants --- */
+.glass-float {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px) saturate(190%);
+  -webkit-backdrop-filter: blur(20px) saturate(190%);
+  border: none;
+  border-radius: var(--radius-lg);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.1),
+    0 2px 8px rgba(0, 0, 0, 0.06),
+    0 0 1px rgba(0, 0, 0, 0.1);
+}
+
+.glass-surface {
+  background: rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(8px) saturate(160%);
+  -webkit-backdrop-filter: blur(8px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+
+.glass-input-premium {
+  background: var(--input-bg);
+  border: 1.5px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  transition: box-shadow 250ms cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 250ms cubic-bezier(0.4, 0, 0.2, 1),
+              background-color 250ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-input-premium:focus {
+  box-shadow:
+    0 0 0 3px rgba(5, 150, 105, 0.15),
+    0 0 12px rgba(5, 150, 105, 0.1),
+    inset 0 0 0 1px rgba(5, 150, 105, 0.2);
+  border-color: rgba(5, 150, 105, 0.5);
+  background: var(--bg-surface);
+  outline: none;
+}
+
+/* --- 4. Message Bubble Materials --- */
+.bubble-sent {
+  position: relative;
+  background: var(--color-sent);
+  color: var(--color-sent-foreground);
+  border-radius: var(--radius-md) var(--radius-md) 4px var(--radius-md);
+  box-shadow:
+    0 2px 8px rgba(5, 150, 105, 0.2),
+    0 1px 2px rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.bubble-sent::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 40%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, transparent 100%);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.bubble-received {
+  position: relative;
+  background: var(--color-received);
+  color: var(--color-received-foreground);
+  border-radius: var(--radius-md) var(--radius-md) var(--radius-md) 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--border-subtle);
+}
+
+.bubble-tail-sent {
+  border-radius: var(--radius-md) var(--radius-md) 4px var(--radius-md);
+}
+
+.bubble-tail-sent::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  right: -6px;
+  width: 12px;
+  height: 12px;
+  background: var(--color-sent);
+  clip-path: polygon(0 0, 0 100%, 100% 100%);
+}
+
+.bubble-tail-received {
+  border-radius: var(--radius-md) var(--radius-md) var(--radius-md) 4px;
+}
+
+.bubble-tail-received::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: -6px;
+  width: 12px;
+  height: 12px;
+  background: var(--color-received);
+  clip-path: polygon(100% 0, 0 100%, 100% 100%);
+}
+
+.bubble-grouped-sent {
+  border-radius: var(--radius-sm) var(--radius-sm) 4px var(--radius-sm);
+  margin-top: 2px;
+  margin-bottom: 2px;
+}
+
+.bubble-grouped-received {
+  border-radius: var(--radius-sm) var(--radius-sm) var(--radius-sm) 4px;
+  margin-top: 2px;
+  margin-bottom: 2px;
+}
+
+/* --- 5. Smooth Spring Animations --- */
+@keyframes messageAppear {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-1px) scale(1.005);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes bubbleSpring {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.02);
+  }
+  75% {
+    transform: scale(0.99);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slideUpSoft {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  60% {
+    transform: translateY(-2px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInScale {
+  0% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes shimmerFloat {
+  0%, 100% {
+    opacity: 0.6;
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.01);
+  }
+}
+
+@keyframes gentlePulse {
+  0%, 100% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+.animate-message-appear {
+  animation: messageAppear 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.animate-bubble-spring {
+  animation: bubbleSpring 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.animate-slide-up-soft {
+  animation: slideUpSoft 400ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.animate-fade-in-scale {
+  animation: fadeInScale 250ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.animate-shimmer-float {
+  animation: shimmerFloat 2s ease-in-out infinite;
+}
+
+.animate-gentle-pulse {
+  animation: gentlePulse 2s ease-in-out infinite;
+}
+
+/* --- 6. Typing Indicator Enhancement --- */
+.typing-bubble {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 16px;
+  border-radius: var(--radius-pill);
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.typing-bubble span {
+  display: block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  animation: typingBounce 1.4s ease-in-out infinite;
+}
+
+.typing-bubble span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.typing-bubble span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes typingBounce {
+  0%, 60%, 100% {
+    transform: translateY(0) scale(0.8);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-6px) scale(1);
+    opacity: 1;
+  }
+}
+
+/* --- 7. Input Bar Premium --- */
+.input-bar-glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-top: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow:
+    0 -2px 12px rgba(0, 0, 0, 0.05),
+    0 -1px 4px rgba(0, 0, 0, 0.03),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transition: box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.input-bar-glass:focus-within {
+  border-color: rgba(5, 150, 105, 0.4);
+  box-shadow:
+    0 -2px 12px rgba(0, 0, 0, 0.05),
+    0 -1px 4px rgba(0, 0, 0, 0.03),
+    0 0 0 3px rgba(5, 150, 105, 0.1),
+    0 0 16px rgba(5, 150, 105, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* --- 8. FAB (Floating Action Button) Enhanced --- */
+.fab-premium {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow:
+    0 6px 20px rgba(0, 0, 0, 0.12),
+    0 2px 6px rgba(0, 0, 0, 0.08),
+    0 0 1px rgba(0, 0, 0, 0.1);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 280ms cubic-bezier(0.4, 0, 0.2, 1),
+              background-color 200ms ease;
+}
+
+.fab-premium:hover {
+  transform: scale(1.08) translateY(-2px);
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.15),
+    0 4px 10px rgba(0, 0, 0, 0.1),
+    0 0 1px rgba(0, 0, 0, 0.12);
+}
+
+.fab-premium:active {
+  transform: scale(0.95);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.1),
+    0 1px 3px rgba(0, 0, 0, 0.08);
+  transition: transform 100ms ease, box-shadow 100ms ease;
+}
+
+/* --- 9. Chat List Tile Hover --- */
+.chat-tile {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  padding: var(--spacing-3) var(--spacing-4);
+  border-radius: var(--radius-md);
+  border-left: 3px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.chat-tile:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.chat-tile.active {
+  background: rgba(5, 150, 105, 0.06);
+  border-left-color: var(--color-primary);
+}
+
+/* --- 10. Premium Header --- */
+.header-glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px) saturate(190%);
+  -webkit-backdrop-filter: blur(20px) saturate(190%);
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.03);
+  z-index: 50;
+}
+
+/* --- 11. Soft Divider --- */
+.divider {
+  height: 1px;
+  border: none;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--border-subtle) 15%,
+    var(--border-subtle) 85%,
+    transparent 100%
+  );
+  margin: var(--spacing-4) 0;
+}
+
+/* --- 12. Scroll Behavior --- */
+.scroll-smooth-native {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+}
+
+.scroll-momentum {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: none;
+  scroll-behavior: smooth;
+}
+
+/* --- 13. Easter Egg Particle Enhancement --- */
+@keyframes particleDrift {
+  0% {
+    transform: translateY(0) translateX(0) rotate(0deg) scale(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+    transform: translateY(-10px) translateX(3px) rotate(-8deg) scale(1);
+  }
+  30% {
+    transform: translateY(-50px) translateX(-5px) rotate(12deg) scale(1.1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: translateY(-90px) translateX(4px) rotate(-6deg) scale(0.95);
+    opacity: 0.7;
+  }
+  70% {
+    transform: translateY(-130px) translateX(-3px) rotate(10deg) scale(0.8);
+    opacity: 0.5;
+  }
+  100% {
+    transform: translateY(-180px) translateX(2px) rotate(-12deg) scale(0.5);
+    opacity: 0;
+  }
+}
+
+@keyframes sparkle {
+  0% {
+    transform: scale(0) rotate(0deg);
+    opacity: 0;
+  }
+  40% {
+    transform: scale(1.2) rotate(90deg);
+    opacity: 1;
+  }
+  70% {
+    transform: scale(0.9) rotate(180deg);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(0) rotate(270deg);
+    opacity: 0;
+  }
+}
+
+.animate-particle-drift {
+  animation: particleDrift 2.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+.animate-sparkle {
+  animation: sparkle 0.8s ease-in-out forwards;
+}
+
+/* --- 14. Dark Mode Refinements --- */
+.dark .glass-float {
+  background: rgba(0, 0, 0, 0.72);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.25),
+    0 2px 8px rgba(0, 0, 0, 0.2),
+    0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+.dark .glass-surface {
+  background: rgba(30, 30, 30, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.dark .glass-input-premium:focus {
+  box-shadow:
+    0 0 0 3px rgba(16, 185, 129, 0.18),
+    0 0 12px rgba(16, 185, 129, 0.12),
+    inset 0 0 0 1px rgba(16, 185, 129, 0.25);
+  border-color: rgba(16, 185, 129, 0.5);
+}
+
+.dark .elevation-1 {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.15),
+    0 1px 3px rgba(0, 0, 0, 0.2),
+    0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.dark .elevation-2 {
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.15),
+    0 3px 6px rgba(0, 0, 0, 0.2),
+    0 4px 12px rgba(0, 0, 0, 0.25),
+    0 1px 3px rgba(16, 185, 129, 0.08);
+}
+
+.dark .elevation-3 {
+  box-shadow:
+    0 3px 6px rgba(0, 0, 0, 0.2),
+    0 6px 12px rgba(0, 0, 0, 0.25),
+    0 8px 24px rgba(0, 0, 0, 0.3),
+    0 2px 4px rgba(16, 185, 129, 0.1);
+}
+
+.dark .elevation-4 {
+  box-shadow:
+    0 4px 8px rgba(0, 0, 0, 0.2),
+    0 8px 16px rgba(0, 0, 0, 0.3),
+    0 12px 32px rgba(0, 0, 0, 0.35),
+    0 2px 6px rgba(16, 185, 129, 0.12);
+}
+
+.dark .glass-float,
+.dark .glass-surface,
+.dark .glass-input-premium,
+.dark .input-bar-glass,
+.dark .header-glass,
+.dark .typing-bubble {
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+}
+
+.dark .bubble-sent {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.dark .bubble-sent::before {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, transparent 100%);
+}
+
+.dark .input-bar-glass {
+  background: rgba(20, 20, 20, 0.85);
+  box-shadow:
+    0 -2px 12px rgba(0, 0, 0, 0.2),
+    0 -1px 4px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.dark .input-bar-glass:focus-within {
+  box-shadow:
+    0 -2px 12px rgba(0, 0, 0, 0.2),
+    0 -1px 4px rgba(0, 0, 0, 0.15),
+    0 0 0 3px rgba(16, 185, 129, 0.12),
+    0 0 16px rgba(16, 185, 129, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.dark .header-glass {
+  background: rgba(10, 10, 10, 0.88);
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.2), 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.dark .chat-tile:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.dark .chat-tile.active {
+  background: rgba(16, 185, 129, 0.1);
+}
+
+/* --- 15. AMOLED Refinements --- */
+.amoled .glass-float {
+  background: rgba(0, 0, 0, 0.85);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.amoled .glass-surface {
+  background: rgba(10, 10, 10, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.amoled .glass-input-premium {
+  background: #0a0a0a;
+  border: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.amoled .glass-input-premium:focus {
+  box-shadow:
+    0 0 0 2px rgba(16, 185, 129, 0.2),
+    0 0 8px rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+.amoled .elevation-1 {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.amoled .elevation-2 {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.amoled .elevation-3 {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+.amoled .elevation-4 {
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+}
+
+.amoled .bubble-sent {
+  border: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.amoled .bubble-sent::before {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, transparent 100%);
+}
+
+.amoled .bubble-received {
+  background: #0a0a0a;
+  border: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.amoled .input-bar-glass {
+  background: rgba(0, 0, 0, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  box-shadow: 0 -1px 8px rgba(0, 0, 0, 0.3);
+}
+
+.amoled .input-bar-glass:focus-within {
+  box-shadow:
+    0 -1px 8px rgba(0, 0, 0, 0.3),
+    0 0 0 2px rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.amoled .header-glass {
+  background: rgba(0, 0, 0, 0.92);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
+}
+
+.amoled .fab-premium {
+  background: rgba(10, 10, 10, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.amoled .chat-tile:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.amoled .chat-tile.active {
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.amoled .typing-bubble {
+  background: rgba(10, 10, 10, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+/* --- 16. Date Separator Chip --- */
+.date-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 14px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+}
+
+/* --- 17. Empty State Improvements --- */
+.empty-state-icon {
+  animation: gentleFloat 3s ease-in-out infinite;
+}
+
+@keyframes gentleFloat {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+/* --- 18. Status Indicator Ring --- */
+@keyframes statusRing {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4);
+  }
+  70% {
+    transform: scale(1.3);
+    opacity: 0;
+    box-shadow: 0 0 0 8px rgba(34, 197, 94, 0);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+  }
+}
+
+.animate-status-ring {
+  animation: statusRing 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}

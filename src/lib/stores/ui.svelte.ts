@@ -6,8 +6,11 @@
 
 import type { Message } from '$lib/types/index.js';
 
+export type TabId = 'global' | 'dms' | 'settings';
+
 class UIStore {
   view: 'auth' | 'chatList' | 'conversation' = $state('auth');
+  tab: TabId = $state('dms');
   replyTo: Message | null = $state(null);
   showMediaGallery = $state(false);
   showBottomSheet = $state(false);
@@ -20,6 +23,10 @@ class UIStore {
     if (view !== 'conversation') {
       this.replyTo = null;
     }
+  }
+
+  setTab(tab: TabId): void {
+    this.tab = tab;
   }
 
   setReplyTo(msg: Message | null): void {

@@ -3,7 +3,7 @@
   import Avatar from '$lib/components/ui/Avatar.svelte';
   import DeliveryStatus from '$lib/components/indicators/DeliveryStatus.svelte';
   import AudioPlayer from '$lib/components/media/AudioPlayer.svelte';
-  import { SmilePlus, Reply as ReplyIcon, Pencil } from 'lucide-svelte';
+  import { Reply as ReplyIcon } from 'lucide-svelte';
 
   interface Props {
     msg: Message;
@@ -22,103 +22,112 @@
   }
 
   let {
-    msg,
-    isOwn,
-    showAvatar = false,
-    senderName,
-    isGrouped = false,
-    isPinned = false,
-    isStarred = false,
-    replyPreviewMsg,
-    onReply,
-    onLongPress,
-    onImageTap,
-    onReaction,
-    onSwipeReply,
+    msg, isOwn, showAvatar = false, senderName, isGrouped = false,
+    isPinned = false, isStarred = false, replyPreviewMsg,
+    onReply, onLongPress, onImageTap, onReaction, onSwipeReply,
   }: Props = $props();
 
-  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
-  let touchStartY = $state(0);
-  let touchStartX = $state(0);
-  let touchCurrentX = $state(0);
+  // --- Swipe physics state ---
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let currentOffset = 0;
+  let touchStartTime = 0;
+  let lastTouchX = 0;
+  let lastTouchTime = 0;
+  let velocityX = 0;
   let isSwiping = $state(false);
-  let showReactions = $state(false);
-  let lastTapTime = 0;
   let swipeTriggered = $state(false);
-  const LONG_PRESS_MS = 500;
-  const SWIPE_REPLY_THRESHOLD = 80;
+  let displayOffset = $state(0);
+  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  let springRaf: number | null = null;
+  let lastTapTime = 0;
 
-  // Swipe-to-reply visual offset
-  let swipeOffset = $derived(() => {
-    if (!isSwiping) return 0;
-    const dx = isOwn ? touchStartX - touchCurrentX : touchCurrentX - touchStartX;
-    return Math.max(0, Math.min(dx, 120));
-  });
+  const SWIPE_THRESHOLD = 60;
+  const ELASTIC_FACTOR = 0.3;
+  const VELOCITY_THRESHOLD = 0.25;
 
-  let swipeOpacity = $derived(Math.min(swipeOffset() / SWIPE_REPLY_THRESHOLD, 1));
-
-  function handleReaction(emoji: string) {
-    onReaction?.(msg, emoji);
-    showReactions = false;
+  function springBack() {
+    currentOffset *= 0.78;
+    if (Math.abs(currentOffset) < 0.5) {
+      currentOffset = 0;
+      displayOffset = 0;
+      springRaf = null;
+      return;
+    }
+    displayOffset = currentOffset;
+    springRaf = requestAnimationFrame(springBack);
   }
 
-  function handleDoubleTap() {
-    const now = Date.now();
-    if (now - lastTapTime < 300) {
-      onReaction?.(msg, '❤️');
+  function cancelSpring() {
+    if (springRaf !== null) {
+      cancelAnimationFrame(springRaf);
+      springRaf = null;
     }
-    lastTapTime = now;
   }
 
   function handleTouchStart(e: TouchEvent) {
+    cancelSpring();
     touchStartX = e.touches[0].clientX;
     touchStartY = e.touches[0].clientY;
-    touchCurrentX = touchStartX;
+    lastTouchX = touchStartX;
+    touchStartTime = Date.now();
+    lastTouchTime = Date.now();
+    velocityX = 0;
     isSwiping = false;
     swipeTriggered = false;
 
     longPressTimer = setTimeout(() => {
-      if (!isSwiping) {
-        onLongPress?.(msg);
-      }
-    }, LONG_PRESS_MS);
+      if (!isSwiping) onLongPress?.(msg);
+    }, 500);
   }
 
   function handleTouchMove(e: TouchEvent) {
     const cx = e.touches[0].clientX;
     const cy = e.touches[0].clientY;
-    touchCurrentX = cx;
+    const now = Date.now();
+    const dt = now - lastTouchTime;
+    if (dt > 0) velocityX = (cx - lastTouchX) / dt;
+    lastTouchX = cx;
+    lastTouchTime = now;
 
-    const dx = isOwn ? touchStartX - cx : cx - touchStartX;
+    const rawDx = isOwn ? touchStartX - cx : cx - touchStartX;
     const dy = Math.abs(cy - touchStartY);
 
-    // If moving mostly horizontally, it's a swipe
-    if (dx > 15 && dy < 20) {
+    if (rawDx > 12 && dy < rawDx * 0.6) {
       isSwiping = true;
-      if (longPressTimer) clearTimeout(longPressTimer);
+      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
 
-      // Trigger reply when threshold reached
-      if (dx >= SWIPE_REPLY_THRESHOLD && !swipeTriggered) {
-        swipeTriggered = true;
+      let effectiveDx: number;
+      if (rawDx > SWIPE_THRESHOLD) {
+        const beyond = rawDx - SWIPE_THRESHOLD;
+        effectiveDx = SWIPE_THRESHOLD + beyond * ELASTIC_FACTOR;
+      } else {
+        effectiveDx = rawDx;
       }
-    } else if (dy > 10 && dx < 15) {
-      // Vertical scroll — cancel long press
-      if (longPressTimer) clearTimeout(longPressTimer);
+      currentOffset = effectiveDx * (isOwn ? -1 : 1);
+      displayOffset = currentOffset;
+
+      if (rawDx >= SWIPE_THRESHOLD && !swipeTriggered) swipeTriggered = true;
+    } else if (dy > 10 && rawDx < 15) {
+      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
     }
   }
 
   function handleTouchEnd() {
-    if (longPressTimer) {
-      clearTimeout(longPressTimer);
-      longPressTimer = null;
-    }
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
 
-    if (swipeTriggered && swipeOffset() >= SWIPE_REPLY_THRESHOLD) {
+    const shouldTrigger = swipeTriggered ||
+      (Math.abs(currentOffset) >= SWIPE_THRESHOLD * 0.8 && Math.abs(velocityX) > VELOCITY_THRESHOLD);
+
+    if (shouldTrigger) {
       onSwipeReply?.(msg);
+      currentOffset = 0;
+      displayOffset = 0;
+    } else {
+      springBack();
     }
 
     isSwiping = false;
-    touchCurrentX = touchStartX;
     swipeTriggered = false;
   }
 
@@ -127,6 +136,13 @@
     onLongPress?.(msg);
   }
 
+  function handleDoubleTap() {
+    const now = Date.now();
+    if (now - lastTapTime < 300) onReaction?.(msg, '❤️');
+    lastTapTime = now;
+  }
+
+  // --- Derived ---
   const timeStr = $derived(() => {
     const d = new Date(msg.ts);
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -142,7 +158,6 @@
     return `${m}:${s.toString().padStart(2, '0')}`;
   }
 
-  // Detect URLs in text messages for link preview
   const urlMatch = $derived(() => {
     if (msg.t !== 'text') return null;
     const match = msg.c.match(/https?:\/\/[^\s<>"']+/i);
@@ -153,11 +168,26 @@
     if (msg.t !== 'text' || !urlMatch()) return msg.c;
     return msg.c.replace(urlMatch()!, '').trim();
   });
+
+  const replyIndicatorOpacity = $derived(Math.min(Math.abs(displayOffset) / SWIPE_THRESHOLD, 1));
+
+  const bubbleRadius = $derived(
+    isOwn
+      ? (isGrouped ? '18px 18px 4px 18px' : '18px 18px 4px 18px')
+      : (isGrouped ? '18px 18px 18px 4px' : '18px 18px 18px 4px')
+  );
 </script>
 
 <div
-  class="group flex {isOwn ? 'justify-end' : 'justify-start'} {isGrouped ? 'mb-0.5' : 'mb-2'} px-3 {isPinned ? '' : 'animate-scale-in'} {isOwn ? 'pl-8' : 'pr-8'}"
-  style="transform: translateX({isOwn ? -swipeOffset() : swipeOffset()}px); transition: {isSwiping ? 'none' : 'transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1)'};"
+  class="msg-row"
+  style="
+    justify-content: {isOwn ? 'flex-end' : 'flex-start'};
+    margin-top: {isGrouped ? '2px' : '8px'};
+    padding-left: {isOwn ? '48px' : '12px'};
+    padding-right: {isOwn ? '12px' : '48px'};
+    transform: translateX({displayOffset}px);
+    transition: {isSwiping ? 'none' : 'transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1)'};
+  "
   role="article"
   aria-label="Message from {isOwn ? 'you' : senderName || 'unknown'}"
   oncontextmenu={handleContextMenu}
@@ -165,100 +195,60 @@
   ontouchmove={handleTouchMove}
   ontouchend={handleTouchEnd}
 >
-  <!-- Swipe Reply Indicator (revealed behind the bubble) -->
-  {#if isSwiping && swipeOffset() > 20}
+  <!-- Swipe Reply Indicator -->
+  {#if Math.abs(displayOffset) > 15}
     <div
-      class="absolute {isOwn ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full animate-scale-in"
-      style="
-        opacity: {swipeOpacity};
-        background: var(--color-primary);
-        color: var(--color-primary-foreground);
-        z-index: 5;
-        {isOwn ? 'right: 12px;' : 'left: 12px;'}
-      "
+      class="swipe-indicator"
+      style="opacity: {replyIndicatorOpacity}; {isOwn ? 'right: 0px;' : 'left: 0px;'}"
     >
-      <ReplyIcon size={16} />
-      <span class="text-xs font-medium">Reply</span>
+      <ReplyIcon size={15} />
     </div>
   {/if}
 
-  <!-- Avatar for received messages -->
+  <!-- Avatar -->
   {#if !isOwn && showAvatar}
-    <div class="mr-2 self-end">
+    <div class="mr-2 self-end" style="margin-bottom: 18px;">
       <Avatar username={senderName || '?'} size="sm" />
     </div>
   {/if}
 
-  <div class="flex flex-col {isOwn ? 'items-end' : 'items-start'} max-w-[80%] relative">
+  <div class="msg-wrapper" style="align-items: {isOwn ? 'flex-end' : 'flex-start'};">
     <!-- Sender Name -->
     {#if !isOwn && senderName && showAvatar}
-      <span class="text-xs mb-1 ml-1 font-medium" style="color: var(--color-primary);">
-        {senderName}
-      </span>
-    {/if}
-
-    <!-- Reply Preview Bar (inline in bubble) -->
-    {#if msg.rid && replyPreviewMsg}
-      <div
-        class="mb-1 px-3 py-1.5 rounded-t-[var(--radius-lg)] text-xs max-w-full"
-        style="
-          background: {isOwn ? 'rgba(0,0,0,0.12)' : 'var(--bg-elevated)'};
-          border-left: 2.5px solid var(--color-primary);
-          color: {isOwn ? 'rgba(255,255,255,0.85)' : 'var(--text-secondary)'};
-        "
-      >
-        <p class="font-semibold text-[11px] mb-0.5" style="color: {isOwn ? 'var(--color-primary-foreground)' : 'var(--color-primary)'};">
-          {isOwn ? 'You' : senderName}
-        </p>
-        <p class="truncate opacity-80">
-          {replyPreviewMsg.t === 'image' ? '📷 Photo' : replyPreviewMsg.c.slice(0, 60)}
-        </p>
-      </div>
-    {:else if msg.rid}
-      <div
-        class="mb-1 px-3 py-1.5 rounded-t-[var(--radius-lg)] text-xs max-w-full truncate"
-        style="
-          background: {isOwn ? 'rgba(0,0,0,0.12)' : 'var(--bg-elevated)'};
-          border-left: 2.5px solid var(--color-primary);
-          color: {isOwn ? 'rgba(255,255,255,0.8)' : 'var(--text-secondary)'};
-        "
-      >
-        <span class="opacity-70">↩ Reply</span>
-      </div>
+      <span class="msg-sender">{senderName}</span>
     {/if}
 
     <!-- Bubble -->
     <div
-      class="px-3.5 py-2.5 relative {isPinned ? 'ring-1' : ''}"
+      class="msg-bubble {isOwn ? 'bbl-sent' : 'bbl-recv'}"
+      style="border-radius: {bubbleRadius}; {isPinned ? 'box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary) 30%, transparent);' : ''}"
       onclick={handleDoubleTap}
       role="button"
       tabindex="0"
       onkeydown={(e) => { if (e.key === 'Enter') handleDoubleTap(); }}
-      style="
-        background: {isOwn ? 'var(--color-sent)' : 'var(--color-received)'};
-        color: {isOwn ? 'var(--color-sent-foreground)' : 'var(--color-received-foreground)'};
-        border-radius: {isGrouped
-          ? (isOwn ? 'var(--radius-sm) var(--radius-sm) 4px var(--radius-sm)' : 'var(--radius-sm) var(--radius-sm) var(--radius-sm) 4px')
-          : (isOwn ? 'var(--radius-lg) var(--radius-lg) 4px var(--radius-lg)' : 'var(--radius-lg) var(--radius-lg) var(--radius-lg) 4px')};
-        {isPinned ? 'ring-color: var(--color-primary); ring-opacity: 0.3;' : ''}
-      "
     >
-      {#if msg.t === 'text'}
-        <p class="text-[15px] break-words whitespace-pre-wrap leading-relaxed">{msg.c}</p>
+      <!-- Reply Preview -->
+      {#if msg.rid}
+        <div class="rply-bar" style="background: {isOwn ? 'rgba(0,0,0,0.1)' : 'var(--bg-elevated)'};">
+          <div class="rply-accent"></div>
+          <div class="rply-body">
+            {#if replyPreviewMsg}
+              <p class="rply-who" style="color: {isOwn ? 'var(--color-primary-foreground)' : 'var(--color-primary)'};">{isOwn ? 'You' : senderName}</p>
+              <p class="rply-text">{replyPreviewMsg.t === 'image' ? '📷 Photo' : replyPreviewMsg.c.slice(0, 60)}</p>
+            {:else}
+              <p class="rply-text" style="opacity: 0.7;">↩ Reply</p>
+            {/if}
+          </div>
+        </div>
+      {/if}
 
-        <!-- Link preview card -->
+      <!-- Content -->
+      {#if msg.t === 'text'}
+        <p class="bbl-text">{msg.c}</p>
         {#if urlMatch()}
-          <a
-            href={urlMatch()!}
-            target="_blank"
-            rel="noopener noreferrer"
-            class="block mt-2 p-2.5 rounded-[var(--radius-sm)] text-xs transition-all duration-150 active:scale-[0.98]"
-            style="background: {isOwn ? 'rgba(0,0,0,0.1)' : 'var(--input-bg)'}; color: {isOwn ? 'rgba(255,255,255,0.9)' : 'var(--color-primary)'};"
-          >
-            <p class="truncate font-medium" style="color: {isOwn ? 'var(--color-primary-foreground)' : 'var(--text-primary)'};">
-              {urlMatch()?.replace(/^https?:\/\//, '').replace(/\/$/, '').slice(0, 40)}
-            </p>
-            <p class="mt-0.5 opacity-70 truncate">{urlMatch()}</p>
+          <a href={urlMatch()!} target="_blank" rel="noopener noreferrer" class="link-card" style="background: {isOwn ? 'rgba(0,0,0,0.08)' : 'var(--input-bg)'};">
+            <p class="link-domain" style="color: var(--text-primary);">{urlMatch()?.replace(/^https?:\/\//, '').replace(/\/$/, '').slice(0, 40)}</p>
+            <p class="link-url">{urlMatch()}</p>
           </a>
         {/if}
       {:else if msg.t === 'voice' && msg.mu}
@@ -268,65 +258,226 @@
         <img
           src={msg.mu}
           alt={msg.c || 'Shared image'}
-          class="rounded-[var(--radius-sm)] max-w-full cursor-pointer transition-all duration-200 active:scale-[0.98]"
+          class="bbl-img"
           loading="lazy"
-          style="max-height: 240px; object-fit: cover;"
-          onclick={() => onImageTap?.(msg.mu!, msg.c || undefined)}
-          onkeydown={(e) => { if (e.key === 'Enter') onImageTap?.(msg.mu!, msg.c || undefined); }}
-          tabindex="0"
-          role="button"
+          onclick={(e) => { e.stopPropagation(); onImageTap?.(msg.mu!, msg.c || undefined); }}
         />
         {#if msg.c}
-          <p class="text-[15px] break-words whitespace-pre-wrap mt-1.5">{msg.c}</p>
+          <p class="bbl-text" style="margin-top: 6px;">{msg.c}</p>
         {/if}
       {:else if msg.t === 'system'}
-        <p class="text-sm italic opacity-70 text-center">{msg.c}</p>
+        <p class="bbl-sys">{msg.c}</p>
       {/if}
     </div>
 
-    <!-- Timestamp, Status, & Badges -->
-    <div class="flex items-center gap-1.5 mt-0.5 px-1">
+    <!-- Meta -->
+    <div class="msg-meta">
       {#if isPinned}
-        <span class="text-[10px] font-medium" style="color: var(--color-primary);">📌 Pinned</span>
+        <span class="m-badge" style="color: var(--color-primary);">📌 Pinned</span>
       {/if}
       {#if isStarred}
-        <span class="text-[10px]">⭐</span>
+        <span class="m-badge">⭐</span>
       {/if}
       {#if isOwn}
         <DeliveryStatus status={deliveryStatus} />
       {/if}
       {#if msg.edited}
-        <span class="text-[10px] italic" style="color: var(--text-tertiary);">edited</span>
+        <span class="m-edited">edited</span>
       {/if}
-      <span class="text-[11px]" style="color: var(--text-tertiary);">
-        {timeStr()}
-      </span>
-    </div>
-
-    <!-- Quick React Button -->
-    <div class="flex justify-end mt-0.5 mr-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150" style="min-height: 24px;">
-      <button
-        class="min-w-[28px] min-h-[28px] flex items-center justify-center rounded-full"
-        style="color: var(--text-tertiary);"
-        onclick={() => (showReactions = !showReactions)}
-        aria-label="Quick react"
-      >
-        <SmilePlus size={14} />
-      </button>
-      {#if showReactions}
-        <div class="flex items-center gap-0.5 ml-1 animate-scale-in">
-          {#each ['❤️', '👍', '😂'] as emoji}
-            <button
-              class="min-w-[32px] min-h-[32px] flex items-center justify-center rounded-full text-base transition-all duration-150 hover:scale-125 active:scale-110"
-              style="background: var(--glass-bg); backdrop-filter: var(--glass-blur); border: 1px solid var(--border-subtle);"
-              onclick={(e) => { e.stopPropagation(); handleReaction(emoji); }}
-              aria-label="React with {emoji}"
-            >
-              {emoji}
-            </button>
-          {/each}
-        </div>
-      {/if}
+      <span class="m-time">{timeStr()}</span>
     </div>
   </div>
 </div>
+
+<style>
+  .msg-row {
+    display: flex;
+    position: relative;
+    -webkit-user-select: none;
+    user-select: none;
+    will-change: transform;
+  }
+
+  .msg-wrapper {
+    display: flex;
+    flex-direction: column;
+    max-width: 82%;
+    min-width: 80px;
+    position: relative;
+  }
+
+  .msg-sender {
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    margin-left: 2px;
+    color: var(--color-primary);
+  }
+
+  /* === BUBBLE MATERIALS === */
+  .msg-bubble {
+    padding: 10px 14px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .bbl-sent {
+    background: var(--color-sent);
+    color: var(--color-sent-foreground);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 2px 8px rgba(5,150,105,0.08);
+  }
+  .bbl-sent::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 45%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.1) 0%, transparent 100%);
+    border-radius: inherit;
+    pointer-events: none;
+  }
+
+  .bbl-recv {
+    background: var(--color-received);
+    color: var(--color-received-foreground);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 1px 4px rgba(0,0,0,0.03);
+    border: 1px solid var(--border-subtle);
+  }
+
+  /* === CONTENT === */
+  .bbl-text {
+    font-size: 15px;
+    line-height: 1.45;
+    word-break: break-word;
+    white-space: pre-wrap;
+    margin: 0;
+  }
+
+  .bbl-img {
+    display: block;
+    width: 100%;
+    max-height: 280px;
+    object-fit: cover;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: transform 200ms ease;
+  }
+  .bbl-img:active { transform: scale(0.97); }
+
+  .bbl-sys {
+    font-size: 13px;
+    font-style: italic;
+    opacity: 0.7;
+    text-align: center;
+    margin: 0;
+  }
+
+  /* === REPLY PREVIEW === */
+  .rply-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .rply-accent {
+    width: 2.5px;
+    border-radius: 2px;
+    background: var(--color-primary);
+    flex-shrink: 0;
+  }
+
+  .rply-body { min-width: 0; flex: 1; }
+
+  .rply-who {
+    font-size: 11px;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+
+  .rply-text {
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 0.75;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+
+  /* === LINK CARD === */
+  .link-card {
+    display: block;
+    margin-top: 8px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    text-decoration: none;
+    transition: transform 150ms ease;
+  }
+  .link-card:active { transform: scale(0.98); }
+
+  .link-domain {
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin: 0;
+  }
+
+  .link-url {
+    font-size: 11px;
+    margin-top: 2px;
+    opacity: 0.6;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--color-primary);
+  }
+
+  /* === META === */
+  .msg-meta {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 3px;
+    padding: 0 4px;
+    min-height: 16px;
+  }
+
+  .m-time {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    line-height: 1;
+  }
+
+  .m-edited {
+    font-size: 10px;
+    font-style: italic;
+    color: var(--text-tertiary);
+  }
+
+  .m-badge { font-size: 10px; line-height: 1; }
+
+  /* === SWIPE INDICATOR === */
+  .swipe-indicator {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 6px 12px;
+    border-radius: 9999px;
+    background: var(--color-primary);
+    color: var(--color-primary-foreground);
+    font-size: 12px;
+    font-weight: 500;
+    pointer-events: none;
+    z-index: 5;
+    transition: opacity 150ms ease;
+    box-shadow: 0 4px 16px rgba(5, 150, 105, 0.3);
+  }
+</style>
