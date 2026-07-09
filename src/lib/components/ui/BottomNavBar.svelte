@@ -13,7 +13,7 @@
   }
 </script>
 
-<!-- svelte-ignore a11y_no_noninteractive_element_interactive_role -->
+<!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
 <nav
   class="nav-bar glass-header safe-bottom"
   role="tablist"
@@ -87,11 +87,6 @@
     transform: scale(0.93);
   }
 
-  .nav-pill-icon {
-    flex-shrink: 0;
-    transition: transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1);
-  }
-
   .nav-pill-label {
     white-space: nowrap;
     line-height: 1;
@@ -103,7 +98,4 @@
     box-shadow: 0 2px 12px rgba(5, 150, 105, 0.35), 0 0 0 1px rgba(5, 150, 105, 0.1);
   }
 
-  .nav-pill-active .nav-pill-icon {
-    transform: scale(1.1);
-  }
 </style>
