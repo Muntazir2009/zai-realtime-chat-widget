@@ -695,3 +695,34 @@ Stage Summary:
 
 ### Final Verdict
 All finalized PRD requirements have been implemented. The codebase is clean, builds with zero errors, and has been audited for performance, memory, dead code, and quality.
+
+---
+Task ID: 21 (Cloudflare Pages Migration)
+Agent: Main
+Task: Refactor project for Cloudflare Pages + Pages Functions (Workers) deployment
+
+Work Log:
+- Replaced @sveltejs/adapter-auto with @sveltejs/adapter-cloudflare
+- Created wrangler.toml with public vars and secret placeholders
+- Created src/lib/server/password.ts — PBKDF2-SHA256 via Web Crypto API (replaces Bun.password)
+- Created src/lib/server/firebase-rest.ts — Full Firebase Admin replacement using REST API:
+  - Google OAuth2 JWT signing via Web Crypto (RSASSA-PKCS1-v1_5)
+  - RTDB operations: rtdbGet, rtdbPush, rtdbSet, rtdbUpdate, rtdbRemove
+  - Auth: createCustomToken via Identity Toolkit REST API
+  - Access token caching with 60s pre-expiry refresh
+- Deleted src/lib/server/firebase-admin.ts (firebase-admin SDK removed entirely)
+- Rewrote src/lib/server/r2.ts to accept Env parameter instead of process.env
+- Refactored all 8 +server.ts routes:
+  - /api/auth/register, /api/auth/login (password hashing, custom token)
+  - /api/chats, /api/chats/[id]/messages, /api/chats/[id]/messages/[messageId]
+  - /api/chats/[id]/messages/[messageId]/edit, /api/chats/[id]/pin, /api/chats/[id]/star
+  - /api/upload/presign (was missing — client referenced it but route didn't exist)
+- Updated src/app.d.ts with Cloudflare Platform env type declarations
+- Removed firebase-admin and @sveltejs/adapter-auto from dependencies
+- Build verified: _worker.js contains zero Node.js runtime dependencies
+- Pushed to GitHub: Muntazir2009/zai-realtime-chat-widget
+
+Stage Summary:
+- Project is fully Cloudflare Workers-compatible
+- No remaining fs, path, process.env, Bun.password, or firebase-admin imports in server code
+- Deployment requires manual Cloudflare setup (API token not in this environment)
