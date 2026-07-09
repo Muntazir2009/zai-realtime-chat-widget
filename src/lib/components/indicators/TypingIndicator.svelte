@@ -30,36 +30,44 @@
     align-items: center;
     gap: 8px;
     padding: 2px 14px 4px;
-    animation: typingFadeIn 200ms ease both;
+    animation: typingFadeIn 250ms ease both;
   }
 
   .typing-bubble {
     display: flex;
     align-items: center;
-    gap: 3.5px;
-    padding: 5px 9px;
-    border-radius: 14px;
+    justify-content: center;
+    gap: 4px;
+    padding: 10px 14px;
+    border-radius: 18px 18px 18px 4px;
     background: var(--color-received);
-    border: 0.5px solid var(--border-subtle);
     box-shadow:
-      0 1px 2px rgba(0,0,0,0.03),
-      inset 0 1px 0 rgba(255,255,255,0.6);
+      0 2px 12px rgba(0, 0, 0, 0.2),
+      0 0 0 0.5px rgba(255, 255, 255, 0.04);
   }
 
   .dot {
-    display: inline-block;
-    width: 5.5px;
-    height: 5.5px;
+    display: block;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
     background: var(--text-tertiary);
-    animation: typingBounce 1.4s ease-in-out infinite;
+    opacity: 0.35;
+    animation: typingWave 1.4s ease-in-out infinite;
   }
-  .dot:nth-child(2) { animation-delay: 0.15s; }
-  .dot:nth-child(3) { animation-delay: 0.3s; }
+  .dot:nth-child(1) { animation-delay: 0s; }
+  .dot:nth-child(2) { animation-delay: 0.2s; }
+  .dot:nth-child(3) { animation-delay: 0.4s; }
 
-  @keyframes typingBounce {
-    0%, 60%, 100% { transform: translateY(0); opacity: 0.3; }
-    30% { transform: translateY(-4px); opacity: 1; }
+  @keyframes typingWave {
+    0%, 60%, 100% {
+      transform: translateY(0) scale(1);
+      opacity: 0.35;
+    }
+    30% {
+      transform: translateY(-5px) scale(1.1);
+      opacity: 1;
+    }
   }
 
   .typing-label {
@@ -70,7 +78,7 @@
   }
 
   @keyframes typingFadeIn {
-    from { opacity: 0; transform: translateY(4px); }
-    to { opacity: 1; transform: translateY(0); }
+    from { opacity: 0; transform: translateY(6px) scale(0.96); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
   }
 </style>
