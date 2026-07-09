@@ -14,6 +14,8 @@
   let ChatList: any = $state(null);
   let Conversation: any = $state(null);
 
+  let _prevView: string | null = null;
+
   onMount(async () => {
     if (!browser) return;
 
@@ -45,22 +47,10 @@
     Conversation = convComp.default;
 
     mounted = true;
-  });
 
-  $effect(() => {
-    if (!mounted || !authStore || !uiStore) return;
-
+    // Redirect to chatList if already authenticated
     if (authStore.isAuthenticated && uiStore.view === 'auth') {
       uiStore.setView('chatList');
-    }
-
-    if (uiStore.view === 'chatList' && authStore.user) {
-      chatStore.loadInbox(authStore.user.id);
-      presenceManager.goOnline();
-    }
-
-    if (!authStore.isAuthenticated) {
-      chatStore.detachAllListeners();
     }
   });
 
@@ -69,6 +59,22 @@
     !authStore?.isAuthenticated ? 'auth' :
     uiStore?.view ?? 'auth'
   );
+
+  // Watch for view changes to trigger side effects (load inbox, go online)
+  $effect(() => {
+    const v = view;
+    if (v === 'loading') return;
+    if (v === _prevView) return;
+    _prevView = v;
+
+    if (v === 'chatList' && authStore?.user) {
+      chatStore?.loadInbox(authStore.user.id);
+      presenceManager?.goOnline();
+    }
+    if (v === 'auth') {
+      chatStore?.detachAllListeners();
+    }
+  });
 </script>
 
 {#if view === 'loading'}
