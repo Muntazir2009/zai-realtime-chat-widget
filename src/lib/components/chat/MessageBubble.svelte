@@ -266,11 +266,6 @@
     <div class="msg-avatar-spacer"></div>
   {/if}
 
-  <!-- Sender Name (above bubble, aligned with avatar) -->
-  {#if !isOwn && senderName && showAvatar}
-    <span class="msg-sender">{senderName}</span>
-  {/if}
-
   <!-- Bubble -->
   <div
     class="msg-bubble {isOwn ? 'bbl-sent' : 'bbl-recv'} {isGrouped ? 'bbl-grouped' : ''} {isPinned ? 'bbl-pinned' : ''} {isEmojiOnly ? 'bbl-emoji' : ''}"
@@ -436,29 +431,16 @@
     flex-shrink: 0;
   }
 
-  /* === SENDER NAME === */
-  .msg-sender {
-    font-size: 12px;
-    font-weight: 600;
-    margin-bottom: 2px;
-    margin-left: 2px;
-    color: var(--color-primary);
-    letter-spacing: 0.01em;
-    line-height: 1;
-    align-self: flex-end;
-    padding-bottom: 2px;
-  }
-
-  /* === BUBBLE — Discord/Telegram Premium Design === */
+  /* === BUBBLE — Premium Messaging Design === */
   .msg-bubble {
-    padding: 12px 16px 8px 16px;
+    padding: 10px 14px 6px 14px;
     position: relative;
     overflow: hidden;
     transition: transform 120ms cubic-bezier(0.34, 1.56, 0.64, 1),
-                box-shadow 200ms ease;
-    max-width: min(85%, 340px);
+                box-shadow 200ms ease,
+                opacity 150ms ease;
+    max-width: min(82%, 360px);
     min-width: fit-content;
-    /* Subtle spring entrance animation (uses bubbleSpring keyframe from app.css) */
     animation: bubbleSpring 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
   }
 
@@ -466,51 +448,76 @@
     transform: scale(0.985);
   }
 
-  /* Sent bubble — crimson gradient with white text */
+  /* Sent bubble — clean primary with subtle gradient shimmer */
   .bbl-sent {
-    background: linear-gradient(135deg, var(--color-sent) 0%, #991b1b 100%);
-    color: #ffffff;
-    border-radius: 18px 18px 4px 18px;
+    background: var(--color-sent);
+    color: var(--color-sent-foreground, #ffffff);
+    border-radius: 20px 20px 6px 20px;
     box-shadow:
-      0 2px 12px rgba(153, 27, 27, 0.25),
-      0 0 0 0.5px rgba(153, 27, 27, 0.1);
+      0 1px 3px rgba(0, 0, 0, 0.08),
+      0 4px 16px color-mix(in srgb, var(--color-sent) 25%, transparent);
   }
 
   .bbl-sent.bbl-grouped {
-    border-radius: 12px 12px 2px 12px;
+    border-radius: 14px 14px 4px 14px;
     box-shadow:
-      0 1px 8px rgba(153, 27, 27, 0.18),
-      0 0 0 0.5px rgba(153, 27, 27, 0.08);
+      0 1px 2px rgba(0, 0, 0, 0.06),
+      0 2px 8px color-mix(in srgb, var(--color-sent) 18%, transparent);
   }
 
-  /* Received bubble — theme surface with off-white text */
+  /* Subtle light shimmer on sent bubble */
+  .bbl-sent::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 50%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.08) 0%, transparent 100%);
+    pointer-events: none;
+    border-radius: inherit;
+  }
+
+  /* Received bubble — elevated surface */
   .bbl-recv {
     background: var(--color-received);
-    color: rgba(255, 255, 255, 0.88);
-    border-radius: 18px 18px 18px 4px;
+    color: var(--color-received-foreground, #1e293b);
+    border-radius: 20px 20px 20px 6px;
     box-shadow:
-      0 2px 12px rgba(0, 0, 0, 0.2),
-      0 0 0 0.5px rgba(255, 255, 255, 0.04);
+      0 1px 3px rgba(0, 0, 0, 0.06),
+      0 4px 16px rgba(0, 0, 0, 0.08);
   }
 
   .bbl-recv.bbl-grouped {
-    border-radius: 12px 12px 12px 2px;
+    border-radius: 14px 14px 14px 4px;
     box-shadow:
-      0 1px 8px rgba(0, 0, 0, 0.15),
-      0 0 0 0.5px rgba(255, 255, 255, 0.03);
+      0 1px 2px rgba(0, 0, 0, 0.04),
+      0 2px 8px rgba(0, 0, 0, 0.06);
+  }
+
+  /* Subtle top highlight on received bubble */
+  .bbl-recv::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
+    pointer-events: none;
   }
 
   /* Pinned ring highlight */
   .bbl-pinned {
     box-shadow:
-      0 0 0 1.5px color-mix(in srgb, var(--color-primary) 40%, transparent),
-      0 2px 12px rgba(153, 27, 27, 0.2) !important;
+      0 0 0 1.5px color-mix(in srgb, var(--color-primary) 50%, transparent),
+      0 2px 12px color-mix(in srgb, var(--color-primary) 15%, transparent) !important;
   }
 
   .bbl-sent.bbl-pinned {
     box-shadow:
-      0 0 0 1.5px color-mix(in srgb, var(--color-primary) 40%, transparent),
-      0 2px 12px rgba(153, 27, 27, 0.25) !important;
+      0 0 0 1.5px color-mix(in srgb, var(--color-primary) 50%, transparent),
+      0 4px 16px color-mix(in srgb, var(--color-sent) 30%, transparent) !important;
   }
 
   /* === EMOJI-ONLY BUBBLE === */
@@ -590,11 +597,11 @@
   }
 
   .bbl-sent .rply-bar {
-    background: rgba(0, 0, 0, 0.15);
+    background: rgba(255, 255, 255, 0.12);
   }
 
   .bbl-recv .rply-bar {
-    background: rgba(255, 255, 255, 0.04);
+    background: rgba(0, 0, 0, 0.04);
   }
 
   .rply-accent {
@@ -641,8 +648,8 @@
     position: relative;
     z-index: 1;
   }
-  .bbl-sent .link-card { background: rgba(0, 0, 0, 0.12); }
-  .bbl-recv .link-card { background: rgba(255, 255, 255, 0.05); }
+  .bbl-sent .link-card { background: rgba(255, 255, 255, 0.1); }
+  .bbl-recv .link-card { background: rgba(0, 0, 0, 0.04); }
   .link-card:active { transform: scale(0.98); }
 
   .link-icon-wrap {
@@ -653,8 +660,11 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    background: rgba(0, 0, 0, 0.08);
+    background: rgba(0, 0, 0, 0.06);
     color: var(--color-primary);
+  }
+  .bbl-sent .link-icon-wrap {
+    background: rgba(255, 255, 255, 0.15);
   }
 
   .link-body { min-width: 0; flex: 1; }
@@ -683,9 +693,12 @@
 
   .bbl-time {
     font-size: 10px;
-    opacity: 0.45;
+    opacity: 0.5;
     line-height: 1;
     font-variant-numeric: tabular-nums;
+  }
+  .bbl-sent .bbl-time {
+    color: rgba(255, 255, 255, 0.75);
   }
 
   .bbl-edited {
@@ -715,7 +728,7 @@
     pointer-events: none;
     z-index: 5;
     transition: opacity 120ms ease;
-    box-shadow: 0 4px 16px rgba(153, 27, 27, 0.35);
+    box-shadow: 0 4px 16px color-mix(in srgb, var(--color-primary) 35%, transparent);
   }
 
   /* === REACTIONS BAR === */

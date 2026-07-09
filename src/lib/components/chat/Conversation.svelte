@@ -491,7 +491,7 @@
     background: var(--glass-bg);
     backdrop-filter: blur(24px) saturate(200%);
     -webkit-backdrop-filter: blur(24px) saturate(200%);
-    box-shadow: 0 0.5px 0 var(--border-subtle), 0 4px 24px rgba(0,0,0,0.03), 0 1px 0 rgba(220,38,38,0.06);
+    box-shadow: 0 0.5px 0 var(--border-subtle), 0 4px 24px rgba(0,0,0,0.03), 0 1px 0 color-mix(in srgb, var(--color-primary) 6%, transparent);
     z-index: 50;
     position: relative;
     flex-shrink: 0;
@@ -723,7 +723,7 @@
     backdrop-filter: blur(16px) saturate(180%);
     -webkit-backdrop-filter: blur(16px) saturate(180%);
     border: var(--glass-border);
-    box-shadow: 0 4px 20px rgba(0,0,0,0.1), 0 2px 8px rgba(220,38,38,0.15);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1), 0 2px 8px color-mix(in srgb, var(--color-primary) 15%, transparent);
     color: var(--color-primary);
     min-width: 40px;
     min-height: 40px;
@@ -758,7 +758,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 2px 6px rgba(220, 38, 38, 0.4);
+    box-shadow: 0 2px 6px color-mix(in srgb, var(--color-primary) 40%, transparent);
     animation: badgePulse 2s ease-in-out infinite;
     line-height: 1;
   }
@@ -806,7 +806,7 @@
     font-weight: 700;
     font-size: 24px;
     color: white;
-    background: linear-gradient(135deg, #ef4444, #dc2626);
+    background: linear-gradient(135deg, var(--color-primary), color-mix(in srgb, var(--color-primary) 80%, #000));
   }
 
   .empty-title {

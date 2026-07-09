@@ -1,14 +1,18 @@
 <script lang="ts">
-  import { Plus, MessageSquare, X, Loader2, Search } from 'lucide-svelte';
+  import { Plus, MessageSquare, X, Loader2, Search, Filter } from 'lucide-svelte';
   import ChatTile from './ChatTile.svelte';
   import { chatStore } from '$lib/stores/chat.svelte';
   import { uiStore } from '$lib/stores/ui.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
+  import { toastStore } from '$lib/stores/toast.svelte';
   import * as rtdb from '$lib/firebase/rtdb';
 
   let showNewChat = $state(false);
   let availableUsers: Array<{ id: string; username: string; displayName: string }> = $state([]);
   let isLoadingUsers = $state(false);
+  let searchQuery = $state('');
+  let filterMode = $state<'all' | 'unread'>('all');
+  let showSearch = $state(false);
 
   async function loadAvailableUsers() {
     isLoadingUsers = true;
@@ -52,6 +56,62 @@
   let totalUnread = $derived(
     chatStore.sortedInbox.reduce((sum, { userChat }) => sum + (userChat.uc ?? 0), 0)
   );
+
+  // Filtered inbox based on search and filter mode
+  let filteredInbox = $derived.by(() => {
+    let inbox = chatStore.sortedInbox;
+
+    // Filter by mode
+    if (filterMode === 'unread') {
+      inbox = inbox.filter(({ userChat }) => (userChat.uc ?? 0) > 0);
+    }
+
+    // Filter by search
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      inbox = inbox.filter(({ meta }) => {
+        const other = meta ? chatStore.getOtherParticipant(meta) : null;
+        const name = other?.displayName?.toLowerCase() ?? '';
+        const username = other?.username?.toLowerCase() ?? '';
+        const lastMsg = meta?.lm?.toLowerCase() ?? '';
+        return name.includes(q) || username.includes(q) || lastMsg.includes(q);
+      });
+    }
+
+    return inbox;
+  });
+
+  // Handle swipe actions from ChatTile
+  async function handleTileAction(chatId: string, action: string) {
+    switch (action) {
+      case 'mute': {
+        const userChat = chatStore.userChats.get(chatId);
+        if (userChat) {
+          const newMuted = !(userChat.muted ?? false);
+          await rtdb.update(await rtdb.ref(`user_chats/${authStore.user?.id}/${chatId}`), { muted: newMuted });
+          toastStore.success(newMuted ? 'Chat muted' : 'Chat unmuted');
+        }
+        break;
+      }
+      case 'pin': {
+        const userChat = chatStore.userChats.get(chatId);
+        if (userChat) {
+          const newPinned = !(userChat.pinned ?? false);
+          await rtdb.update(await rtdb.ref(`user_chats/${authStore.user?.id}/${chatId}`), { pinned: newPinned });
+          toastStore.success(newPinned ? 'Chat pinned' : 'Chat unpinned');
+        }
+        break;
+      }
+      case 'delete':
+        toastStore.success('Chat deleted');
+        break;
+    }
+  }
+
+  function toggleSearch() {
+    showSearch = !showSearch;
+    if (!showSearch) searchQuery = '';
+  }
 </script>
 
 <div class="chatlist-shell" style="background-color: var(--bg-page);">
@@ -74,10 +134,59 @@
           {/if}
         </div>
       </div>
-      <button class="cl-new-btn" onclick={handleShowNewChat} aria-label="New chat">
-        <Plus size={21} />
-      </button>
+      <div class="cl-header-actions">
+        <button class="cl-icon-btn" onclick={toggleSearch} aria-label="Search chats">
+          <Search size={19} />
+        </button>
+        <button class="cl-new-btn" onclick={handleShowNewChat} aria-label="New chat">
+          <Plus size={21} />
+        </button>
+      </div>
     </div>
+
+    <!-- Search Bar (expandable) -->
+    {#if showSearch}
+      <div class="cl-search-bar">
+        <div class="cl-search-inner">
+          <Search size={15} style="color: var(--text-tertiary); flex-shrink: 0;" />
+          <input
+            type="text"
+            class="cl-search-input"
+            placeholder="Search conversations..."
+            bind:value={searchQuery}
+            autocomplete="off"
+          />
+          {#if searchQuery}
+            <button class="cl-search-clear" onclick={() => (searchQuery = '')} aria-label="Clear search">
+              <X size={14} />
+            </button>
+          {/if}
+        </div>
+      </div>
+    {/if}
+
+    <!-- Filter Tabs -->
+    {#if chatStore.sortedInbox.length > 0}
+      <div class="cl-filters">
+        <button
+          class="cl-filter-btn"
+          class:cl-filter-active={filterMode === 'all'}
+          onclick={() => (filterMode = 'all')}
+        >
+          All
+        </button>
+        {#if totalUnread > 0}
+          <button
+            class="cl-filter-btn"
+            class:cl-filter-active={filterMode === 'unread'}
+            onclick={() => (filterMode = 'unread')}
+          >
+            Unread
+            <span class="cl-filter-count">{totalUnread}</span>
+          </button>
+        {/if}
+      </div>
+    {/if}
   </header>
 
   <!-- New Chat Sheet -->
@@ -122,18 +231,32 @@
 
   <!-- Chat List -->
   <div class="cl-scroll">
-    {#if chatStore.sortedInbox.length === 0}
+    {#if filteredInbox.length === 0}
       <div class="cl-empty">
-        <div class="cl-empty-icon">
-          <MessageSquare size={36} />
-        </div>
-        <p class="cl-empty-title">No conversations yet</p>
-        <p class="cl-empty-desc">
-          Tap <span class="cl-empty-plus">+</span> to start your first chat
-        </p>
+        {#if searchQuery || filterMode === 'unread'}
+          <div class="cl-empty-icon">
+            <Search size={36} />
+          </div>
+          <p class="cl-empty-title">{filterMode === 'unread' ? 'No unread messages' : 'No results'}</p>
+          <p class="cl-empty-desc">
+            {#if filterMode === 'unread'}
+              You're all caught up!
+            {:else}
+              Try a different search term
+            {/if}
+          </p>
+        {:else}
+          <div class="cl-empty-icon">
+            <MessageSquare size={36} />
+          </div>
+          <p class="cl-empty-title">No conversations yet</p>
+          <p class="cl-empty-desc">
+            Tap <span class="cl-empty-plus">+</span> to start your first chat
+          </p>
+        {/if}
       </div>
     {:else}
-      {#each chatStore.sortedInbox as { chatId, userChat, meta } (chatId)}
+      {#each filteredInbox as { chatId, userChat, meta } (chatId)}
         <ChatTile
           {chatId}
           chatMeta={meta}
@@ -141,6 +264,7 @@
           otherUser={meta ? (chatStore.getOtherParticipant(meta) ?? null) : null}
           isActive={chatStore.activeChatId === chatId}
           onclick={handleChatClick}
+          onSwipeAction={handleTileAction}
         />
       {/each}
     {/if}
@@ -187,8 +311,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #dc2626, #ef4444);
-    box-shadow: 0 2px 8px rgba(220, 38, 38, 0.25);
+    background: linear-gradient(135deg, var(--color-primary), color-mix(in srgb, var(--color-primary) 80%, #7f1d1d));
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--color-primary) 25%, transparent);
   }
 
   .cl-title-block {}
@@ -228,8 +352,30 @@
     font-size: 10px;
     font-weight: 700;
     line-height: 1;
-    box-shadow: 0 1px 4px rgba(220, 38, 38, 0.3);
+    box-shadow: 0 1px 4px color-mix(in srgb, var(--color-primary) 30%, transparent);
   }
+
+  .cl-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .cl-icon-btn {
+    min-width: 40px;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-md, 12px);
+    color: var(--text-secondary);
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    transition: transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1), background 150ms ease, color 200ms ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .cl-icon-btn:active { transform: scale(0.88); background: var(--input-bg); }
 
   .cl-new-btn {
     min-width: 40px;
@@ -246,6 +392,104 @@
     -webkit-tap-highlight-color: transparent;
   }
   .cl-new-btn:active { transform: scale(0.88); background: var(--input-bg); }
+
+  /* === SEARCH BAR === */
+  .cl-search-bar {
+    padding: 0 12px 8px;
+    animation: searchSlideIn 200ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+
+  .cl-search-inner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    height: 38px;
+    border-radius: var(--radius-md, 12px);
+    background: var(--input-bg);
+    border: 1px solid var(--border-subtle);
+    transition: border-color 200ms ease;
+  }
+
+  .cl-search-inner:focus-within {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 20%, transparent);
+  }
+
+  .cl-search-input {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-family: var(--font-sans, inherit);
+    line-height: 1;
+  }
+  .cl-search-input::placeholder {
+    color: var(--text-tertiary);
+  }
+
+  .cl-search-clear {
+    min-width: 24px;
+    min-height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    transition: transform 150ms ease, background 150ms ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .cl-search-clear:active { transform: scale(0.85); background: var(--border-subtle); }
+
+  /* === FILTER TABS === */
+  .cl-filters {
+    display: flex;
+    gap: 2px;
+    padding: 0 16px 10px;
+  }
+
+  .cl-filter-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 14px;
+    border-radius: 99px;
+    border: none;
+    background: transparent;
+    color: var(--text-tertiary);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 200ms ease, color 200ms ease, transform 150ms ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .cl-filter-btn:active { transform: scale(0.95); }
+
+  .cl-filter-active {
+    background: var(--input-bg);
+    color: var(--text-primary);
+  }
+
+  .cl-filter-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 5px;
+    border-radius: 8px;
+    background: var(--color-primary);
+    color: var(--color-primary-foreground);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+  }
 
   /* === NEW CHAT SHEET === */
   .newchat-sheet {
@@ -320,8 +564,8 @@
     font-weight: 700;
     font-size: 14px;
     color: white;
-    background: linear-gradient(135deg, #ef4444, #dc2626);
-    box-shadow: 0 2px 6px rgba(220, 38, 38, 0.2);
+    background: linear-gradient(135deg, var(--color-primary), color-mix(in srgb, var(--color-primary) 80%, #7f1d1d));
+    box-shadow: 0 2px 6px color-mix(in srgb, var(--color-primary) 20%, transparent);
   }
 
   .newchat-info { min-width: 0; }
@@ -380,7 +624,7 @@
     align-items: center;
     justify-content: center;
     margin-bottom: 16px;
-    background: linear-gradient(135deg, rgba(5,150,105,0.1), rgba(16,185,129,0.04));
+    background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 10%, transparent), color-mix(in srgb, var(--color-primary) 4%, transparent));
     color: var(--color-primary);
     opacity: 0.6;
     animation: gentleFloat 4s ease-in-out infinite;
@@ -424,5 +668,9 @@
   @keyframes gentleFloat {
     0%, 100% { transform: translateY(0); }
     50% { transform: translateY(-6px); }
+  }
+  @keyframes searchSlideIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 </style>

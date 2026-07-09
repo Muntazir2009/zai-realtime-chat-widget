@@ -52,6 +52,8 @@ export interface UserChat {
   lrid: string | null;  // lastReadMessageId
   uc: number;           // unreadCount
   jt: number;           // joinedAt timestamp
+  muted?: boolean;
+  pinned?: boolean;
 }
 
 /* ---------- Presence ---------- */

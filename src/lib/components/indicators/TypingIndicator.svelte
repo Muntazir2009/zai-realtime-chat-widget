@@ -39,11 +39,11 @@
     justify-content: center;
     gap: 4px;
     padding: 10px 14px;
-    border-radius: 18px 18px 18px 4px;
+    border-radius: 20px 20px 20px 6px;
     background: var(--color-received);
     box-shadow:
-      0 2px 12px rgba(0, 0, 0, 0.2),
-      0 0 0 0.5px rgba(255, 255, 255, 0.04);
+      0 1px 3px rgba(0, 0, 0, 0.06),
+      0 4px 16px rgba(0, 0, 0, 0.08);
   }
 
   .dot {
