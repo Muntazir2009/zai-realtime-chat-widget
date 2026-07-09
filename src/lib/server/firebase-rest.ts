@@ -1,9 +1,17 @@
 // ============================================================
-// Firebase Admin replacement using REST API + Google OAuth2.
+// Firebase Admin replacement — pure HTTP + Web Crypto.
 // Works on Cloudflare Workers (no Node.js deps, no firebase-admin).
 //
-// Uses the service account private key to sign JWTs via Web Crypto,
-// then obtains Google OAuth2 access tokens for RTDB and Auth APIs.
+// Two distinct auth mechanisms:
+//
+// 1. CUSTOM TOKENS (auth): A JWT signed DIRECTLY with the service
+//    account private key.  No Google API call needed.  The client
+//    passes this token to signInWithCustomToken().
+//    Per https://cloud.google.com/identity-platform/docs/admin/create-custom-tokens
+//
+// 2. OAUTH2 ACCESS TOKENS (RTDB): Exchanged via the standard
+//    Google OAuth2 JWT-bearer grant flow.  Used to authenticate
+//    REST API calls to Firebase Realtime Database.
 // ============================================================
 
 // ---- Types ----
@@ -21,14 +29,13 @@ export interface EnvVars {
   PUBLIC_R2_PUBLIC_URL?: string;
 }
 
-// ---- Token Cache ----
+// ---- OAuth2 token cache (RTDB only) ----
 
-let cachedToken: { token: string; expiresAt: number } | null = null;
+let cachedAccessToken: { token: string; expiresAt: number } | null = null;
 
 // ---- PEM → DER conversion ----
 
 function pemToDer(pem: string): ArrayBuffer {
-  // Strip PEM headers, newlines, and whitespace
   const b64 = pem
     .replace(/-----BEGIN PRIVATE KEY-----/, '')
     .replace(/-----END PRIVATE KEY-----/, '')
@@ -59,9 +66,9 @@ function base64urlEncodeStr(str: string): string {
   return base64urlEncode(new TextEncoder().encode(str));
 }
 
-// ---- Sign JWT with RS256 via Web Crypto ----
+// ---- RSA signing via Web Crypto ----
 
-async function signJwt(payload: Record<string, unknown>, privateKeyPem: string): Promise<string> {
+async function signRsaJwt(payload: Record<string, unknown>, privateKeyPem: string): Promise<string> {
   const derKey = pemToDer(privateKeyPem);
 
   const key = await crypto.subtle.importKey(
@@ -85,19 +92,79 @@ async function signJwt(payload: Record<string, unknown>, privateKeyPem: string):
   return `${unsigned}.${base64urlEncode(signature)}`;
 }
 
-// ---- Google OAuth2 Access Token ----
+// ====================================================================
+// 1. CUSTOM TOKENS  (for Firebase Authentication)
+// ====================================================================
+//
+// Official approach from Google's Identity Platform docs:
+// https://cloud.google.com/identity-platform/docs/admin/create-custom-tokens
+//
+// A custom token IS a JWT.  It is signed directly by the service
+// account's private key.  No additional API calls are needed.
+//
+// Required JWT payload:
+//   iss  → service account email
+//   sub  → service account email
+//   aud  → "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit"
+//   iat  → now (seconds)
+//   exp  → now + 3600  (max 1 hour)
+//   uid  → the user's unique ID
+//   claims → optional custom claims object
+//
+// The client receives this JWT and calls signInWithCustomToken(token).
+
+const IDENTITY_TOOLKIT_AUDIENCE =
+  'https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit';
+
+/**
+ * Create a Firebase custom auth token.
+ * Equivalent to admin.auth().createCustomToken(uid, claims).
+ *
+ * This signs a JWT with the service account's private key per Google's
+ * documented third-party JWT library approach.  The resulting JWT IS
+ * the custom token — no additional Google API call is required.
+ */
+export async function createCustomToken(
+  env: EnvVars,
+  uid: string,
+  claims?: Record<string, unknown>,
+): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+
+  const payload: Record<string, unknown> = {
+    iss: env.FIREBASE_CLIENT_EMAIL,
+    sub: env.FIREBASE_CLIENT_EMAIL,
+    aud: IDENTITY_TOOLKIT_AUDIENCE,
+    iat: now,
+    exp: now + 3600, // Maximum: 1 hour
+    uid,
+    claims: claims ?? {},
+  };
+
+  return signRsaJwt(payload, env.FIREBASE_PRIVATE_KEY);
+}
+
+// ====================================================================
+// 2. OAUTH2 ACCESS TOKENS  (for Firebase Realtime Database REST API)
+// ====================================================================
+//
+// The RTDB REST API requires a Google OAuth2 Bearer token.  We obtain
+// one using the service-account JWT-bearer grant flow:
+//   1. Sign a JWT with scope + oauth2 token endpoint as audience
+//   2. POST to Google's token endpoint
+//   3. Receive access_token (cached for 1 hour minus 60s buffer)
 
 async function getAccessToken(env: EnvVars): Promise<string> {
   // Return cached token if still valid (with 60s buffer)
-  if (cachedToken && Date.now() < cachedToken.expiresAt - 60_000) {
-    return cachedToken.token;
+  if (cachedAccessToken && Date.now() < cachedAccessToken.expiresAt - 60_000) {
+    return cachedAccessToken.token;
   }
 
   const now = Math.floor(Date.now() / 1000);
-  const jwt = await signJwt(
+  const assertion = await signRsaJwt(
     {
       iss: env.FIREBASE_CLIENT_EMAIL,
-      scope: 'https://www.googleapis.com/auth/firebase.database https://www.googleapis.com/auth/identitytoolkit',
+      scope: 'https://www.googleapis.com/auth/firebase.database',
       aud: 'https://oauth2.googleapis.com/token',
       iat: now,
       exp: now + 3600,
@@ -109,7 +176,7 @@ async function getAccessToken(env: EnvVars): Promise<string> {
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`,
+    body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${assertion}`,
   });
 
   if (!res.ok) {
@@ -118,24 +185,24 @@ async function getAccessToken(env: EnvVars): Promise<string> {
   }
 
   const data = (await res.json()) as { access_token: string; expires_in: number };
-  cachedToken = {
+  cachedAccessToken = {
     token: data.access_token,
     expiresAt: Date.now() + data.expires_in * 1000,
   };
 
-  return cachedToken.token;
+  return cachedAccessToken.token;
 }
 
-// ---- Firebase RTDB REST API ----
+// ====================================================================
+// 3. FIREBASE RTDB REST API  (uses OAuth2 access token)
+// ====================================================================
 
 function rtdbUrl(path: string, env: EnvVars): string {
   const base = env.PUBLIC_FIREBASE_DATABASE_URL.replace(/\/$/, '');
   return `${base}/${path}.json`;
 }
 
-/**
- * GET a path from RTDB. Returns null if path doesn't exist.
- */
+/** GET a path from RTDB. Returns null if path doesn't exist. */
 export async function rtdbGet(env: EnvVars, path: string): Promise<any> {
   const token = await getAccessToken(env);
   const url = `${rtdbUrl(path, env)}?auth=${token}`;
@@ -144,9 +211,7 @@ export async function rtdbGet(env: EnvVars, path: string): Promise<any> {
   return res.json();
 }
 
-/**
- * POST (push) to an RTDB path. Returns the generated key.
- */
+/** POST (push) to an RTDB path. Returns the generated key. */
 export async function rtdbPush(env: EnvVars, path: string, data: unknown): Promise<string> {
   const token = await getAccessToken(env);
   const url = `${rtdbUrl(path, env)}?auth=${token}`;
@@ -160,9 +225,7 @@ export async function rtdbPush(env: EnvVars, path: string, data: unknown): Promi
   return result.name;
 }
 
-/**
- * PUT (set/overwrite) data at an RTDB path.
- */
+/** PUT (set/overwrite) data at an RTDB path. */
 export async function rtdbSet(env: EnvVars, path: string, data: unknown): Promise<void> {
   const token = await getAccessToken(env);
   const url = `${rtdbUrl(path, env)}?auth=${token}`;
@@ -176,8 +239,7 @@ export async function rtdbSet(env: EnvVars, path: string, data: unknown): Promis
 
 /**
  * PATCH (update/merge) data at an RTDB path.
- * The data object's keys are used as the child paths to update.
- * Example: rtdbUpdate(env, '/', { 'users/john/name': 'John', 'users/jane/age': 30 })
+ * Example: rtdbUpdate(env, '/', { 'users/john/name': 'John' })
  */
 export async function rtdbUpdate(env: EnvVars, path: string, data: Record<string, unknown>): Promise<void> {
   const token = await getAccessToken(env);
@@ -190,9 +252,7 @@ export async function rtdbUpdate(env: EnvVars, path: string, data: Record<string
   if (!res.ok) throw new Error(`RTDB PATCH ${path} failed: ${res.status}`);
 }
 
-/**
- * DELETE an RTDB path.
- */
+/** DELETE an RTDB path. */
 export async function rtdbRemove(env: EnvVars, path: string): Promise<void> {
   const token = await getAccessToken(env);
   const url = `${rtdbUrl(path, env)}?auth=${token}`;
@@ -200,43 +260,9 @@ export async function rtdbRemove(env: EnvVars, path: string): Promise<void> {
   if (!res.ok) throw new Error(`RTDB DELETE ${path} failed: ${res.status}`);
 }
 
-// ---- Firebase Auth REST API ----
+// ---- Helper ----
 
-/**
- * Create a Firebase custom auth token.
- * Equivalent to admin.auth().createCustomToken(uid, claims).
- */
-export async function createCustomToken(
-  env: EnvVars,
-  uid: string,
-  claims?: Record<string, unknown>,
-): Promise<string> {
-  const token = await getAccessToken(env);
-
-  const res = await fetch(
-    `https://identitytoolkit.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/accounts:createCustomToken`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ uid, claims: claims ?? {}, returnSecureToken: true }),
-    },
-  );
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`createCustomToken failed: ${res.status} ${text}`);
-  }
-
-  const data = (await res.json()) as { token: string };
-  return data.token;
-}
-
-/**
- * Helper to extract env from a SvelteKit RequestEvent.
- */
+/** Extract Cloudflare env from a SvelteKit RequestEvent. */
 export function getEnv(event: { platform?: { env?: Record<string, string> } }): EnvVars {
   const p = event.platform?.env;
   if (!p) throw new Error('Cloudflare env bindings not available');
