@@ -256,7 +256,7 @@
         <ChevronLeft size={22} />
       </button>
 
-      <button class="header-center" onclick={() => {}}>
+      <button class="header-center" onclick={() => undefined}>
         <div class="avatar-wrap">
           <Avatar
             username={otherUser?.username ?? '?'}
@@ -448,7 +448,7 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div class="menu-overlay" style="background: var(--overlay-bg);" onclick={() => (showMenu = false)} onkeydown={(e) => e.key === 'Escape' && (showMenu = false)} role="button" tabindex="-1">
     <div class="menu-sheet">
-      <button class="menu-item" onclick={() => { showMenu = false; uiStore.openMediaGallery(); }}">
+      <button class="menu-item" onclick={() => (showMenu = false, uiStore.openMediaGallery())}>
         <ImageIcon size={17} style="color: var(--text-secondary);" />
         <span>View media</span>
       </button>
