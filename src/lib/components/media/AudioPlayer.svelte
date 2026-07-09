@@ -46,6 +46,17 @@
     }
   }
 
+  // Cleanup audio element on destroy
+  $effect(() => {
+    return () => {
+      if (audioEl) {
+        audioEl.pause();
+        audioEl.src = '';
+        audioEl = null;
+      }
+    };
+  });
+
   function handleSeek(e: MouseEvent) {
     if (!audioEl) return;
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();

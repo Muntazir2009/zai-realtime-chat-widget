@@ -1,7 +1,7 @@
 // ============================================================
 // Storage — R2-backed media uploads via presigned URLs.
 // The client requests a presigned URL from /api/upload/presign,
-// uploads directly to R2, then confirms via /api/upload/confirm.
+// then uploads directly to R2.
 // ============================================================
 
 export interface PresignRequest {
@@ -15,18 +15,6 @@ export interface PresignResult {
   uploadUrl: string;
   publicUrl: string;
   key: string;
-}
-
-export interface ConfirmRequest {
-  chatId: string;
-  messageId: string;
-  publicUrl: string;
-  r2Key: string;
-  blurhash?: string;
-  mediaType: 'image' | 'voice' | 'file';
-  width?: number;
-  height?: number;
-  duration?: number;
 }
 
 /**
@@ -87,14 +75,5 @@ export async function uploadToR2(
 }
 
 /**
- * Confirm an upload: store metadata in RTDB via the server.
+ * Upload a file to R2 using a presigned URL.
  */
-export async function confirmUpload(data: ConfirmRequest): Promise<void> {
-  const res = await fetch('/api/upload/confirm', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-
-  if (!res.ok) throw new Error('Failed to confirm upload');
-}

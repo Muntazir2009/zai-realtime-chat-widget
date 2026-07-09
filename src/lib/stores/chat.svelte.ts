@@ -37,6 +37,7 @@ class ChatStore {
   private inboxUnsub: (() => void) | null = null;
   private inboxChangedUnsub: (() => void) | null = null;
   private messageUnsub: (() => void) | null = null;
+  private messageChangedUnsub: (() => void) | null = null;
   private presenceUnsubs: Map<string, () => void> = new Map();
   private typingUnsubs: Map<string, () => void> = new Map();
 
@@ -49,8 +50,21 @@ class ChatStore {
   starredMessageIds: Set<string> = $state(new Set());
   private starredUnsub: (() => void) | null = null;
 
-  // ---- Idempotency tracking ----
-  private sentKeys = new Set<string();
+  // ---- Idempotency tracking (bounded to prevent memory leak) ----
+  private sentKeys = new Set<string>();
+  private static readonly MAX_SENT_KEYS = 500;
+
+  private addSentKey(key: string): boolean {
+    if (this.sentKeys.has(key)) return false;
+    this.sentKeys.add(key);
+    if (this.sentKeys.size > ChatStore.MAX_SENT_KEYS) {
+      const iter = this.sentKeys.values();
+      for (let i = 0; i < ChatStore.MAX_SENT_KEYS / 2; i++) {
+        this.sentKeys.delete(iter.next().value);
+      }
+    }
+    return true;
+  }
 
   /** Derive sorted inbox (most recent first) */
   sortedInbox = $derived.by(() => {
@@ -186,6 +200,17 @@ class ChatStore {
       }
     });
 
+    // Listen for message changes (edits, pin state sync)
+    this.messageChangedUnsub = rtdb.onChildChanged(msgRef, (snap) => {
+      const raw = snap.val() as Message;
+      if (!raw) return;
+      const msg: Message = { ...raw, edited: raw.edited ?? false };
+      const idx = this.messages.findIndex((m) => m.id === msg.id);
+      if (idx !== -1) {
+        this.messages = this.messages.map((m) => (m.id === msg.id ? msg : m));
+      }
+    });
+
     this.markAsRead(chatId);
     this.attachPresenceListeners(chatId);
     this.attachTypingListener(chatId);
@@ -198,6 +223,10 @@ class ChatStore {
     if (this.messageUnsub) {
       this.messageUnsub();
       this.messageUnsub = null;
+    }
+    if (this.messageChangedUnsub) {
+      this.messageChangedUnsub();
+      this.messageChangedUnsub = null;
     }
     this.detachPresenceListeners();
     this.detachTypingListener();
@@ -217,51 +246,27 @@ class ChatStore {
   // Send message — PRD §IV.1 fan-out write
   // ============================================================
 
-  async sendMessage(chatId: string, content: string, replyToId?: string): Promise<void> {
-    const user = authStore.user;
-    if (!user) return;
-
-    const idempotencyKey = generateIdempotencyKey();
-    if (this.sentKeys.has(idempotencyKey)) return;
-    this.sentKeys.add(idempotencyKey);
-
-    const msgRef = rtdb.push(rtdb.ref(RTDB_PATHS.CHAT_MESSAGES(chatId)));
-    const messageId = msgRef.key ?? idempotencyKey;
-
-    const message: Message = {
-      id: messageId,
-      c: content,
-      sid: user.id,
-      t: 'text',
-      ts: Date.now(),
-      rk: idempotencyKey,
-      rid: replyToId ?? null,
-      mu: null,
-      mh: null,
-      md: null,
-      edited: false,
-    };
-
+  /** Shared fan-out write: message + meta + user_chats in one atomic update */
+  private buildFanOutUpdates(
+    chatId: string,
+    messageId: string,
+    message: Message,
+    lastMessageSnippet: string,
+  ): Record<string, unknown> {
+    const user = authStore.user!;
     const meta = this.chats.get(chatId);
     const otherUid = meta?.participantIds.find((id) => id !== user.id);
 
-    // PRD §IV.1: Single atomic multi-path update
     const updates: Record<string, unknown> = {};
-
-    // 1. Write message
     updates[RTDB_PATHS.CHAT_MESSAGES(chatId) + '/' + messageId] = message;
-
-    // 2. Update chat meta
     updates[RTDB_PATHS.CHAT_META(chatId)] = {
       id: chatId,
       type: 'direct',
       participantIds: meta?.participantIds ?? [user.id],
-      lm: content.slice(0, 100),
+      lm: lastMessageSnippet,
       ts: message.ts,
       updatedAt: message.ts,
     };
-
-    // 3. Update sender's lastRead
     updates[RTDB_PATHS.USER_CHAT_ENTRY(user.id, chatId)] = {
       chatId,
       uid: user.id,
@@ -269,8 +274,6 @@ class ChatStore {
       uc: 0,
       jt: Date.now(),
     };
-
-    // 4. Increment recipient's unread
     if (otherUid) {
       const otherUC = this.userChats.get(chatId);
       updates[RTDB_PATHS.USER_CHAT_ENTRY(otherUid, chatId)] = {
@@ -281,10 +284,26 @@ class ChatStore {
         jt: otherUC?.jt ?? Date.now(),
       };
     }
+    return updates;
+  }
 
+  async sendMessage(chatId: string, content: string, replyToId?: string): Promise<void> {
+    const user = authStore.user;
+    if (!user) return;
+
+    const idempotencyKey = generateIdempotencyKey();
+    if (!this.addSentKey(idempotencyKey)) return;
+
+    const msgRef = rtdb.push(rtdb.ref(RTDB_PATHS.CHAT_MESSAGES(chatId)));
+    const messageId = msgRef.key ?? idempotencyKey;
+
+    const message: Message = {
+      id: messageId, c: content, sid: user.id, t: 'text', ts: Date.now(),
+      rk: idempotencyKey, rid: replyToId ?? null, mu: null, mh: null, md: null, edited: false,
+    };
+
+    const updates = this.buildFanOutUpdates(chatId, messageId, message, content.slice(0, 100));
     await rtdb.update(rtdb.ref('/'), updates);
-
-    // Optimistic render
     this.messages = [...this.messages, message].sort((a, b) => a.ts - b.ts);
   }
 
@@ -294,57 +313,17 @@ class ChatStore {
     if (!user) return;
 
     const idempotencyKey = generateIdempotencyKey();
-    if (this.sentKeys.has(idempotencyKey)) return;
-    this.sentKeys.add(idempotencyKey);
+    if (!this.addSentKey(idempotencyKey)) return;
 
     const msgRef = rtdb.push(rtdb.ref(RTDB_PATHS.CHAT_MESSAGES(chatId)));
     const messageId = msgRef.key ?? idempotencyKey;
 
     const message: Message = {
-      id: messageId,
-      c: caption ?? '📷 Photo',
-      sid: user.id,
-      t: 'image',
-      ts: Date.now(),
-      rk: idempotencyKey,
-      rid: null,
-      mu: imageUrl,
-      mh: null,
-      md: null,
-      edited: false,
+      id: messageId, c: caption ?? '📷 Photo', sid: user.id, t: 'image', ts: Date.now(),
+      rk: idempotencyKey, rid: null, mu: imageUrl, mh: null, md: null, edited: false,
     };
 
-    const meta = this.chats.get(chatId);
-    const otherUid = meta?.participantIds.find((id) => id !== user.id);
-
-    const updates: Record<string, unknown> = {};
-    updates[RTDB_PATHS.CHAT_MESSAGES(chatId) + '/' + messageId] = message;
-    updates[RTDB_PATHS.CHAT_META(chatId)] = {
-      id: chatId,
-      type: 'direct',
-      participantIds: meta?.participantIds ?? [user.id],
-      lm: '📷 Photo',
-      ts: message.ts,
-      updatedAt: message.ts,
-    };
-    updates[RTDB_PATHS.USER_CHAT_ENTRY(user.id, chatId)] = {
-      chatId,
-      uid: user.id,
-      lrid: messageId,
-      uc: 0,
-      jt: Date.now(),
-    };
-    if (otherUid) {
-      const otherUC = this.userChats.get(chatId);
-      updates[RTDB_PATHS.USER_CHAT_ENTRY(otherUid, chatId)] = {
-        chatId,
-        uid: otherUid,
-        lrid: otherUC?.lrid ?? null,
-        uc: (otherUC?.uc ?? 0) + 1,
-        jt: otherUC?.jt ?? Date.now(),
-      };
-    }
-
+    const updates = this.buildFanOutUpdates(chatId, messageId, message, '📷 Photo');
     await rtdb.update(rtdb.ref('/'), updates);
     this.messages = [...this.messages, message].sort((a, b) => a.ts - b.ts);
   }
@@ -355,8 +334,7 @@ class ChatStore {
     if (!user) return;
 
     const idempotencyKey = generateIdempotencyKey();
-    if (this.sentKeys.has(idempotencyKey)) return;
-    this.sentKeys.add(idempotencyKey);
+    if (!this.addSentKey(idempotencyKey)) return;
 
     const msgRef = rtdb.push(rtdb.ref(RTDB_PATHS.CHAT_MESSAGES(chatId)));
     const messageId = msgRef.key ?? idempotencyKey;
@@ -364,48 +342,11 @@ class ChatStore {
     const message: Message = {
       id: messageId,
       c: `🎙 Voice message (${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')})`,
-      sid: user.id,
-      t: 'voice',
-      ts: Date.now(),
-      rk: idempotencyKey,
-      rid: null,
-      mu: voiceUrl,
-      mh: null,
-      md: { duration },
-      edited: false,
+      sid: user.id, t: 'voice', ts: Date.now(),
+      rk: idempotencyKey, rid: null, mu: voiceUrl, mh: null, md: { duration }, edited: false,
     };
 
-    const meta = this.chats.get(chatId);
-    const otherUid = meta?.participantIds.find((id) => id !== user.id);
-
-    const updates: Record<string, unknown> = {};
-    updates[RTDB_PATHS.CHAT_MESSAGES(chatId) + '/' + messageId] = message;
-    updates[RTDB_PATHS.CHAT_META(chatId)] = {
-      id: chatId,
-      type: 'direct',
-      participantIds: meta?.participantIds ?? [user.id],
-      lm: '🎙 Voice message',
-      ts: message.ts,
-      updatedAt: message.ts,
-    };
-    updates[RTDB_PATHS.USER_CHAT_ENTRY(user.id, chatId)] = {
-      chatId,
-      uid: user.id,
-      lrid: messageId,
-      uc: 0,
-      jt: Date.now(),
-    };
-    if (otherUid) {
-      const otherUC = this.userChats.get(chatId);
-      updates[RTDB_PATHS.USER_CHAT_ENTRY(otherUid, chatId)] = {
-        chatId,
-        uid: otherUid,
-        lrid: otherUC?.lrid ?? null,
-        uc: (otherUC?.uc ?? 0) + 1,
-        jt: otherUC?.jt ?? Date.now(),
-      };
-    }
-
+    const updates = this.buildFanOutUpdates(chatId, messageId, message, '🎙 Voice message');
     await rtdb.update(rtdb.ref('/'), updates);
     this.messages = [...this.messages, message].sort((a, b) => a.ts - b.ts);
   }

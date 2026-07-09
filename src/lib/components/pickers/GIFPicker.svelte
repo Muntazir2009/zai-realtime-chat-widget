@@ -5,7 +5,6 @@
   let { onGifSelect }: Props = $props();
 
   let searchQuery = $state('');
-  let activeTab = $state('trending');
 
   // Curated GIFs using giphy public URLs (these are commonly available public GIFs)
   const trendingGifs = [

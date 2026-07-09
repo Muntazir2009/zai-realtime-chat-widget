@@ -3,7 +3,6 @@
   import Avatar from '$lib/components/ui/Avatar.svelte';
   import DeliveryStatus from '$lib/components/indicators/DeliveryStatus.svelte';
   import AudioPlayer from '$lib/components/media/AudioPlayer.svelte';
-  import EmojiReactions from './EmojiReactions.svelte';
   import { SmilePlus, Reply as ReplyIcon, Pencil } from 'lucide-svelte';
 
   interface Props {

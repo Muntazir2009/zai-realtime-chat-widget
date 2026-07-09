@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ChevronLeft, MoreVertical, Phone, Video, Clock, Image as ImageIcon, Pin, X } from 'lucide-svelte';
+  import { ChevronLeft, MoreVertical, Clock, Image as ImageIcon, Pin, X } from 'lucide-svelte';
   import MessageBubble from './MessageBubble.svelte';
   import Lightbox from '$lib/components/media/Lightbox.svelte';
   import MessageContextMenu from './MessageContextMenu.svelte';
@@ -263,12 +263,6 @@
       </div>
     </button>
 
-    <button class="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-[var(--radius-md)] transition-spring active:scale-90" style="color: var(--text-secondary);" aria-label="Voice call">
-      <Phone size={20} />
-    </button>
-    <button class="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-[var(--radius-md)] transition-spring active:scale-90" style="color: var(--text-secondary);" aria-label="Video call">
-      <Video size={20} />
-    </button>
     <button
       class="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-[var(--radius-md)] transition-spring active:scale-90"
       style="color: var(--text-secondary);"
@@ -334,12 +328,12 @@
         </div>
 
         {#each group.messages as msg, idx (msg.id)}
+          {@const isOwn = msg.sid === authStore.user?.id}
           {@const prevMsg = idx > 0 ? group.messages[idx - 1] : null}
           {@const nextMsg = idx < group.messages.length - 1 ? group.messages[idx + 1] : null}
           {@const isConsecutive = prevMsg?.sid === msg.sid}
           {@const isLastInGroup = nextMsg?.sid !== msg.sid}
           {@const showAv = !isOwn && isLastInGroup}
-          {@const isOwn = msg.sid === authStore.user?.id}
           <MessageBubble
             {msg}
             {isOwn}

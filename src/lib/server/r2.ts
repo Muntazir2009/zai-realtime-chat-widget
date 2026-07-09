@@ -7,8 +7,6 @@
 import {
   S3Client,
   PutObjectCommand,
-  DeleteObjectCommand,
-  type PutObjectCommandInput,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
@@ -66,14 +64,4 @@ export async function generatePresignedUploadUrl(
   const publicUrl = `${publicBase}/${key}`;
 
   return { uploadUrl, publicUrl, key };
-}
-
-/**
- * Delete an object from R2.
- */
-export async function deleteR2Object(key: string): Promise<void> {
-  const client = getS3Client();
-  const bucket = process.env.R2_BUCKET_NAME || 'chat-media';
-
-  await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
 }

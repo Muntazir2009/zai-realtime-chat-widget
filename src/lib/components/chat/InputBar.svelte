@@ -5,6 +5,7 @@
   import GIFPicker from '$lib/components/pickers/GIFPicker.svelte';
   import { presenceManager } from '$lib/managers/PresenceManager.svelte';
   import { chatStore } from '$lib/stores/chat.svelte';
+  import { toastStore } from '$lib/stores/toast.svelte';
   import { requestPresignedUpload, uploadToR2 } from '$lib/firebase/storage';
 
   interface Props {
@@ -149,6 +150,7 @@
       }
     } catch (err) {
       console.error('Upload failed:', err);
+      toastStore.error('Failed to upload image');
     } finally {
       isUploading = false;
       uploadProgress = 0;
