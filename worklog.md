@@ -27,3 +27,44 @@ Stage Summary:
 - Message bubbles properly aligned with sender avatar (flex layout with spacer)
 - Easter egg messages now appear instantly (optimistic local update)
 - Easter egg particles are more polished with sparkle trails and better animations
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Fix build error (Svelte template parser) + resolve 4 critical architecture issues
+
+Work Log:
+- Fixed Svelte build error: nested `{ }` in onclick arrow functions confused template parser
+  - Changed `onclick={() => { showMenu = false; uiStore.openMediaGallery(); }}` to use comma operator
+  - Changed `onclick={() => {}}` to `onclick={() => undefined}`
+- Fixed 4 major issues per user report:
+
+1. **Overlapping UI & Safe Areas** (+page.svelte, Conversation.svelte, InputBar.svelte):
+   - Bottom nav now hidden when `view === 'conversation'` (user has back button)
+   - InputBar: added `padding-bottom: max(4px, env(safe-area-inset-bottom, 0px) + 4px)`
+   - Reduced scroll-bottom-pad from 72px to 16px, FAB bottom from 148px to 100px
+
+2. **Message Bubble Styling** (MessageBubble.svelte):
+   - Sent: `border-radius: 16px 16px 4px 16px` (rounded-2xl rounded-tr-sm equivalent)
+   - Received: `border-radius: 16px 16px 16px 4px` (rounded-2xl rounded-tl-sm equivalent)
+   - Padding increased from `8px 10px 4px 10px` to `10px 14px 6px 14px`
+   - Removed all inset borders/shadows from received bubbles (clean solid bg)
+   - Avatar column: `align-self: flex-end` (aligned with bottom of stack)
+
+3. **Ghost Online Status** (rtdb.ts, PresenceManager.svelte.ts):
+   - Added `onDisconnect`, `onDisconnectSet`, `onDisconnectRemove`, `onDisconnectCancel`, `serverTimestamp` to rtdb.ts
+   - Rewrote `goOnline()`: queues `onDisconnect().set({status:'offline'})` BEFORE writing online
+   - Firebase now guarantees offline cleanup even on crash/tab-close
+
+4. **Missing DM List** (chat.svelte.ts, ChatTile.svelte, ChatList.svelte):
+   - Removed `filter(([, uc]) => this.chats.has(uc.chatId))` from sortedInbox
+   - sortedInbox now uses `meta ?? null` and falls back to `userChat.jt` for sorting
+   - ChatTile accepts `ChatMeta | null` with "Loading..." fallback
+   - Added per-chat `onValue` meta listeners so inbox re-sorts in real-time
+   - Proper cleanup in `detachInboxListener()`
+   - Also fixed BottomNavBar a11y warning (svelte-ignore for tablist on nav)
+
+Stage Summary:
+- All 4 fixes committed in d136162 and pushed to GitHub
+- Build should pass (fixed Svelte parser error from previous commit too)
+- Cloudflare Pages should deploy successfully
