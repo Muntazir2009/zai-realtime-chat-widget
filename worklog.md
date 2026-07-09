@@ -68,3 +68,31 @@ Stage Summary:
 - All 4 fixes committed in d136162 and pushed to GitHub
 - Build should pass (fixed Svelte parser error from previous commit too)
 - Cloudflare Pages should deploy successfully
+
+---
+Task ID: 3
+Agent: Main Agent (with parallel subagents)
+Task: Complete Discord crimson & black theme redesign + gesture/voice/backend overhaul
+
+Work Log:
+- Audited 41 source files (~17,000+ lines) to understand full architecture
+- Added `.crimson-dark` theme class to html element with full token system (#0f0f13 bg, #dc2626 primary)
+- Added 80+ lines of crimson-specific component refinements in app.css
+- Redesigned MessageBubble.svelte: Telegram squircles (18px/4px), crimson gradient sent, dark matte received
+- Removed dated ::after tail pseudo-elements, increased padding to 12px 16px 8px 16px
+- Added haptic feedback on long-press (navigator.vibrate(50)), reduced timeout to 400ms
+- Redesigned VoiceRecorder.svelte: slide-to-cancel gesture, 20-bar CSS waveform, pulsing red dot
+- Redesigned InputBar.svelte: auto-expand to 5 lines, crimson glass focus glow, fixed nested braces
+- Updated Conversation.svelte: crimson header glow, dark date chips, crimson FAB, Escape key handler
+- Replaced all hardcoded green colors (18 files) with crimson palette
+- Fixed fan-out write bug: sender's jt (joinedAt) timestamp was being overwritten on every message
+- Verified backend: atomic multi-path updates, onDisconnect() hooks, R2 upload pipeline all correct
+- Added msgSpringIn and crimsonGlow animations to app.css
+
+Stage Summary:
+- 18 files modified, 553 insertions, 162 deletions
+- Commit 0f11f46 pushed to main
+- Theme: Discord-style AMOLED black (#0f0f13) with crimson (#dc2626) accents
+- Bubbles: Telegram-style directional squircles with spring entrance animation
+- Voice: Slide-to-cancel with CSS waveform visualization
+- Backend: All three areas (upload, fan-out, presence) verified correct
