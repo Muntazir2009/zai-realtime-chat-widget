@@ -1,13 +1,11 @@
-// ============================================================
-// POST /api/auth/register
-// Lazy-loads firebase-admin to reduce memory footprint.
-// ============================================================
-
 import { json } from '@sveltejs/kit';
+import { getEnv, rtdbGet, rtdbSet, rtdbUpdate, createCustomToken } from '$lib/server/firebase-rest';
+import { hashPassword } from '$lib/server/password';
 
-export async function POST({ request }: { request: Request }) {
+export async function POST({ request, platform }: { request: Request; platform: any }) {
   try {
-    const body = await request.json() as {
+    const env = getEnv(platform);
+    const body = (await request.json()) as {
       username?: string;
       password?: string;
       displayName?: string;
@@ -21,9 +19,7 @@ export async function POST({ request }: { request: Request }) {
       return json({ error: 'Authentication failed' }, { status: 400 });
     }
 
-    // Lazy-load server deps
     const { sanitizeUsername, isValidUsername } = await import('$lib/utils/sanitize');
-    const { getAdminDb, getAdminAuth } = await import('$lib/server/firebase-admin');
 
     const username = sanitizeUsername(rawUsername);
 
@@ -43,34 +39,25 @@ export async function POST({ request }: { request: Request }) {
       return json({ error: 'Authentication failed' }, { status: 400 });
     }
 
-    const { ref: dbRef, set, get } = await import('firebase-admin/database');
-    const db = getAdminDb();
-
-    const existingSnap = await get(dbRef(db, `users/${username}`));
-    if (existingSnap.exists()) {
+    // Check existing user
+    const existingSnap = await rtdbGet(env, `users/${username}`);
+    if (existingSnap !== null) {
       return json({ error: 'Authentication failed' }, { status: 400 });
     }
 
-    const passwordHash = await Bun.password.hash(password, {
-      algorithm: 'argon2id',
-      memoryCost: 65536,
-      timeCost: 3,
-    });
+    const passwordHash = await hashPassword(password);
 
     const userId = `user_${username}`;
     const now = Date.now();
 
-    const userData = { id: userId, username, displayName: trimmedName, avatarUrl: null, status: 'online' as const, lastSeen: now, createdAt: now };
+    const userData = { id: userId, username, displayName: trimmedName, avatarUrl: null, status: 'online', lastSeen: now, createdAt: now };
     const authData = { passwordHash, userId };
 
-    await set(dbRef(db, `users/${username}`), userData);
-    await set(dbRef(db, `user_auth/${username}`), authData);
+    await rtdbSet(env, `users/${username}`, userData);
+    await rtdbSet(env, `user_auth/${username}`, authData);
+    await rtdbSet(env, `user_index/${userId}`, username);
 
-    // Create user_index for fast reverse lookups (uid → username)
-    await set(dbRef(db, `user_index/${userId}`), username);
-
-    const auth = getAdminAuth();
-    const customToken = await auth.createCustomToken(userId, { username });
+    const customToken = await createCustomToken(env, userId, { username });
 
     return json({ userId, username, displayName: trimmedName, token: customToken });
   } catch (err) {

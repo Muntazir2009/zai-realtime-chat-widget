@@ -1,11 +1,10 @@
 import { json } from '@sveltejs/kit';
+import { getEnv, rtdbRemove } from '$lib/server/firebase-rest';
 
-export async function DELETE({ params }: { params: { id: string; messageId: string } }) {
+export async function DELETE({ params, platform }: { params: { id: string; messageId: string }; platform: any }) {
   try {
-    const { getAdminDb } = await import('$lib/server/firebase-admin');
-    const { ref: dbRef, remove } = await import('firebase-admin/database');
-    const db = getAdminDb();
-    await remove(dbRef(db, `chats/${params.id}/messages/${params.messageId}`));
+    const env = getEnv(platform);
+    await rtdbRemove(env, `chats/${params.id}/messages/${params.messageId}`);
     return json({ success: true });
   } catch (err) {
     console.error('[delete-message]', err);

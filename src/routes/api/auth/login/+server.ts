@@ -1,8 +1,11 @@
 import { json } from '@sveltejs/kit';
+import { getEnv, rtdbGet, rtdbUpdate, createCustomToken } from '$lib/server/firebase-rest';
+import { verifyPassword } from '$lib/server/password';
 
-export async function POST({ request }: { request: Request }) {
+export async function POST({ request, platform }: { request: Request; platform: any }) {
   try {
-    const body = await request.json() as { username?: string; password?: string };
+    const env = getEnv(platform);
+    const body = (await request.json()) as { username?: string; password?: string };
     const rawUsername = body.username ?? '';
     const password = body.password ?? '';
 
@@ -11,32 +14,27 @@ export async function POST({ request }: { request: Request }) {
     }
 
     const { sanitizeUsername } = await import('$lib/utils/sanitize');
-    const { getAdminDb, getAdminAuth } = await import('$lib/server/firebase-admin');
-    const { ref: dbRef, get, update } = await import('firebase-admin/database');
-
     const username = sanitizeUsername(rawUsername);
-    const db = getAdminDb();
 
-    const authSnap = await get(dbRef(db, `user_auth/${username}`));
-    if (!authSnap.exists()) {
+    const authSnap = await rtdbGet(env, `user_auth/${username}`);
+    if (authSnap === null) {
       await new Promise((r) => setTimeout(r, 100));
       return json({ error: 'Authentication failed' }, { status: 401 });
     }
 
-    const { passwordHash, userId } = authSnap.val() as { passwordHash: string; userId: string };
-    const valid = await Bun.password.verify(password, passwordHash);
+    const { passwordHash, userId } = authSnap as { passwordHash: string; userId: string };
+    const valid = await verifyPassword(password, passwordHash);
     if (!valid) {
       return json({ error: 'Authentication failed' }, { status: 401 });
     }
 
     const now = Date.now();
-    await update(dbRef(db, `users/${username}`), { status: 'online', lastSeen: now });
+    await rtdbUpdate(env, `users/${username}`, { status: 'online', lastSeen: now });
 
-    const auth = getAdminAuth();
-    const customToken = await auth.createCustomToken(userId, { username });
+    const customToken = await createCustomToken(env, userId, { username });
 
-    const userSnap = await get(dbRef(db, `users/${username}`));
-    const userData = userSnap.val() as { displayName: string } | null;
+    const userSnap = await rtdbGet(env, `users/${username}`);
+    const userData = userSnap as { displayName: string } | null;
 
     return json({ userId, username, displayName: userData?.displayName ?? username, token: customToken });
   } catch (err) {

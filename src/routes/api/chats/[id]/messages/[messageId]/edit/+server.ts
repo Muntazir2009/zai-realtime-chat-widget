@@ -1,19 +1,17 @@
 import { json } from '@sveltejs/kit';
 import { sanitize } from '$lib/server/sanitize';
+import { getEnv, rtdbUpdate } from '$lib/server/firebase-rest';
 
-export async function PATCH({ params, request }: { params: { id: string; messageId: string }; request: Request }) {
+export async function PATCH({ params, request, platform }: { params: { id: string; messageId: string }; request: Request; platform: any }) {
   try {
-    const { content } = await request.json() as { content?: string };
+    const { content } = (await request.json()) as { content?: string };
     if (!content || content.trim().length === 0) {
       return json({ error: 'Content required' }, { status: 400 });
     }
     const sanitized = sanitize(content.trim());
+    const env = getEnv(platform);
 
-    const { getAdminDb } = await import('$lib/server/firebase-admin');
-    const { ref: dbRef, update } = await import('firebase-admin/database');
-    const db = getAdminDb();
-
-    await update(dbRef(db, '/'), {
+    await rtdbUpdate(env, '/', {
       [`chats/${params.id}/messages/${params.messageId}/c`]: sanitized,
       [`chats/${params.id}/messages/${params.messageId}/edited`]: true,
     });

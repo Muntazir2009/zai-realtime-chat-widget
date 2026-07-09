@@ -1,35 +1,31 @@
 import { json } from '@sveltejs/kit';
+import { getEnv, rtdbGet, rtdbSet, rtdbRemove } from '$lib/server/firebase-rest';
 
-export async function POST({ params, request }: { params: { id: string }; request: Request }) {
+export async function POST({ params, request, platform }: { params: { id: string }; request: Request; platform: any }) {
   try {
-    const { messageId, pinnedBy, message } = await request.json() as { messageId: string; pinnedBy: string; message: any };
+    const env = getEnv(platform);
+    const { messageId, pinnedBy, message } = (await request.json()) as { messageId: string; pinnedBy: string; message: any };
     if (!messageId || !pinnedBy) {
       return json({ error: 'Missing fields' }, { status: 400 });
     }
 
-    const { getAdminDb } = await import('$lib/server/firebase-admin');
-    const { ref: dbRef, set, get, remove } = await import('firebase-admin/database');
-    const db = getAdminDb();
-    const pinnedRef = dbRef(db, `chats/${params.id}/pinned/${messageId}`);
-
     // Check if already pinned
-    const snap = await get(pinnedRef);
-    if (snap.exists()) {
-      await remove(pinnedRef);
+    const snap = await rtdbGet(env, `chats/${params.id}/pinned/${messageId}`);
+    if (snap !== null) {
+      await rtdbRemove(env, `chats/${params.id}/pinned/${messageId}`);
       return json({ action: 'unpinned' });
     }
 
     // Check max 3 pins
-    const allPinned = dbRef(db, `chats/${params.id}/pinned`);
-    const allSnap = await get(allPinned);
-    if (allSnap.exists()) {
-      const count = Object.keys(allSnap.val()).length;
+    const allSnap = await rtdbGet(env, `chats/${params.id}/pinned`);
+    if (allSnap !== null && typeof allSnap === 'object') {
+      const count = Object.keys(allSnap).length;
       if (count >= 3) {
         return json({ error: 'Maximum 3 pinned messages' }, { status: 400 });
       }
     }
 
-    await set(pinnedRef, {
+    await rtdbSet(env, `chats/${params.id}/pinned/${messageId}`, {
       messageId,
       pinnedBy,
       pinnedAt: Date.now(),
