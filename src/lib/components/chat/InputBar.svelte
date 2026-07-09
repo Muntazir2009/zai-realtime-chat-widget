@@ -6,7 +6,7 @@
   import { presenceManager } from '$lib/managers/PresenceManager.svelte';
   import { chatStore } from '$lib/stores/chat.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
-  import { requestPresignedUpload, uploadToR2 } from '$lib/firebase/storage';
+  import { uploadFile } from '$lib/firebase/storage';
 
   interface Props {
     onSend: (content: string) => void;
@@ -103,18 +103,16 @@
   async function sendVoice(blob: Blob, duration: number) {
     isRecording = false;
     if (!chatStore.activeChatId || duration < 1) return;
-    const file = new File([blob], `voice-${Date.now()}.webm`, { type: 'audio/webm' });
     isUploading = true;
     uploadProgress = 0;
     uploadLabel = 'Sending voice...';
     try {
-      const presign = await requestPresignedUpload(chatStore.activeChatId, file, 'voice');
-      await uploadToR2(presign.uploadUrl, file, (pct) => { uploadProgress = pct; });
-      await chatStore.sendVoiceMessage(chatStore.activeChatId, presign.publicUrl, duration);
+      const result = await uploadFile(blob, 'voice', `voice-${Date.now()}.webm`, (pct) => { uploadProgress = pct; });
+      await chatStore.sendVoiceMessage(chatStore.activeChatId, result.publicUrl, duration);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('Voice upload failed:', msg);
-      toastStore.error(`Voice failed: ${msg.slice(0, 80)}`);
+      toastStore.error(`Voice failed: ${msg.slice(0, 120)}`);
     } finally {
       isUploading = false;
       uploadProgress = 0;
@@ -139,13 +137,12 @@
     uploadProgress = 0;
     uploadLabel = 'Sending image...';
     try {
-      const presign = await requestPresignedUpload(chatStore.activeChatId, file, 'images');
-      await uploadToR2(presign.uploadUrl, file, (pct) => { uploadProgress = pct; });
-      if (onImageSend) onImageSend(presign.publicUrl);
+      const result = await uploadFile(file, 'images', file.name, (pct) => { uploadProgress = pct; });
+      if (onImageSend) onImageSend(result.publicUrl);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error('Upload failed:', msg);
-      toastStore.error(`Upload failed: ${msg.slice(0, 80)}`);
+      console.error('Image upload failed:', msg);
+      toastStore.error(`Upload failed: ${msg.slice(0, 120)}`);
     } finally {
       isUploading = false;
       uploadProgress = 0;

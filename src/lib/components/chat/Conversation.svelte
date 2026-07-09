@@ -166,14 +166,7 @@
 
   async function handleDeleteMessage(msg: Message) {
     if (!chatStore.activeChatId) return;
-    try {
-      await chatStore.deleteMessage(chatStore.activeChatId, msg.id);
-      toastStore.success('Deleted');
-    } catch (err) {
-      const msg2 = err instanceof Error ? err.message : String(err);
-      console.error('Delete failed:', msg2);
-      // chatStore.deleteMessage already shows toast on failure
-    }
+    await chatStore.deleteMessage(chatStore.activeChatId, msg.id);
   }
 
   async function handlePinMessage(msg: Message) {

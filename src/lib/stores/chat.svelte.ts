@@ -106,7 +106,9 @@ class ChatStore {
     this.inboxUnsub = await rtdb.onChildAdded(r, (snap) => {
       const data = snap.val() as UserChat | null;
       if (!data) return;
-      this.userChats.set(data.chatId, data);
+      const newMap = new Map(this.userChats);
+      newMap.set(data.chatId, data);
+      this.userChats = newMap;
       if (!this.chats.has(data.chatId)) {
         this.fetchChatMeta(data.chatId);
       }
@@ -118,7 +120,9 @@ class ChatStore {
     this.inboxChangedUnsub = await rtdb.onChildChanged(r, (snap) => {
       const data = snap.val() as UserChat | null;
       if (!data) return;
-      this.userChats.set(data.chatId, data);
+      const newMap = new Map(this.userChats);
+      newMap.set(data.chatId, data);
+      this.userChats = newMap;
     });
   }
 
@@ -129,7 +133,9 @@ class ChatStore {
     const unsub = await rtdb.onValue(metaRef, (snap) => {
       if (snap.exists()) {
         const meta = snap.val() as ChatMeta;
-        this.chats.set(chatId, meta);
+        const newMap = new Map(this.chats);
+        newMap.set(chatId, meta);
+        this.chats = newMap;
         // Fetch participant profiles if not cached
         for (const pid of meta.participantIds) {
           if (!this.userDict.has(pid)) {
@@ -145,7 +151,9 @@ class ChatStore {
     const snap = await rtdb.get(await rtdb.ref(RTDB_PATHS.CHAT_META(chatId)));
     if (snap.exists()) {
       const meta = snap.val() as ChatMeta;
-      this.chats.set(chatId, meta);
+      const newMap = new Map(this.chats);
+      newMap.set(chatId, meta);
+      this.chats = newMap;
       for (const pid of meta.participantIds) {
         if (!this.userDict.has(pid)) {
           this.fetchUser(pid);
@@ -158,7 +166,9 @@ class ChatStore {
     // 1. Check IndexedDB cache — validate it's a real User (not corrupt proxy remnant)
     const cached = await getUserProfile(uid);
     if (cached && cached.displayName && cached.username) {
-      this.userDict.set(uid, cached);
+      const m = new Map(this.userDict);
+      m.set(uid, cached);
+      this.userDict = m;
       return;
     }
 
@@ -172,7 +182,9 @@ class ChatStore {
         if (userSnap.exists()) {
           const user = userSnap.val() as User;
           if (user && user.displayName) {
-            this.userDict.set(uid, user);
+            const m = new Map(this.userDict);
+            m.set(uid, user);
+            this.userDict = m;
             cacheUserProfiles([user]);
             return;
           }
@@ -185,7 +197,9 @@ class ChatStore {
     if (directSnap.exists()) {
       const user = directSnap.val() as User;
       if (user && user.displayName) {
-        this.userDict.set(uid, user);
+        const m = new Map(this.userDict);
+        m.set(uid, user);
+        this.userDict = m;
         cacheUserProfiles([user]);
         return;
       }
@@ -194,13 +208,18 @@ class ChatStore {
     // 4. Last resort: scan the entire users node (expensive, rarely needed)
     const allSnap = await rtdb.get(await rtdb.ref('users'));
     if (allSnap.exists()) {
+      let found = false;
       allSnap.forEach((childSnap: any) => {
         const u = childSnap.val() as User;
         if (u && u.id === uid && u.displayName) {
-          this.userDict.set(uid, u);
+          const m = new Map(this.userDict);
+          m.set(uid, u);
+          this.userDict = m;
           cacheUserProfiles([u]);
+          found = true;
         }
       });
+      if (found) return;
     }
   }
 
@@ -472,8 +491,12 @@ class ChatStore {
       ts: now,
       updatedAt: now,
     };
-    this.chats.set(chatId, meta);
-    this.userChats.set(chatId, { chatId, uid: user.id, lrid: null, uc: 0, jt: now });
+    const chatsMap = new Map(this.chats);
+    chatsMap.set(chatId, meta);
+    this.chats = chatsMap;
+    const ucMap = new Map(this.userChats);
+    ucMap.set(chatId, { chatId, uid: user.id, lrid: null, uc: 0, jt: now });
+    this.userChats = ucMap;
 
     return chatId;
   }
@@ -512,7 +535,9 @@ class ChatStore {
       const r = await rtdb.ref(RTDB_PATHS.PRESENCE(uid));
       const unsub = await rtdb.onValue(r, (snap) => {
         if (snap.exists()) {
-          this.presence.set(uid, snap.val() as PresenceState);
+          const newMap = new Map(this.presence);
+          newMap.set(uid, snap.val() as PresenceState);
+          this.presence = newMap;
         }
       });
       this.presenceUnsubs.set(uid, unsub);
@@ -536,42 +561,36 @@ class ChatStore {
     for (const uid of meta.participantIds) {
       const r = await rtdb.ref(RTDB_PATHS.TYPING(chatId, uid));
       const unsub = await rtdb.onValue(r, (snap) => {
+        const newMap = new Map(this.typingUsers);
+        const set = new Set(newMap.get(chatId) ?? []);
         if (!snap.exists()) {
-          // Node removed — clear typing state
-          const set = this.typingUsers.get(chatId) ?? new Set();
           set.delete(uid);
-          this.typingUsers.set(chatId, set);
           this.clearTypingSafetyTimeout(chatId, uid);
-          return;
-        }
-
-        const data = snap.val() as { typing: boolean; ts: number } | null;
-        if (!data || !data.typing) {
-          // Not typing — remove from set
-          const set = this.typingUsers.get(chatId) ?? new Set();
-          set.delete(uid);
-          this.typingUsers.set(chatId, set);
-          this.clearTypingSafetyTimeout(chatId, uid);
-          return;
-        }
-
-        // User is typing — add to set
-        const set = this.typingUsers.get(chatId) ?? new Set();
-        set.add(uid);
-        this.typingUsers.set(chatId, set);
-
-        // Set a 3-second safety timeout to auto-remove (in case RTDB removal is delayed/lost)
-        this.clearTypingSafetyTimeout(chatId, uid);
-        const timeout = setTimeout(() => {
-          const s = this.typingUsers.get(chatId);
-          if (s) {
-            s.delete(uid);
-            this.typingUsers.set(chatId, s);
+        } else {
+          const data = snap.val() as { typing: boolean; ts: number } | null;
+          if (!data || !data.typing) {
+            set.delete(uid);
+            this.clearTypingSafetyTimeout(chatId, uid);
+          } else {
+            set.add(uid);
+            this.clearTypingSafetyTimeout(chatId, uid);
+            const timeout = setTimeout(() => {
+              const s = this.typingUsers.get(chatId);
+              if (s) {
+                const updated = new Set(s);
+                updated.delete(uid);
+                const m = new Map(this.typingUsers);
+                m.set(chatId, updated);
+                this.typingUsers = m;
+              }
+              const timeouts = this.typingSafetyTimeouts.get(chatId);
+              if (timeouts) timeouts.delete(uid);
+            }, 3000);
+            this.typingSafetyTimeouts.get(chatId)!.set(uid, timeout);
           }
-          const timeouts = this.typingSafetyTimeouts.get(chatId);
-          if (timeouts) timeouts.delete(uid);
-        }, 3000);
-        this.typingSafetyTimeouts.get(chatId)!.set(uid, timeout);
+        }
+        newMap.set(chatId, set);
+        this.typingUsers = newMap;
       });
       this.typingUnsubs.set(uid, unsub);
     }
@@ -679,10 +698,10 @@ class ChatStore {
     });
 
     this.pinnedRemovedUnsub = await rtdb.onChildRemoved(r, (snap) => {
-      const data = snap.val() as PinnedMessage | null;
-      if (!data) return;
+      const msgId = snap.key;
+      if (!msgId) return;
       const newMap = new Map(this.pinnedMessages);
-      newMap.delete(data.messageId);
+      newMap.delete(msgId);
       this.pinnedMessages = newMap;
     });
   }
@@ -703,13 +722,27 @@ class ChatStore {
     const user = authStore.user;
     if (!user) return;
 
+    const isPinned = this.pinnedMessages.has(msg.id);
+
+    // Optimistic: update local state immediately
+    if (isPinned) {
+      const newMap = new Map(this.pinnedMessages);
+      newMap.delete(msg.id);
+      this.pinnedMessages = newMap;
+    } else if (this.pinnedMessages.size < 3) {
+      const newMap = new Map(this.pinnedMessages);
+      newMap.set(msg.id, msg);
+      this.pinnedMessages = newMap;
+    } else {
+      toastStore.warning('Maximum 3 pinned messages');
+      return;
+    }
+
     try {
-      if (this.pinnedMessages.has(msg.id)) {
-        // Unpin
+      if (isPinned) {
         await rtdb.remove(await rtdb.ref(RTDB_PATHS.PINNED(chatId) + '/' + msg.id));
         toastStore.success('Message unpinned');
-      } else if (this.pinnedMessages.size < 3) {
-        // Pin
+      } else {
         const pinned: PinnedMessage = {
           messageId: msg.id,
           pinnedBy: user.id,
@@ -718,12 +751,21 @@ class ChatStore {
         };
         await rtdb.set(await rtdb.ref(RTDB_PATHS.PINNED(chatId) + '/' + msg.id), pinned);
         toastStore.success('Message pinned');
-      } else {
-        toastStore.warning('Maximum 3 pinned messages');
       }
     } catch (err) {
-      console.error('[togglePin]', err);
-      toastStore.error('Failed to update pin');
+      // Revert on failure
+      if (isPinned) {
+        const newMap = new Map(this.pinnedMessages);
+        newMap.set(msg.id, msg);
+        this.pinnedMessages = newMap;
+      } else {
+        const newMap = new Map(this.pinnedMessages);
+        newMap.delete(msg.id);
+        this.pinnedMessages = newMap;
+      }
+      const msg2 = err instanceof Error ? err.message : String(err);
+      console.error('[togglePin]', msg2);
+      toastStore.error(`Pin failed: ${msg2.slice(0, 60)}`);
     }
   }
 
@@ -756,31 +798,43 @@ class ChatStore {
     const user = authStore.user;
     if (!user) return;
 
+    const isStarred = this.starredMessageIds.has(msg.id);
+
+    // Optimistic: update local state immediately
+    const newSet = new Set(this.starredMessageIds);
+    if (isStarred) {
+      newSet.delete(msg.id);
+    } else {
+      newSet.add(msg.id);
+    }
+    this.starredMessageIds = newSet;
+
     const starRef = await rtdb.ref(RTDB_PATHS.STARRED(user.id, chatId) + '/' + msg.id);
 
     try {
-      if (this.starredMessageIds.has(msg.id)) {
-        // Unstar
+      if (isStarred) {
         await rtdb.remove(starRef);
-        const newSet = new Set(this.starredMessageIds);
-        newSet.delete(msg.id);
-        this.starredMessageIds = newSet;
         toastStore.success('Message unstarred');
       } else {
-        // Star
         await rtdb.set(starRef, {
           messageId: msg.id,
           starredAt: Date.now(),
           message: { id: msg.id, c: msg.c, t: msg.t, ts: msg.ts, sid: msg.sid },
         });
-        const newSet = new Set(this.starredMessageIds);
-        newSet.add(msg.id);
-        this.starredMessageIds = newSet;
         toastStore.success('Message starred');
       }
     } catch (err) {
-      console.error('[toggleStar]', err);
-      toastStore.error('Failed to update star');
+      // Revert on failure
+      const revertSet = new Set(this.starredMessageIds);
+      if (isStarred) {
+        revertSet.add(msg.id);
+      } else {
+        revertSet.delete(msg.id);
+      }
+      this.starredMessageIds = revertSet;
+      const msg2 = err instanceof Error ? err.message : String(err);
+      console.error('[toggleStar]', msg2);
+      toastStore.error(`Star failed: ${msg2.slice(0, 60)}`);
     }
   }
 
@@ -837,6 +891,7 @@ class ChatStore {
       await rtdb.update(await rtdb.ref('/'), metaUpdates).catch(() => {
         // Best-effort meta update — don't fail the delete
       });
+      toastStore.success('Deleted');
     } catch (err) {
       // Revert on failure
       this.messages = prevMessages;
@@ -921,40 +976,42 @@ class ChatStore {
     this.reactions = new Map();
   }
 
-  /** Toggle a reaction on a message. Adds or removes based on current state. */
+  /** Toggle a reaction on a message. Adds or removes based on current state. Optimistic local update. */
   async toggleReaction(chatId: string, messageId: string, emoji: string): Promise<void> {
     const user = authStore.user;
     if (!user) return;
 
-    const reactionPath = RTDB_PATHS.REACTIONS(chatId, messageId) + '/' + emoji;
-    const snap = await rtdb.get(await rtdb.ref(reactionPath));
-    const existing = snap.exists() ? (snap.val() as { uids?: string[] }) : null;
-    const uids: string[] = existing?.uids ?? [];
+    // Read current uids from LOCAL state (no RTDB read — use what we already have)
+    const currentReactions = this.reactions.get(messageId) ?? [];
+    const existingReaction = currentReactions.find(r => r.emoji === emoji);
+    const currentUids = existingReaction?.uids ?? [];
 
-    const alreadyReacted = uids.includes(user.id);
+    const alreadyReacted = currentUids.includes(user.id);
     let newUids: string[];
 
     if (alreadyReacted) {
-      // Remove own reaction
-      newUids = uids.filter(id => id !== user.id);
+      newUids = currentUids.filter(id => id !== user.id);
     } else {
-      // Add own reaction
-      newUids = [...uids, user.id];
+      newUids = [...currentUids, user.id];
     }
 
-    if (newUids.length === 0) {
-      // Remove the node entirely
-      await rtdb.remove(await rtdb.ref(reactionPath)).catch((err) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error('[toggleReaction]', msg);
-        toastStore.error(`Reaction failed: ${msg.slice(0, 60)}`);
-      });
-    } else {
-      await rtdb.set(await rtdb.ref(reactionPath), { uids: newUids }).catch((err) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error('[toggleReaction]', msg);
-        toastStore.error(`Reaction failed: ${msg.slice(0, 60)}`);
-      });
+    // Optimistic: update local state immediately
+    this.setReaction(messageId, emoji, newUids);
+
+    const reactionPath = RTDB_PATHS.REACTIONS(chatId, messageId) + '/' + emoji;
+
+    try {
+      if (newUids.length === 0) {
+        await rtdb.remove(await rtdb.ref(reactionPath));
+      } else {
+        await rtdb.set(await rtdb.ref(reactionPath), { uids: newUids });
+      }
+    } catch (err) {
+      // Revert on failure
+      this.setReaction(messageId, emoji, currentUids);
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[toggleReaction]', msg);
+      toastStore.error(`Reaction failed: ${msg.slice(0, 60)}`);
     }
   }
 

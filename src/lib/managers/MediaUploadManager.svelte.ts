@@ -1,8 +1,8 @@
-// Manages media upload lifecycle: presign → R2 upload → confirm
+// Manages media upload lifecycle: server proxy → R2 upload
 // Integrates with Web Workers for image encoding and blurhash generation
 
 import type { UploadTask } from '$lib/types/index.js';
-import { requestPresignedUpload, uploadToR2 } from '$lib/firebase/storage.js';
+import { uploadFile } from '$lib/firebase/storage.js';
 import { generateIdempotencyKey } from '$lib/utils/idempotency.js';
 
 class MediaUploadManager {
@@ -34,19 +34,15 @@ class MediaUploadManager {
     try {
       task.status = 'uploading';
 
-      // Step 1: Get presigned URL
-      const presign = await requestPresignedUpload(chatId, file, 'images');
-
-      // Step 2: Upload to R2 with progress
-      await uploadToR2(presign.uploadUrl, file, (pct) => {
+      const result = await uploadFile(file, 'images', file.name, (pct) => {
         task.progress = pct;
         onProgress?.(pct);
       });
 
-      task.url = presign.publicUrl;
+      task.url = result.publicUrl;
       task.status = 'done';
 
-      // Step 3: Generate blurhash in a Web Worker (non-blocking)
+      // Generate blurhash in a Web Worker (non-blocking)
       let blurhash: string | null = null;
       try {
         if (typeof Worker !== 'undefined') {
@@ -57,7 +53,7 @@ class MediaUploadManager {
         // Blurhash generation is best-effort
       }
 
-      return { publicUrl: presign.publicUrl, r2Key: presign.key, blurhash };
+      return { publicUrl: result.publicUrl, r2Key: result.key, blurhash };
     } catch (err) {
       task.status = 'error';
       throw err;
@@ -82,11 +78,10 @@ class MediaUploadManager {
 
     try {
       task.status = 'uploading';
-      const presign = await requestPresignedUpload(chatId, file, 'voice');
-      await uploadToR2(presign.uploadUrl, file, (pct) => { task.progress = pct; });
-      task.url = presign.publicUrl;
+      const result = await uploadFile(blob, 'voice', `voice-${Date.now()}.webm`, (pct) => { task.progress = pct; });
+      task.url = result.publicUrl;
       task.status = 'done';
-      return { publicUrl: presign.publicUrl, r2Key: presign.key };
+      return { publicUrl: result.publicUrl, r2Key: result.key };
     } catch (err) {
       task.status = 'error';
       throw err;
@@ -99,7 +94,7 @@ class MediaUploadManager {
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const size = 32; // Small for blurhash performance
+        const size = 32;
         canvas.width = size;
         canvas.height = size;
         const ctx = canvas.getContext('2d');
@@ -108,8 +103,6 @@ class MediaUploadManager {
         const data = ctx.getImageData(0, 0, size, size).data;
         URL.revokeObjectURL(url);
 
-        // Simple blurhash approximation using average color
-        // Full blurhash would use the Web Worker with the blurhash library
         const r = Math.round(data.reduce((s, _, i) => i % 4 === 0 ? s + data[i] : s, 0) / (size * size));
         const g = Math.round(data.reduce((s, _, i) => i % 4 === 1 ? s + data[i] : s, 0) / (size * size));
         const b = Math.round(data.reduce((s, _, i) => i % 4 === 2 ? s + data[i] : s, 0) / (size * size));

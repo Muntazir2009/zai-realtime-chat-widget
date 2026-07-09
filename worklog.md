@@ -149,3 +149,50 @@ Stage Summary:
 - Optimistic: edit and delete update UI instantly, revert on failure
 - Inbox: previews update instantly on edit/delete/send via meta listener
 - Errors: all generic messages replaced with real HTTP status + response body
+
+---
+Task ID: 5
+Agent: Main Agent
+Task: Fix 5 critical bugs: R2 uploads (CORS), realtime reactivity, reactions, conversation list, error surfacing
+
+Work Log:
+- Analyzed user error: `Error: Upload failed` from XHR `error` event = network-level CORS failure on browser → R2 presigned URL PUT
+- Root cause: presigned URL upload requires CORS headers on R2 bucket, which aren't configured
+
+1. **R2 Uploads — Server-side proxy eliminates CORS** (storage.ts, +server.ts, InputBar.svelte, MediaUploadManager.svelte.ts):
+   - Created new `/api/upload/file/+server.ts` — accepts FormData, uploads to R2 server-side via PutObjectCommand
+   - Rewrote `storage.ts` — replaced `requestPresignedUpload` + `uploadToR2` with single `uploadFile()` that POSTs to server proxy
+   - XHR with progress tracking for client→server leg; server→R2 is fast (same datacenter)
+   - Fixed `ArrayBuffer` → `Uint8Array` for AWS SDK v3 type compatibility
+   - Updated InputBar.svelte: both `sendVoice` and `handleFileSelect` use new `uploadFile()`
+   - Updated MediaUploadManager.svelte.ts: both `uploadImage` and `uploadVoice` use new `uploadFile()`
+
+2. **Realtime — Svelte 5 Map reactivity fix** (chat.svelte.ts):
+   - **Critical bug**: `Map.set()` on `$state(new Map())` does NOT trigger Svelte 5 reactivity for `$derived`
+   - Fixed ALL Map mutations to use `new Map(old) → .set() → reassign` pattern
+   - Fixed: `loadInbox` (userChats), `attachChatMetaListener` (chats), `fetchChatMeta` (chats), `fetchUser` (userDict), `attachPresenceListeners` (presence), `attachTypingListener` (typingUsers), `createDirectChat` (chats + userChats), `attachPinnedListener` (pinnedMessages onChildRemoved using snap.key instead of snap.val())
+
+3. **Message Reactions — Optimistic updates** (chat.svelte.ts):
+   - `toggleReaction`: now reads from LOCAL state instead of RTDB (no network round-trip before UI update)
+   - Updates local reactions Map immediately, then writes to RTDB
+   - Reverts on failure with toast showing actual error
+
+4. **Conversation List — Instant previews** (chat.svelte.ts):
+   - Meta listener now triggers reactivity (Map reassignment fix)
+   - `sortedInbox` $derived re-computes when `chats` Map changes (new message, edit, delete, upload)
+   - `userChats` Map changes (unread count) also trigger re-computation
+
+5. **Debugging — Real error surfacing** (storage.ts, chat.svelte.ts, Conversation.svelte):
+   - Upload errors now show HTTP status + response body (server errors include R2 SDK error messages)
+   - XHR timeout handler added (2 minutes)
+   - Double-toast bug in Conversation.svelte handleDeleteMessage fixed (deleteMessage now shows its own toast)
+   - togglePin/toggleStar errors now show real RTDB error messages instead of generic text
+
+Stage Summary:
+- 0 svelte-check errors, 7 warnings (all pre-existing)
+- 6 files modified: storage.ts, chat.svelte.ts, InputBar.svelte, MediaUploadManager.svelte.ts, Conversation.svelte, +server.ts (new)
+- Uploads: server-side proxy eliminates CORS, progress tracking preserved, real errors surfaced
+- Reactivity: ALL $state Map mutations now use reassignment pattern — inbox, presence, typing, users, pins all update in real-time
+- Reactions: optimistic toggle (instant UI), revert on failure
+- Pins/Stars: optimistic toggle (instant UI), revert on failure
+- Errors: no more swallowed exceptions, all surface real messages

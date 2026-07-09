@@ -1,58 +1,32 @@
 // ============================================================
-// Storage — R2-backed media uploads via presigned URLs.
-// The client requests a presigned URL from /api/upload/presign,
-// then uploads directly to R2.
+// Storage — R2-backed media uploads via server-side proxy.
+// The client sends the file to /api/upload/file, which uploads
+// to R2 server-side (no CORS issues).
 // ============================================================
 
-export interface PresignRequest {
-  chatId: string;
-  filename: string;
-  contentType: string;
-  folder?: string;
-}
-
-export interface PresignResult {
-  uploadUrl: string;
+export interface UploadResult {
   publicUrl: string;
   key: string;
 }
 
 /**
- * Request a presigned R2 upload URL from the server.
+ * Upload a file to R2 through the server-side proxy.
+ * This avoids CORS issues with direct browser → R2 uploads.
+ * Returns the public URL and R2 object key.
  */
-export async function requestPresignedUpload(
-  chatId: string,
-  file: File,
-  folder?: string,
-): Promise<PresignResult> {
-  const res = await fetch('/api/upload/presign', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chatId,
-      filename: file.name,
-      contentType: file.type,
-      folder,
-    }),
-  });
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`Presign request failed (HTTP ${res.status}): ${body || res.statusText}`);
-  }
-  return res.json();
-}
-
-/**
- * Upload a file to R2 using a presigned URL.
- * Returns the public URL.
- */
-export async function uploadToR2(
-  presignedUrl: string,
-  file: File,
+export async function uploadFile(
+  file: File | Blob,
+  folder: string = 'media',
+  filename?: string,
   onProgress?: (pct: number) => void,
-): Promise<void> {
+): Promise<UploadResult> {
+  const name = filename || (file instanceof File ? file.name : `upload-${Date.now()}.bin`);
+
   return new Promise((resolve, reject) => {
+    const formData = new FormData();
+    formData.append('file', file, name);
+    formData.append('folder', folder);
+
     const xhr = new XMLHttpRequest();
 
     xhr.upload.addEventListener('progress', (e) => {
@@ -63,23 +37,38 @@ export async function uploadToR2(
 
     xhr.addEventListener('load', () => {
       if (xhr.status >= 200 && xhr.status < 300) {
-        resolve();
+        try {
+          const data = JSON.parse(xhr.responseText);
+          if (data.publicUrl && data.key) {
+            resolve({ publicUrl: data.publicUrl, key: data.key });
+          } else if (data.error) {
+            reject(new Error(`Upload server error: ${data.error}`));
+          } else {
+            reject(new Error(`Upload server returned invalid response: ${xhr.responseText.slice(0, 300)}`));
+          }
+        } catch {
+          reject(new Error(`Upload server returned non-JSON: ${xhr.responseText.slice(0, 300)}`));
+        }
       } else {
-        const body = xhr.responseText || '(empty body)';
-        reject(new Error(`R2 upload failed (HTTP ${xhr.status}): ${body.slice(0, 500)}`));
+        let detail = xhr.responseText || '(empty body)';
+        try {
+          const parsed = JSON.parse(xhr.responseText);
+          detail = parsed.error || parsed.message || detail;
+        } catch { /* use raw text */ }
+        reject(new Error(`Upload failed (HTTP ${xhr.status}): ${detail.slice(0, 500)}`));
       }
     });
 
     xhr.addEventListener('error', () => {
-      reject(new Error(`R2 upload network error (status ${xhr.status}, readyState ${xhr.readyState})`));
+      reject(new Error(`Upload network error (status ${xhr.status}, readyState ${xhr.readyState})`));
     });
 
-    xhr.open('PUT', presignedUrl);
-    xhr.setRequestHeader('Content-Type', file.type);
-    xhr.send(file);
+    xhr.addEventListener('timeout', () => {
+      reject(new Error('Upload timed out'));
+    });
+
+    xhr.open('POST', '/api/upload/file');
+    xhr.timeout = 120_000; // 2 minutes
+    xhr.send(formData);
   });
 }
-
-/**
- * Upload a file to R2 using a presigned URL.
- */
