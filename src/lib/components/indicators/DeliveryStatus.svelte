@@ -82,6 +82,6 @@
   }
 
   .check-read {
-    filter: drop-shadow(0 0 2px rgba(5, 150, 105, 0.3));
+    filter: drop-shadow(0 0 2px rgba(220, 38, 38, 0.3));
   }
 </style>

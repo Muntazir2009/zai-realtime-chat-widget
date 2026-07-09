@@ -305,12 +305,13 @@ class ChatStore {
       ts: message.ts,
       updatedAt: message.ts,
     };
+    const senderUC = this.userChats.get(chatId);
     updates[RTDB_PATHS.USER_CHAT_ENTRY(user.id, chatId)] = {
       chatId,
       uid: user.id,
       lrid: messageId,
       uc: 0,
-      jt: Date.now(),
+      jt: senderUC?.jt ?? Date.now(),
     };
     if (otherUid) {
       const otherUC = this.userChats.get(chatId);

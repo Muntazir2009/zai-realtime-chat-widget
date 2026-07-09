@@ -403,7 +403,7 @@
     height: 300px;
     top: -80px;
     left: -60px;
-    background: linear-gradient(135deg, #059669, #10b981, #34d399);
+    background: linear-gradient(135deg, #dc2626, #ef4444, #f87171);
     animation: orbFloat1 8s ease-in-out infinite;
   }
 
@@ -441,10 +441,10 @@
     align-items: center;
     justify-content: center;
     margin-bottom: 12px;
-    background: linear-gradient(135deg, #059669, #10b981, #34d399, #059669);
+    background: linear-gradient(135deg, #dc2626, #ef4444, #f87171, #dc2626);
     background-size: 300% 300%;
     animation: gradientShift 4s ease-in-out infinite;
-    box-shadow: 0 4px 20px rgba(5, 150, 105, 0.3);
+    box-shadow: 0 4px 20px rgba(220, 38, 38, 0.3);
   }
 
   @keyframes gradientShift {
@@ -493,7 +493,7 @@
   }
 
   .field-group:focus-within {
-    box-shadow: 0 0 0 2px var(--color-primary), 0 0 0 4px rgba(5, 150, 105, 0.15);
+    box-shadow: 0 0 0 2px var(--color-primary), 0 0 0 4px rgba(220, 38, 38, 0.15);
   }
 
   :global(.field-icon) {

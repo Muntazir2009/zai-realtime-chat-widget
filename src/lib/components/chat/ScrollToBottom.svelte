@@ -110,7 +110,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 2px 6px rgba(5, 150, 105, 0.4);
+    box-shadow: 0 2px 6px rgba(220, 38, 38, 0.4);
     animation: badgePulse 2s ease-in-out infinite;
     line-height: 1;
   }

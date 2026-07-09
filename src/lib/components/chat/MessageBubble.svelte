@@ -90,8 +90,11 @@
     swipeTriggered = false;
 
     longPressTimer = setTimeout(() => {
-      if (!isSwiping) onLongPress?.(msg);
-    }, 500);
+      if (!isSwiping) {
+        navigator.vibrate?.(50);
+        onLongPress?.(msg);
+      }
+    }, 400);
   }
 
   function handleTouchMove(e: TouchEvent) {
@@ -153,6 +156,15 @@
     const now = Date.now();
     if (now - lastTapTime < 300) onReaction?.(msg, '❤️');
     lastTapTime = now;
+  }
+
+  function handleBubbleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter') handleDoubleTap();
+  }
+
+  function handleImageClick(e: MouseEvent) {
+    e.stopPropagation();
+    onImageTap?.(msg.mu!, msg.c || undefined);
   }
 
   // --- Derived ---
@@ -234,7 +246,7 @@
     onclick={handleDoubleTap}
     role="button"
     tabindex="0"
-    onkeydown={(e) => { if (e.key === 'Enter') handleDoubleTap(); }}
+    onkeydown={handleBubbleKeydown}
   >
     <!-- Reply Preview -->
     {#if msg.rid}
@@ -274,7 +286,7 @@
           alt={msg.c || 'Shared image'}
           class="bbl-img"
           loading="lazy"
-          onclick={(e) => { e.stopPropagation(); onImageTap?.(msg.mu!, msg.c || undefined); }}
+          onclick={handleImageClick}
         />
       </div>
       {#if msg.c}
@@ -311,7 +323,7 @@
     -webkit-user-select: none;
     user-select: none;
     will-change: transform;
-    padding: 1px 0;
+    padding: 8px 0;
     align-items: flex-end;
   }
 
@@ -328,11 +340,13 @@
   }
 
   .msg-grouped {
-    padding-top: 1px;
+    padding-top: 2px;
+    padding-bottom: 2px;
   }
 
   .msg-row:not(.msg-grouped) {
-    padding-top: 6px;
+    padding-top: 8px;
+    padding-bottom: 8px;
   }
 
   /* === AVATAR COLUMN — aligned with bottom of the message stack === */
@@ -362,80 +376,68 @@
     padding-bottom: 2px;
   }
 
-  /* === BUBBLE MATERIALS === */
+  /* === BUBBLE — Discord/Telegram Premium Design === */
   .msg-bubble {
-    padding: 10px 14px 6px 14px;
+    padding: 12px 16px 8px 16px;
     position: relative;
     overflow: hidden;
     transition: transform 120ms cubic-bezier(0.34, 1.56, 0.64, 1),
                 box-shadow 200ms ease;
-    max-width: min(82%, 320px);
+    max-width: min(85%, 340px);
     min-width: fit-content;
+    /* Subtle spring entrance animation (uses bubbleSpring keyframe from app.css) */
+    animation: bubbleSpring 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
   }
 
   .msg-bubble:active {
     transform: scale(0.985);
   }
 
-  /* Sent bubble — emerald */
+  /* Sent bubble — crimson gradient with white text */
   .bbl-sent {
-    background: var(--color-sent);
-    color: var(--color-sent-foreground);
-    border-radius: 16px 16px 4px 16px;
-    box-shadow: 0 1px 3px rgba(5, 150, 105, 0.12);
+    background: linear-gradient(135deg, var(--color-sent) 0%, #991b1b 100%);
+    color: #ffffff;
+    border-radius: 18px 18px 4px 18px;
+    box-shadow:
+      0 2px 12px rgba(153, 27, 27, 0.25),
+      0 0 0 0.5px rgba(153, 27, 27, 0.1);
   }
 
   .bbl-sent.bbl-grouped {
-    border-radius: 16px 16px 4px 16px;
-    box-shadow: 0 1px 2px rgba(5, 150, 105, 0.08);
+    border-radius: 12px 12px 2px 12px;
+    box-shadow:
+      0 1px 8px rgba(153, 27, 27, 0.18),
+      0 0 0 0.5px rgba(153, 27, 27, 0.08);
   }
 
-  /* Sent bubble tail */
-  .bbl-sent::after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    right: -4px;
-    width: 12px;
-    height: 14px;
-    background: var(--color-sent);
-    clip-path: polygon(0 0, 0% 100%, 100% 100%);
-    border-bottom-right-radius: 4px;
-    opacity: 0.9;
-  }
-
-  /* Received bubble — clean solid */
+  /* Received bubble — theme surface with off-white text */
   .bbl-recv {
     background: var(--color-received);
-    color: var(--color-received-foreground);
-    border-radius: 16px 16px 16px 4px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    color: rgba(255, 255, 255, 0.88);
+    border-radius: 18px 18px 18px 4px;
+    box-shadow:
+      0 2px 12px rgba(0, 0, 0, 0.2),
+      0 0 0 0.5px rgba(255, 255, 255, 0.04);
   }
 
   .bbl-recv.bbl-grouped {
-    border-radius: 16px 16px 16px 4px;
-    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.03);
-  }
-
-  /* Received bubble tail */
-  .bbl-recv::after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    left: -4px;
-    width: 12px;
-    height: 14px;
-    background: var(--color-received);
-    clip-path: polygon(100% 0, 0 100%, 100% 100%);
-    border-bottom-left-radius: 4px;
-    opacity: 0.9;
+    border-radius: 12px 12px 12px 2px;
+    box-shadow:
+      0 1px 8px rgba(0, 0, 0, 0.15),
+      0 0 0 0.5px rgba(255, 255, 255, 0.03);
   }
 
   /* Pinned ring highlight */
   .bbl-pinned {
     box-shadow:
       0 0 0 1.5px color-mix(in srgb, var(--color-primary) 40%, transparent),
-      0 1px 3px rgba(5, 150, 105, 0.1) !important;
+      0 2px 12px rgba(153, 27, 27, 0.2) !important;
+  }
+
+  .bbl-sent.bbl-pinned {
+    box-shadow:
+      0 0 0 1.5px color-mix(in srgb, var(--color-primary) 40%, transparent),
+      0 2px 12px rgba(153, 27, 27, 0.25) !important;
   }
 
   /* === EMOJI-ONLY BUBBLE === */
@@ -443,9 +445,7 @@
     background: transparent !important;
     box-shadow: none !important;
     padding: 4px 6px 2px !important;
-  }
-  .bbl-emoji::after {
-    display: none;
+    animation: none;
   }
 
   .bbl-emoji-text {
@@ -514,15 +514,14 @@
     overflow: hidden;
     position: relative;
     z-index: 1;
-    background: rgba(0, 0, 0, 0.06);
   }
 
   .bbl-sent .rply-bar {
-    background: rgba(0, 0, 0, 0.12);
+    background: rgba(0, 0, 0, 0.15);
   }
 
   .bbl-recv .rply-bar {
-    background: rgba(0, 0, 0, 0.04);
+    background: rgba(255, 255, 255, 0.04);
   }
 
   .rply-accent {
@@ -568,10 +567,9 @@
     transition: transform 150ms ease, background 150ms ease;
     position: relative;
     z-index: 1;
-    background: rgba(0, 0, 0, 0.06);
   }
-  .bbl-sent .link-card { background: rgba(0, 0, 0, 0.1); }
-  .bbl-recv .link-card { background: rgba(0, 0, 0, 0.03); }
+  .bbl-sent .link-card { background: rgba(0, 0, 0, 0.12); }
+  .bbl-recv .link-card { background: rgba(255, 255, 255, 0.05); }
   .link-card:active { transform: scale(0.98); }
 
   .link-icon-wrap {
@@ -582,7 +580,7 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    background: rgba(0, 0, 0, 0.06);
+    background: rgba(0, 0, 0, 0.08);
     color: var(--color-primary);
   }
 
@@ -612,7 +610,7 @@
 
   .bbl-time {
     font-size: 10px;
-    opacity: 0.55;
+    opacity: 0.45;
     line-height: 1;
     font-variant-numeric: tabular-nums;
   }
@@ -644,6 +642,6 @@
     pointer-events: none;
     z-index: 5;
     transition: opacity 120ms ease;
-    box-shadow: 0 4px 16px rgba(5, 150, 105, 0.3);
+    box-shadow: 0 4px 16px rgba(153, 27, 27, 0.35);
   }
 </style>

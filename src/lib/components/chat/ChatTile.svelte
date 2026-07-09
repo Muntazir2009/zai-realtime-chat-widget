@@ -174,11 +174,11 @@
     min-height: 20px;
     padding: 0 6px;
     border-radius: 10px;
-    background: linear-gradient(135deg, var(--color-primary), color-mix(in srgb, var(--color-primary) 70%, #047857));
+    background: linear-gradient(135deg, var(--color-primary), color-mix(in srgb, var(--color-primary) 70%, #7f1d1d));
     color: var(--color-primary-foreground);
     font-size: 11px;
     font-weight: 700;
-    box-shadow: 0 1px 4px rgba(5, 150, 105, 0.35);
+    box-shadow: 0 1px 4px rgba(220, 38, 38, 0.35);
     line-height: 1;
   }
 </style>

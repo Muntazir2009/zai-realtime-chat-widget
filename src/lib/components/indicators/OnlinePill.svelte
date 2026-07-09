@@ -11,9 +11,9 @@
   const config = $derived({
     online: {
       bg: 'rgba(16, 185, 129, 0.15)',
-      text: '#059669',
+      text: '#dc2626',
       label: 'Online',
-      darkText: '#34d399',
+      darkText: '#f87171',
     },
     away: {
       bg: 'rgba(245, 158, 11, 0.15)',

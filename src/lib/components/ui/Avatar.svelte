@@ -40,7 +40,7 @@
 
 <div
   class="relative inline-flex items-center justify-center rounded-full overflow-hidden flex-shrink-0 select-none"
-  style="width: {sizeMap}px; height: {sizeMap}px; background: linear-gradient(135deg, #34d399, #059669);"
+  style="width: {sizeMap}px; height: {sizeMap}px; background: linear-gradient(135deg, #f87171, #dc2626);"
   role="img"
   aria-label={username}
 >

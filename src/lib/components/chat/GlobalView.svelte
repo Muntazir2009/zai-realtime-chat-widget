@@ -6,7 +6,7 @@
   <!-- Header -->
   <header class="glass-header safe-top flex items-center justify-between px-4" style="height: 60px; min-height: 60px; z-index: 50;">
     <div class="flex items-center gap-3">
-      <div class="w-8 h-8 rounded-xl flex items-center justify-center" style="background: linear-gradient(135deg, #059669, #10b981);">
+      <div class="w-8 h-8 rounded-xl flex items-center justify-center" style="background: linear-gradient(135deg, #dc2626, #ef4444);">
         <Globe size={16} color="white" />
       </div>
       <div>
@@ -19,7 +19,7 @@
   <!-- Empty State -->
   <div class="flex-1 flex items-center justify-center px-8 animate-fade-in" style="padding-bottom: 80px;">
     <div class="text-center">
-      <div class="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-5" style="background: linear-gradient(135deg, rgba(5, 150, 105, 0.1), rgba(16, 185, 129, 0.05));">
+      <div class="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-5" style="background: linear-gradient(135deg, rgba(220, 38, 38, 0.1), rgba(16, 185, 129, 0.05));">
         <Users size={36} style="color: var(--color-primary); opacity: 0.6;" />
       </div>
       <p class="text-base font-semibold mb-1" style="color: var(--text-primary);">Coming Soon</p>

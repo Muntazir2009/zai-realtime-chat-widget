@@ -241,11 +241,17 @@
       showMenu = false;
     }
   }
+
+  function handleKeyDown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && showMenu) {
+      showMenu = false;
+    }
+  }
 </script>
 
-<svelte:window ontouchstart={handleGlobalTouchStart} />
+<svelte:window ontouchstart={handleGlobalTouchStart} onkeydown={handleKeyDown} />
 
-<div class="conv-shell" style="background-color: var(--bg-page);">
+<div class="conv-shell" style="background: var(--bg-page);">
   <ParticleRain type="heart" trigger={triggerHeartRain} />
   <ParticleRain type="kiss" trigger={triggerKissRain} />
 
@@ -470,9 +476,9 @@
   /* === PREMIUM HEADER === */
   .header-glass {
     background: var(--glass-bg);
-    backdrop-filter: blur(24px) saturate(190%);
-    -webkit-backdrop-filter: blur(24px) saturate(190%);
-    box-shadow: 0 0.5px 0 var(--border-subtle), 0 4px 24px rgba(0,0,0,0.03);
+    backdrop-filter: blur(24px) saturate(200%);
+    -webkit-backdrop-filter: blur(24px) saturate(200%);
+    box-shadow: 0 0.5px 0 var(--border-subtle), 0 4px 24px rgba(0,0,0,0.03), 0 1px 0 rgba(220,38,38,0.06);
     z-index: 50;
     position: relative;
     flex-shrink: 0;
@@ -545,7 +551,7 @@
     width: 11px;
     height: 11px;
     border-radius: 50%;
-    border: 2px solid var(--bg-surface, #fff);
+    border: 2px solid var(--bg-surface, #16161e);
     background: #22c55e;
     box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4);
     animation: dotPulse 2s ease-in-out infinite;
@@ -683,10 +689,11 @@
     padding: 3px 10px;
     border-radius: 99px;
     background: var(--bg-elevated);
+    border: 1px solid rgba(255,255,255,0.04);
     color: var(--text-tertiary);
     font-size: 11px;
     font-weight: 500;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04), inset 0 0.5px 0 rgba(255,255,255,0.6);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
   }
 
   /* === SCROLL FAB === */
@@ -703,8 +710,8 @@
     backdrop-filter: blur(16px) saturate(180%);
     -webkit-backdrop-filter: blur(16px) saturate(180%);
     border: var(--glass-border);
-    box-shadow: 0 4px 20px rgba(0,0,0,0.1), 0 1px 3px rgba(0,0,0,0.06);
-    color: var(--text-secondary);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1), 0 2px 8px rgba(220,38,38,0.15);
+    color: var(--color-primary);
     min-width: 40px;
     min-height: 40px;
     width: 40px;
@@ -738,7 +745,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 2px 6px rgba(5, 150, 105, 0.4);
+    box-shadow: 0 2px 6px rgba(220, 38, 38, 0.4);
     animation: badgePulse 2s ease-in-out infinite;
     line-height: 1;
   }
@@ -786,7 +793,7 @@
     font-weight: 700;
     font-size: 24px;
     color: white;
-    background: linear-gradient(135deg, #34d399, #059669);
+    background: linear-gradient(135deg, #ef4444, #dc2626);
   }
 
   .empty-title {
@@ -913,11 +920,11 @@
     min-width: 180px;
     padding: 5px;
     border-radius: var(--radius-lg, 16px);
-    background: var(--glass-bg);
-    backdrop-filter: blur(24px) saturate(190%);
-    -webkit-backdrop-filter: blur(24px) saturate(190%);
-    border: var(--glass-border);
-    box-shadow: var(--shadow-float, 0 8px 32px rgba(0,0,0,0.12));
+    background: rgba(30, 30, 40, 0.95);
+    backdrop-filter: blur(24px) saturate(200%);
+    -webkit-backdrop-filter: blur(24px) saturate(200%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 1px rgba(0,0,0,0.2);
     z-index: 61;
     animation: scaleIn 200ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
   }

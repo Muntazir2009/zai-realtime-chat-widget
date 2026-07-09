@@ -187,8 +187,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #059669, #10b981);
-    box-shadow: 0 2px 8px rgba(5, 150, 105, 0.25);
+    background: linear-gradient(135deg, #dc2626, #ef4444);
+    box-shadow: 0 2px 8px rgba(220, 38, 38, 0.25);
   }
 
   .cl-title-block {}
@@ -228,7 +228,7 @@
     font-size: 10px;
     font-weight: 700;
     line-height: 1;
-    box-shadow: 0 1px 4px rgba(5, 150, 105, 0.3);
+    box-shadow: 0 1px 4px rgba(220, 38, 38, 0.3);
   }
 
   .cl-new-btn {
@@ -320,8 +320,8 @@
     font-weight: 700;
     font-size: 14px;
     color: white;
-    background: linear-gradient(135deg, #34d399, #059669);
-    box-shadow: 0 2px 6px rgba(5, 150, 105, 0.2);
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    box-shadow: 0 2px 6px rgba(220, 38, 38, 0.2);
   }
 
   .newchat-info { min-width: 0; }

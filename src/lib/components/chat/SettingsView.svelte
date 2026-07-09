@@ -27,7 +27,7 @@
   <!-- Header -->
   <header class="glass-header safe-top flex items-center justify-between px-4" style="height: 60px; min-height: 60px; z-index: 50;">
     <div class="flex items-center gap-3">
-      <div class="w-8 h-8 rounded-xl flex items-center justify-center" style="background: linear-gradient(135deg, #059669, #10b981);">
+      <div class="w-8 h-8 rounded-xl flex items-center justify-center" style="background: linear-gradient(135deg, #dc2626, #ef4444);">
         <Settings size={16} color="white" />
       </div>
       <div>
@@ -45,7 +45,7 @@
       <div class="flex items-center gap-3">
         <div
           class="w-14 h-14 rounded-2xl flex items-center justify-center font-bold text-white text-xl flex-shrink-0 shadow-md"
-          style="background: linear-gradient(135deg, #34d399, #059669);"
+          style="background: linear-gradient(135deg, #ef4444, #dc2626);"
         >
           {authStore.user?.displayName?.charAt(0).toUpperCase() || '?'}
         </div>

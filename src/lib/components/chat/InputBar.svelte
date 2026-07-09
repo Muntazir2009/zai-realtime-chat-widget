@@ -48,7 +48,7 @@
     if (textareaEl) {
       const prevHeight = textareaEl.style.height;
       textareaEl.style.height = 'auto';
-      const newHeight = Math.min(Math.max(textareaEl.scrollHeight, 36), 110);
+      const newHeight = Math.min(Math.max(textareaEl.scrollHeight, 36), 130);
       textareaEl.style.height = newHeight + 'px';
     }
   });
@@ -256,7 +256,7 @@
         class="input-field"
         oninput={handleInput}
         onkeydown={handleKeydown}
-        onfocus={() => { if (!showActions) showActions = true; }}
+        onfocus={() => (showActions = true)}
       ></textarea>
 
       <!-- Send / Mic Toggle -->
@@ -306,14 +306,23 @@
     padding: 4px;
     padding-bottom: max(4px, env(safe-area-inset-bottom, 0px) + 4px);
     border-radius: var(--radius-pill);
-    background: var(--glass-bg);
+    background: rgba(22, 22, 30, 0.92);
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
-    border: var(--glass-border);
+    border: 1px solid rgba(255, 255, 255, 0.06);
     box-shadow:
-      0 -0.5px 0 var(--border-subtle),
-      0 2px 12px rgba(0, 0, 0, 0.04),
-      0 0.5px 2px rgba(0, 0, 0, 0.02);
+      0 -0.5px 0 rgba(255, 255, 255, 0.04),
+      0 2px 12px rgba(0, 0, 0, 0.15),
+      0 0.5px 2px rgba(0, 0, 0, 0.1),
+      0 0 0 0.5px rgba(220, 38, 38, 0.04);
+  }
+
+  .input-shell:focus-within {
+    border-color: rgba(220, 38, 38, 0.2);
+    box-shadow:
+      0 -0.5px 0 rgba(255, 255, 255, 0.04),
+      0 2px 12px rgba(0, 0, 0, 0.15),
+      0 0 5px 1px rgba(220, 38, 38, 0.08);
   }
 
   /* ── Upload Progress ── */
@@ -334,7 +343,7 @@
   .upload-progress-fill {
     height: 100%;
     border-radius: var(--radius-pill);
-    background: linear-gradient(90deg, var(--color-primary), var(--color-accent));
+    background: linear-gradient(90deg, #dc2626, #ef4444);
     transition: width 200ms ease-out;
   }
 
@@ -420,7 +429,7 @@
   .input-field {
     flex: 1;
     min-height: 36px;
-    max-height: 110px;
+    max-height: 130px;
     padding: 7px 12px;
     border: none;
     border-radius: var(--radius-pill);
@@ -464,7 +473,7 @@
     border-radius: 50%;
     background: var(--color-primary);
     color: var(--color-primary-foreground);
-    box-shadow: 0 2px 10px rgba(5, 150, 105, 0.35);
+    box-shadow: 0 2px 10px rgba(220, 38, 38, 0.35);
     cursor: pointer;
     opacity: 0;
     transform: scale(0.7) rotate(-30deg);
@@ -484,7 +493,7 @@
 
   .send-btn:active {
     transform: scale(0.88) !important;
-    box-shadow: 0 1px 4px rgba(5, 150, 105, 0.2);
+    box-shadow: 0 1px 4px rgba(220, 38, 38, 0.2);
   }
 
   .send-icon {
