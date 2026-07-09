@@ -5,6 +5,15 @@
 // ============================================================
 
 import { browser } from '$app/environment';
+import {
+  PUBLIC_FIREBASE_API_KEY,
+  PUBLIC_FIREBASE_AUTH_DOMAIN,
+  PUBLIC_FIREBASE_DATABASE_URL,
+  PUBLIC_FIREBASE_PROJECT_ID,
+  PUBLIC_FIREBASE_STORAGE_BUCKET,
+  PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  PUBLIC_FIREBASE_APP_ID,
+} from '$env/static/public';
 import type { FirebaseApp } from 'firebase/app';
 import type { Auth } from 'firebase/auth';
 import type { Database } from 'firebase/database';
@@ -25,13 +34,13 @@ async function initFirebase() {
   const { getStorage } = await import('firebase/storage');
 
   const firebaseConfig = {
-    apiKey: import.meta.env.PUBLIC_FIREBASE_API_KEY,
-    authDomain: import.meta.env.PUBLIC_FIREBASE_AUTH_DOMAIN,
-    databaseURL: import.meta.env.PUBLIC_FIREBASE_DATABASE_URL,
-    projectId: import.meta.env.PUBLIC_FIREBASE_PROJECT_ID,
-    storageBucket: import.meta.env.PUBLIC_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: import.meta.env.PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-    appId: import.meta.env.PUBLIC_FIREBASE_APP_ID,
+    apiKey: PUBLIC_FIREBASE_API_KEY,
+    authDomain: PUBLIC_FIREBASE_AUTH_DOMAIN,
+    databaseURL: PUBLIC_FIREBASE_DATABASE_URL,
+    projectId: PUBLIC_FIREBASE_PROJECT_ID,
+    storageBucket: PUBLIC_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+    appId: PUBLIC_FIREBASE_APP_ID,
   };
 
   if (getApps().length === 0) {
