@@ -19,48 +19,40 @@
 
   type PickerPanel = 'none' | 'sticker' | 'gif' | 'emoji';
 
-  // ── Core state ──
   let message = $state('');
   let isRecording = $state(false);
+  let isTrayOpen = $state(false);
+  let isEmojiOpen = $state(false);
   let isUploading = $state(false);
   let uploadProgress = $state(0);
   let uploadLabel = $state('Uploading...');
   let textareaEl: HTMLTextAreaElement | null = $state(null);
   let typingTimer: ReturnType<typeof setTimeout> | null = null;
   let fileInputEl: HTMLInputElement | null = $state(null);
-  let activePicker = $state<PickerPanel>('none');
 
-  // ── Derived ──
   let hasText = $derived(message.trim().length > 0);
+  let activePicker = $derived.by(() => {
+    if (isEmojiOpen) return 'emoji' as const;
+    if (isTrayOpen) return 'sticker' as const;
+    return 'none' as const;
+  });
 
-  // ── Auto-resize textarea ──
+  // ── Auto-resize ──
   $effect(() => {
     if (textareaEl) {
       textareaEl.style.height = 'auto';
-      const newHeight = Math.min(textareaEl.scrollHeight, 128);
-      textareaEl.style.height = newHeight + 'px';
+      textareaEl.style.height = Math.min(textareaEl.scrollHeight, 128) + 'px';
     }
   });
 
-  // ── Stop typing when input is cleared ──
+  // ── Stop typing when cleared ──
   $effect(() => {
     if (message.trim().length === 0 && typingTimer) {
       clearTimeout(typingTimer);
       typingTimer = null;
-      if (chatStore.activeChatId) {
-        presenceManager.stopTyping(chatStore.activeChatId);
-      }
+      if (chatStore.activeChatId) presenceManager.stopTyping(chatStore.activeChatId);
     }
   });
-
-  // ── Input handler ──
-  function handleInput(e: Event) {
-    message = (e.target as HTMLTextAreaElement).value;
-    if (message.length > 0 && activePicker !== 'none') {
-      activePicker = 'none';
-    }
-    emitTyping();
-  }
 
   // ── Typing presence ──
   function emitTyping() {
@@ -68,32 +60,25 @@
     presenceManager.setTyping(chatStore.activeChatId);
     if (typingTimer) clearTimeout(typingTimer);
     typingTimer = setTimeout(() => {
-      if (chatStore.activeChatId) {
-        presenceManager.stopTyping(chatStore.activeChatId);
-      }
+      if (chatStore.activeChatId) presenceManager.stopTyping(chatStore.activeChatId);
     }, 2000);
   }
 
   function clearTyping() {
     if (typingTimer) clearTimeout(typingTimer);
     typingTimer = null;
-    if (chatStore.activeChatId) {
-      presenceManager.stopTyping(chatStore.activeChatId);
-    }
+    if (chatStore.activeChatId) presenceManager.stopTyping(chatStore.activeChatId);
   }
 
-  // ── Send message (dispatches through chat store via onSend prop) ──
+  // ── Send ──
   function handleSend() {
     if (!hasText) return;
     onSend(message.trim());
     message = '';
-    if (textareaEl) {
-      textareaEl.style.height = 'auto';
-    }
+    if (textareaEl) textareaEl.style.height = 'auto';
     clearTyping();
   }
 
-  // ── Keyboard: Enter to send, Shift+Enter for newline ──
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -101,12 +86,7 @@
     }
   }
 
-  // ── Picker toggle ──
-  function togglePicker(panel: PickerPanel) {
-    activePicker = activePicker === panel ? 'none' : panel;
-  }
-
-  // ── Emoji: insert at cursor position ──
+  // ── Emoji ──
   function handleEmojiSelect(emoji: string) {
     if (textareaEl) {
       const start = textareaEl.selectionStart;
@@ -123,20 +103,20 @@
     emitTyping();
   }
 
-  // ── Sticker: dispatch through onStickerSelect prop ──
+  // ── Sticker ──
   function handleSticker(sticker: string) {
-    activePicker = 'none';
+    isTrayOpen = false;
     onStickerSelect?.(sticker);
   }
 
-  // ── GIF: dispatch through onGifSelect prop ──
+  // ── GIF ──
   function handleGif(gifUrl: string) {
-    activePicker = 'none';
+    isTrayOpen = false;
     onGifSelect?.(gifUrl);
   }
 
-  // ── Voice recording ──
-  function handleVoiceToggle() {
+  // ── Voice ──
+  function handleVoiceRecord() {
     isRecording = true;
   }
 
@@ -147,18 +127,13 @@
   async function sendVoice(blob: Blob, duration: number) {
     isRecording = false;
     if (!chatStore.activeChatId || duration < 1) return;
-
     const file = new File([blob], `voice-${Date.now()}.webm`, { type: 'audio/webm' });
-
     isUploading = true;
     uploadProgress = 0;
     uploadLabel = 'Sending voice...';
-
     try {
       const presign = await requestPresignedUpload(chatStore.activeChatId, file, 'voice');
-      await uploadToR2(presign.uploadUrl, file, (pct) => {
-        uploadProgress = pct;
-      });
+      await uploadToR2(presign.uploadUrl, file, (pct) => { uploadProgress = pct; });
       await chatStore.sendVoiceMessage(chatStore.activeChatId, presign.publicUrl, duration);
     } catch (err) {
       console.error('Voice upload failed:', err);
@@ -169,8 +144,8 @@
     }
   }
 
-  // ── Gallery / media upload (R2 via presigned URL) ──
-  function handleAttach() {
+  // ── Gallery upload (R2) ──
+  function handleMediaUpload() {
     fileInputEl?.click();
   }
 
@@ -178,26 +153,18 @@
     const input = e.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file || !chatStore.activeChatId) return;
-
     input.value = '';
-
     if (!file.type.startsWith('image/')) {
       toastStore.info('Only images are supported');
       return;
     }
-
     isUploading = true;
     uploadProgress = 0;
     uploadLabel = 'Sending image...';
-
     try {
       const presign = await requestPresignedUpload(chatStore.activeChatId, file, 'images');
-      await uploadToR2(presign.uploadUrl, file, (pct) => {
-        uploadProgress = pct;
-      });
-      if (onImageSend) {
-        onImageSend(presign.publicUrl);
-      }
+      await uploadToR2(presign.uploadUrl, file, (pct) => { uploadProgress = pct; });
+      if (onImageSend) onImageSend(presign.publicUrl);
     } catch (err) {
       console.error('Upload failed:', err);
       toastStore.error('Failed to upload image');
@@ -207,69 +174,55 @@
     }
   }
 
-  // ── Inline emoji picker data ──
+  // ── Emoji data ──
   const emojiCategories = [
     { label: '😀', emojis: ['😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃','😉','😊','😇','🥰','😍','🤩','😘','😗','😚','😙','🥲','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫','🤔','😐','😑','😶','😏','😒','🙄','😬','😌','😔','😪','🤤','😴','🥵','🥶','🥴','😵','🤯','🤠','🥳','😎','🤓','🧐','😤','😠','😡','🤬','😈','👿','💀','☠️','💩','🤡','👹','👺','👻','👽','🤖'] },
     { label: '👋', emojis: ['👋','🤚','✋','🖐️','👌','🤌','🤏','✌️','🤞','🫰','🤟','🤘','🤙','👈','👉','👆','👇','☝️','🫵','👍','👎','✊','👊','🤛','🤜','👏','🙌','🫶','👐','🤲','🤝','🙏','💪','🦾','🦿','🦵','🦶'] },
-    { label: '❤️', emojis: ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❤️‍🔥','💕','💗','💖','💝','💘','💟','♥️','❣️','💞','💓','💓','💗','💞'] },
+    { label: '❤️', emojis: ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❤️‍🔥','💕','💗','💖','💝','💘','💟','♥️','❣️','💞','💓','💗','💞'] },
     { label: '🎉', emojis: ['🎉','🎊','🎁','🏆','⭐','🌟','💫','✨','⚡','🔥','💥','💢','💦','💤','🌈','☀️','🌙','💎','🎵','🎶','☕','🍕','🎮','📱','💡','🚀','💰','💵','💎','👑'] },
     { label: '🐱', emojis: ['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐵','🐔','🐧','🦅','🦆','🦉','🐴','🦄','🐝','🦋','🐌','🐞','🐢','🐍','🦎','🦖'] },
   ];
-
   let activeEmojiCategory = $state(0);
   const currentEmojis = $derived(emojiCategories[activeEmojiCategory]?.emojis ?? []);
 </script>
 
-<!-- ============================================================ -->
-<!-- Voice Recorder Overlay                                       -->
-<!-- ============================================================ -->
 {#if isRecording}
   <VoiceRecorder onSend={sendVoice} onCancel={cancelRecording} />
 {:else}
-  <!-- ============================================================ -->
-  <!-- Glass Input Shell                                           -->
-  <!-- ============================================================ -->
-  <div class="input-shell safe-bottom">
+  <div class="safe-bottom" style="margin: 0 6px 6px;">
 
-    <!-- Upload Progress Bar -->
+    <!-- Upload progress -->
     {#if isUploading}
-      <div class="upload-progress-wrap">
-        <div class="upload-progress-track">
-          <div class="upload-progress-fill" style="width: {uploadProgress}%;"></div>
+      <div class="flex items-center gap-1.5 px-3 pb-1.5">
+        <Loader2 size={12} class="animate-spin text-red-500" />
+        <div class="flex-1 h-[3px] rounded-full overflow-hidden" style="background: rgba(255,255,255,0.08);">
+          <div class="h-full rounded-full bg-red-500 transition-all duration-200" style="width: {uploadProgress}%;"></div>
         </div>
-        <div class="upload-progress-info">
-          <Loader2 size={13} class="upload-spinner" />
-          <span class="upload-label">{uploadLabel}</span>
-          <span class="upload-pct">{Math.round(uploadProgress)}%</span>
-        </div>
+        <span class="text-[11px] font-semibold tabular-nums" style="color: var(--text-tertiary);">{Math.round(uploadProgress)}%</span>
       </div>
     {/if}
 
-    <!-- Picker Panels (slide up above input row) -->
+    <!-- Picker panels -->
     {#if activePicker === 'sticker'}
       <StickerPicker onStickerSelect={handleSticker} />
-    {:else if activePicker === 'gif'}
-      <GIFPicker onGifSelect={handleGif} />
     {:else if activePicker === 'emoji'}
-      <div class="emoji-picker-panel animate-slide-up">
-        <div class="emoji-category-tabs">
+      <div class="animate-slide-up" style="background: var(--bg-surface); border-top: 1px solid rgba(255,255,255,0.06);">
+        <div class="flex items-center gap-0.5 px-2 pt-2 pb-1 overflow-x-auto" style="scrollbar-width: none;">
           {#each emojiCategories as cat, i}
             <button
-              class="emoji-cat-btn"
-              class:emoji-cat-active={activeEmojiCategory === i}
+              class="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-lg text-lg transition-all duration-150 active:scale-90"
+              style="background: {activeEmojiCategory === i ? 'var(--input-bg)' : 'transparent'}; opacity: {activeEmojiCategory === i ? '1' : '0.45'};"
               onclick={() => (activeEmojiCategory = i)}
-              aria-label="{cat.label} emoji category"
             >
               {cat.label}
             </button>
           {/each}
         </div>
-        <div class="emoji-grid">
+        <div class="grid grid-cols-8 gap-0 px-1 pb-2 pt-1" style="max-height: 180px; overflow-y: auto;">
           {#each currentEmojis as emoji}
             <button
-              class="emoji-item"
+              class="w-full aspect-square flex items-center justify-center text-xl rounded-lg transition-all duration-150 active:scale-90"
               onclick={() => handleEmojiSelect(emoji)}
-              aria-label="Insert {emoji}"
             >
               {emoji}
             </button>
@@ -278,7 +231,7 @@
       </div>
     {/if}
 
-    <!-- Hidden file input for gallery -->
+    <!-- Hidden file input -->
     <input
       bind:this={fileInputEl}
       type="file"
@@ -287,411 +240,65 @@
       onchange={handleFileSelect}
     />
 
-    <!-- ============================================================ -->
-    <!-- Input Row: [+] [textarea] [GIF] [😊] [Send/Mic]            -->
-    <!-- ============================================================ -->
-    <div class="input-row">
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- Input Row — exact MessageInput.svelte visual            -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <div class="flex items-end gap-1.5 bg-[#111114]/90 backdrop-blur-md
+                border border-white/[0.06] rounded-[1.6rem] px-2 py-1.5
+                transition-all duration-200">
 
-      <!-- Tray toggle — opens sticker/media picker -->
-      <button
-        class="action-btn"
-        class:action-active={activePicker === 'sticker'}
-        onclick={() => togglePicker('sticker')}
-        aria-label="Stickers & media"
-      >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="12" y1="5" x2="12" y2="19"></line>
-          <line x1="5" y1="12" x2="19" y2="12"></line>
-        </svg>
+      <button onclick={handleMediaUpload} aria-label="Add media"
+        class="w-11 h-11 rounded-full active:scale-95 transition-all duration-200
+               flex items-center justify-center text-xl"
+        style="color: var(--text-tertiary);">
+        +
       </button>
 
-      <!-- Auto-growing textarea -->
       <textarea
         bind:this={textareaEl}
-        value={message}
-        oninput={handleInput}
+        bind:value={message}
+        oninput={emitTyping}
         onkeydown={handleKeydown}
         placeholder="Message..."
-        rows={1}
-        class="input-field"
+        rows="1"
+        class="flex-1 resize-none bg-transparent outline-none max-h-32
+               text-[15px] leading-snug py-2 px-1"
+        style="color: var(--text-primary);"
       ></textarea>
 
-      <!-- GIF button -->
-      <button
-        class="action-btn"
-        class:action-active={activePicker === 'gif'}
-        onclick={() => togglePicker('gif')}
-        aria-label="Send GIF"
-      >
-        <span class="gif-label">GIF</span>
+      <button onclick={() => { isTrayOpen = !isTrayOpen; isEmojiOpen = false; }}
+        class="active:scale-95 transition-all duration-200
+               px-1.5 h-11 flex items-center justify-center rounded-full
+               text-[11px] font-bold tracking-wide"
+        style="color: {isTrayOpen ? 'var(--color-primary)' : 'var(--text-tertiary)'};">
+        GIF
       </button>
 
-      <!-- Emoji button -->
-      <button
-        class="action-btn"
-        class:action-active={activePicker === 'emoji'}
-        onclick={() => togglePicker('emoji')}
-        aria-label="Emoji picker"
-      >
-        <span class="emoji-trigger">😊</span>
+      <button onclick={() => { isEmojiOpen = !isEmojiOpen; isTrayOpen = false; }}
+        class="active:scale-95 transition-all duration-200
+               w-11 h-11 flex items-center justify-center rounded-full text-lg"
+        style="color: {isEmojiOpen ? 'var(--color-primary)' : 'var(--text-tertiary)'};">
+        😊
       </button>
 
-      <!-- Send / Mic toggle -->
       {#if hasText}
-        <button
-          class="send-btn send-visible"
-          onclick={handleSend}
-          aria-label="Send message"
-        >
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            class="send-icon"
-          >
-            <line x1="12" y1="19" x2="12" y2="5"></line>
-            <polyline points="5 12 12 5 19 12"></polyline>
-          </svg>
+        <button onclick={handleSend}
+          class="bg-red-600 rounded-full w-11 h-11 flex items-center justify-center
+                 text-white active:scale-95 transition-all duration-200
+                 shadow-[0_2px_10px_rgba(220,38,38,0.35)]">
+          ➤
         </button>
       {:else}
         <button
-          class="mic-btn"
-          onclick={handleVoiceToggle}
-          aria-label="Record voice"
-        >
-          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
-            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-            <line x1="12" x2="12" y1="19" y2="22"></line>
-          </svg>
+          onclick={handleVoiceRecord}
+          class:animate-pulse={isRecording}
+          class="w-11 h-11 rounded-full active:scale-95 transition-all duration-200
+                 flex items-center justify-center text-lg"
+          style="color: var(--text-tertiary);">
+          🎤
         </button>
       {/if}
 
     </div>
   </div>
 {/if}
-
-<style>
-  /* ── Input Shell (Discord/Telegram glass pill) ── */
-  .input-shell {
-    flex-shrink: 0;
-    margin: 0 6px 6px;
-    padding: 5px 6px;
-    padding-bottom: max(5px, env(safe-area-inset-bottom, 0px) + 4px);
-    border-radius: 1.6rem;
-    background: rgba(17, 17, 20, 0.90);
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    box-shadow:
-      0 -0.5px 0 rgba(255, 255, 255, 0.04),
-      0 2px 12px rgba(0, 0, 0, 0.15),
-      0 0.5px 2px rgba(0, 0, 0, 0.1);
-    transition: border-color 200ms ease, box-shadow 200ms ease;
-  }
-
-  .input-shell:focus-within {
-    border-color: rgba(255, 255, 255, 0.12);
-    box-shadow:
-      0 -0.5px 0 rgba(255, 255, 255, 0.06),
-      0 2px 16px rgba(0, 0, 0, 0.2),
-      0 0.5px 2px rgba(0, 0, 0, 0.1);
-  }
-
-  /* ── Upload Progress ── */
-  .upload-progress-wrap {
-    position: relative;
-    padding: 0 8px;
-    padding-top: 4px;
-  }
-
-  .upload-progress-track {
-    width: 100%;
-    height: 2.5px;
-    border-radius: 9999px;
-    background: var(--input-bg, #1e1e28);
-    overflow: hidden;
-  }
-
-  .upload-progress-fill {
-    height: 100%;
-    border-radius: 9999px;
-    background: linear-gradient(90deg, var(--color-primary, #dc2626), #ef4444);
-    transition: width 200ms ease-out;
-  }
-
-  .upload-progress-info {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 2px 2px;
-  }
-
-  .upload-spinner {
-    flex-shrink: 0;
-    color: var(--color-primary, #dc2626);
-    animation: spin 0.8s linear infinite;
-  }
-
-  .upload-label {
-    flex: 1;
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--text-secondary, #a1a1aa);
-  }
-
-  .upload-pct {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--color-primary, #dc2626);
-    font-variant-numeric: tabular-nums;
-  }
-
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
-
-  /* ── Input Row ── */
-  .input-row {
-    display: flex;
-    align-items: flex-end;
-    gap: 2px;
-    padding: 1px 2px 1px 2px;
-  }
-
-  /* ── Action Buttons (circular, always visible) ── */
-  .action-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 38px;
-    height: 38px;
-    min-width: 38px;
-    min-height: 38px;
-    border: none;
-    border-radius: 50%;
-    background: transparent;
-    color: var(--text-tertiary, #71717a);
-    cursor: pointer;
-    transition:
-      color 200ms ease,
-      transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1),
-      background 150ms ease;
-    -webkit-tap-highlight-color: transparent;
-    flex-shrink: 0;
-  }
-
-  .action-btn:active {
-    transform: scale(0.85);
-    background: var(--input-bg, #1e1e28);
-  }
-
-  .action-btn.action-active {
-    color: var(--color-primary, #dc2626);
-  }
-
-  /* GIF label styling */
-  .gif-label {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-  }
-
-  /* Emoji trigger */
-  .emoji-trigger {
-    font-size: 18px;
-    line-height: 1;
-  }
-
-  /* ── Textarea ── */
-  .input-field {
-    flex: 1;
-    min-height: 38px;
-    max-height: 128px;
-    padding: 8px 10px;
-    border: none;
-    border-radius: 1.2rem;
-    background: transparent;
-    color: var(--text-primary, #f1f1f4);
-    font-size: 15px;
-    line-height: 1.4;
-    outline: none;
-    resize: none;
-    font-family: var(--font-sans, inherit);
-    transition: height 120ms ease-out;
-    -webkit-user-select: text;
-    user-select: text;
-  }
-
-  .input-field::placeholder {
-    color: var(--text-tertiary, #71717a);
-    font-size: 15px;
-  }
-
-  /* ── Send Button ── */
-  .send-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 38px;
-    height: 38px;
-    min-width: 38px;
-    min-height: 38px;
-    border: none;
-    border-radius: 50%;
-    background: var(--color-primary, #dc2626);
-    color: var(--color-primary-foreground, #ffffff);
-    box-shadow: 0 2px 10px rgba(220, 38, 38, 0.35);
-    cursor: pointer;
-    flex-shrink: 0;
-    opacity: 0;
-    transform: scale(0.7) rotate(-30deg);
-    pointer-events: none;
-    transition:
-      transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1),
-      opacity 180ms ease,
-      box-shadow 200ms ease;
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  .send-btn.send-visible {
-    opacity: 1;
-    transform: scale(1) rotate(0deg);
-    pointer-events: auto;
-  }
-
-  .send-btn:active {
-    transform: scale(0.88) !important;
-    box-shadow: 0 1px 4px rgba(220, 38, 38, 0.2);
-  }
-
-  .send-icon {
-    transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
-  }
-
-  .send-btn.send-visible .send-icon {
-    transform: rotate(-45deg);
-  }
-
-  /* ── Mic Button ── */
-  .mic-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 38px;
-    height: 38px;
-    min-width: 38px;
-    min-height: 38px;
-    border: none;
-    border-radius: 50%;
-    background: transparent;
-    color: var(--text-tertiary, #71717a);
-    cursor: pointer;
-    flex-shrink: 0;
-    transition:
-      color 200ms ease,
-      transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  .mic-btn:active {
-    transform: scale(0.85);
-  }
-
-  /* ── Inline Emoji Picker Panel ── */
-  .emoji-picker-panel {
-    padding: 6px 8px 4px;
-    border-bottom: 0.5px solid rgba(255, 255, 255, 0.06);
-  }
-
-  .emoji-category-tabs {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    padding-bottom: 6px;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-
-  .emoji-category-tabs::-webkit-scrollbar {
-    display: none;
-  }
-
-  .emoji-cat-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 38px;
-    min-height: 34px;
-    padding: 0 4px;
-    border: none;
-    border-radius: 10px;
-    background: transparent;
-    font-size: 18px;
-    cursor: pointer;
-    opacity: 0.45;
-    transition:
-      opacity 200ms ease,
-      transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1),
-      background 150ms ease;
-    -webkit-tap-highlight-color: transparent;
-    flex-shrink: 0;
-  }
-
-  .emoji-cat-btn.emoji-cat-active {
-    opacity: 1;
-    background: var(--input-bg, #1e1e28);
-  }
-
-  .emoji-cat-btn:active {
-    transform: scale(0.88);
-  }
-
-  .emoji-grid {
-    display: grid;
-    grid-template-columns: repeat(8, 1fr);
-    gap: 0;
-    max-height: 180px;
-    overflow-y: auto;
-    padding-bottom: 2px;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
-  }
-
-  .emoji-grid::-webkit-scrollbar {
-    width: 3px;
-  }
-
-  .emoji-grid::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 3px;
-  }
-
-  .emoji-item {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 40px;
-    min-height: 40px;
-    border: none;
-    border-radius: 10px;
-    background: transparent;
-    font-size: 22px;
-    cursor: pointer;
-    transition:
-      transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1),
-      background 150ms ease;
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  .emoji-item:active {
-    transform: scale(0.85);
-    background: var(--input-bg, #1e1e28);
-  }
-</style>
