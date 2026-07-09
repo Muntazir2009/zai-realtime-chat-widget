@@ -34,6 +34,8 @@
     if (lm.startsWith('📷')) return 'Photo';
     return lm;
   }
+
+  const hasPhotoPreview = $derived(chatMeta?.lm?.startsWith('📷') ?? false);
 </script>
 
 <button
@@ -60,7 +62,7 @@
       <span class="tile-time">{chatMeta?.ts ? formatTime(chatMeta.ts) : ''}</span>
     </div>
     <div class="tile-bottom">
-      <p class="tile-preview">
+        {#if hasPhotoPreview}
         {#if chatMeta?.lm?.startsWith('📷')
           <Camera size={13} class="tile-preview-icon" />
         {/if}
