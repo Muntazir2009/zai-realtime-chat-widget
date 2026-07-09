@@ -36,14 +36,25 @@ let cachedAccessToken: { token: string; expiresAt: number } | null = null;
 // ---- PEM → DER conversion ----
 
 function pemToDer(pem: string): ArrayBuffer {
-  const b64 = pem
-    .replace(/-----BEGIN PRIVATE KEY-----/, '')
-    .replace(/-----END PRIVATE KEY-----/, '')
-    .replace(/-----BEGIN RSA PRIVATE KEY-----/, '')
-    .replace(/-----END RSA PRIVATE KEY-----/, '')
-    .replace(/\s/g, '');
+  // Extract only lines that are valid base64 (alphanumeric, +, /, =).
+  // Robust against redacted/mangled PEM headers.
+  const lines = pem.split('\n');
+  const b64 = lines
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0 && /^[A-Za-z0-9+/=]+$/.test(l))
+    .join('');
 
-  const binary = atob(b64);
+  if (b64.length === 0) {
+    throw new Error('pemToDer: no valid base64 body found in PEM string');
+  }
+
+  let binary: string;
+  try {
+    binary = atob(b64);
+  } catch {
+    throw new Error(`pemToDer: base64 decode failed (bodyLen=${b64.length})`);
+  }
+
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) {
     bytes[i] = binary.charCodeAt(i);
@@ -129,6 +140,9 @@ export async function createCustomToken(
   uid: string,
   claims?: Record<string, unknown>,
 ): Promise<string> {
+  console.log(`[createCustomToken] uid=${uid}, project=${env.FIREBASE_PROJECT_ID}, email=${env.FIREBASE_CLIENT_EMAIL}`);
+  console.log(`[createCustomToken] key present=${!!env.FIREBASE_PRIVATE_KEY}, keyLen=${env.FIREBASE_PRIVATE_KEY.length}`);
+
   const now = Math.floor(Date.now() / 1000);
 
   const payload: Record<string, unknown> = {
@@ -141,7 +155,14 @@ export async function createCustomToken(
     claims: claims ?? {},
   };
 
-  return signRsaJwt(payload, env.FIREBASE_PRIVATE_KEY);
+  try {
+    const token = await signRsaJwt(payload, env.FIREBASE_PRIVATE_KEY);
+    console.log(`[createCustomToken] OK tokenLen=${token.length}`);
+    return token;
+  } catch (err) {
+    console.error('[createCustomToken] FAILED:', err);
+    throw err;
+  }
 }
 
 // ====================================================================
@@ -157,40 +178,49 @@ export async function createCustomToken(
 async function getAccessToken(env: EnvVars): Promise<string> {
   // Return cached token if still valid (with 60s buffer)
   if (cachedAccessToken && Date.now() < cachedAccessToken.expiresAt - 60_000) {
+    console.log('[getAccessToken] using cached token');
     return cachedAccessToken.token;
   }
 
+  console.log(`[getAccessToken] requesting new token for ${env.FIREBASE_CLIENT_EMAIL}`);
   const now = Math.floor(Date.now() / 1000);
-  const assertion = await signRsaJwt(
-    {
-      iss: env.FIREBASE_CLIENT_EMAIL,
-      scope: 'https://www.googleapis.com/auth/firebase.database',
-      aud: 'https://oauth2.googleapis.com/token',
-      iat: now,
-      exp: now + 3600,
-      sub: env.FIREBASE_CLIENT_EMAIL,
-    },
-    env.FIREBASE_PRIVATE_KEY,
-  );
 
-  const res = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${assertion}`,
-  });
+  try {
+    const assertion = await signRsaJwt(
+      {
+        iss: env.FIREBASE_CLIENT_EMAIL,
+        scope: 'https://www.googleapis.com/auth/firebase.database',
+        aud: 'https://oauth2.googleapis.com/token',
+        iat: now,
+        exp: now + 3600,
+        sub: env.FIREBASE_CLIENT_EMAIL,
+      },
+      env.FIREBASE_PRIVATE_KEY,
+    );
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Failed to get access token: ${res.status} ${text}`);
+    const res = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${assertion}`,
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      console.error(`[getAccessToken] HTTP ${res.status}: ${text.slice(0, 300)}`);
+      throw new Error(`OAuth token request failed: ${res.status}`);
+    }
+
+    const data = (await res.json()) as { access_token: string; expires_in: number };
+    cachedAccessToken = {
+      token: data.access_token,
+      expiresAt: Date.now() + data.expires_in * 1000,
+    };
+    console.log(`[getAccessToken] OK, expires in ${data.expires_in}s`);
+    return cachedAccessToken.token;
+  } catch (err) {
+    console.error('[getAccessToken] FAILED:', err);
+    throw err;
   }
-
-  const data = (await res.json()) as { access_token: string; expires_in: number };
-  cachedAccessToken = {
-    token: data.access_token,
-    expiresAt: Date.now() + data.expires_in * 1000,
-  };
-
-  return cachedAccessToken.token;
 }
 
 // ====================================================================
