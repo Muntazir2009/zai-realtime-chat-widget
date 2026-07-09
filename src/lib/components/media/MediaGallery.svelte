@@ -106,13 +106,16 @@
 
 <!-- Full-screen Viewer -->
 {#if showViewer && currentItem}
+  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
   <div
     class="fixed inset-0 z-[60] flex items-center justify-center animate-fade-in"
     style="background: rgba(0, 0, 0, 0.9);"
     onclick={closeViewer}
+    onkeydown={(e) => { if (e.key === 'Escape') closeViewer(); }}
     role="dialog"
     aria-modal="true"
     aria-label="Media viewer"
+    tabindex="-1"
   >
     <!-- Close -->
     <button

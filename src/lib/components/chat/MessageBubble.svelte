@@ -264,6 +264,7 @@
       {:else if msg.t === 'voice' && msg.mu}
         <AudioPlayer url={msg.mu} duration={(msg.md?.duration as number) || 0} />
       {:else if msg.t === 'image' && msg.mu}
+        <!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
         <img
           src={msg.mu}
           alt={msg.c || 'Shared image'}

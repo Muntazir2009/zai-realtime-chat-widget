@@ -2,7 +2,7 @@
 // Integrates with Web Workers for image encoding and blurhash generation
 
 import type { UploadTask } from '$lib/types/index.js';
-import { requestPresignedUpload, uploadToR2, confirmUpload } from '$lib/firebase/storage.js';
+import { requestPresignedUpload, uploadToR2 } from '$lib/firebase/storage.js';
 import { generateIdempotencyKey } from '$lib/utils/idempotency.js';
 
 class MediaUploadManager {

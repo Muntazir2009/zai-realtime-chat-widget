@@ -45,9 +45,9 @@ self.onmessage = async (e: MessageEvent) => {
     self.postMessage({
       blob: webpBlob,
       thumbnail: thumbBlob,
-      width: bitmap.width,  // note: bitmap is closed, but we captured dimensions
+      width: bitmap.width,
       height: bitmap.height,
-    }, [webpBlob, thumbBlob]);
+    }, { transfer: [webpBlob, thumbBlob] } as any);
   } catch (err) {
     self.postMessage({
       error: err instanceof Error ? err.message : 'Encoding failed',

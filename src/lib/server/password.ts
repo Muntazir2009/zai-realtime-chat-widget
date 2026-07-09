@@ -48,7 +48,7 @@ async function deriveKey(password: string, salt: Uint8Array): Promise<ArrayBuffe
   return crypto.subtle.deriveBits(
     {
       name: 'PBKDF2',
-      salt,
+      salt: new Uint8Array(salt) as unknown as BufferSource,
       iterations: ITERATIONS,
       hash: 'SHA-256',
     },
@@ -64,7 +64,7 @@ async function deriveKey(password: string, salt: Uint8Array): Promise<ArrayBuffe
 export async function hashPassword(password: string): Promise<string> {
   const salt = generateSalt();
   const hash = await deriveKey(password, salt);
-  return `pbkdf2_sha256$${ITERATIONS}$${toBase64(salt.buffer)}$${toBase64(hash)}`;
+  return `pbkdf2_sha256$${ITERATIONS}$${toBase64(new Uint8Array(salt).buffer as ArrayBuffer)}$${toBase64(hash as ArrayBuffer)}`;
 }
 
 /**
@@ -100,7 +100,7 @@ export async function verifyPassword(password: string, storedHash: string): Prom
   const derived = await crypto.subtle.deriveBits(
     {
       name: 'PBKDF2',
-      salt,
+      salt: new Uint8Array(salt) as unknown as BufferSource,
       iterations,
       hash: 'SHA-256',
     },

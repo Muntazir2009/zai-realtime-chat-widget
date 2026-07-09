@@ -7,9 +7,10 @@
 
   let { status }: Props = $props();
 
-  // Track previous status for transition animation
-  let prevStatus = $state(status);
+  // svelte-ignore state_referenced_locally
   let animKey = $state(0);
+  // svelte-ignore state_referenced_locally
+  let prevStatus = $state(status);
 
   $effect(() => {
     if (status !== prevStatus) {
@@ -30,29 +31,30 @@
   role="status"
   aria-label={status}
   aria-live="polite"
-  key={animKey}
 >
-  {#if status === 'sending'}
-    <Loader2 size={14} class="animate-spin" style="color: var(--text-tertiary);" />
-  {:else if status === 'sent'}
-    <span class="check-single" style="color: var(--text-tertiary);">
-      <Check size={14} stroke-width={2.5} />
-    </span>
-  {:else if status === 'delivered'}
-    <span class="check-double" style="color: var(--text-tertiary);">
-      <svg width="16" height="14" viewBox="0 0 16 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="1,6.5 4,10 7.5,4" />
-        <polyline points="7,6.5 10,10 13.5,4" />
-      </svg>
-    </span>
-  {:else if status === 'read'}
-    <span class="check-double check-read">
-      <svg width="16" height="14" viewBox="0 0 16 14" fill="none" stroke="var(--color-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="1,6.5 4,10 7.5,4" />
-        <polyline points="7,6.5 10,10 13.5,4" />
-      </svg>
-    </span>
-  {/if}
+  {#key animKey}
+    {#if status === 'sending'}
+      <Loader2 size={14} class="animate-spin" style="color: var(--text-tertiary);" />
+    {:else if status === 'sent'}
+      <span class="check-single" style="color: var(--text-tertiary);">
+        <Check size={14} stroke-width={2.5} />
+      </span>
+    {:else if status === 'delivered'}
+      <span class="check-double" style="color: var(--text-tertiary);">
+        <svg width="16" height="14" viewBox="0 0 16 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="1,6.5 4,10 7.5,4" />
+          <polyline points="7,6.5 10,10 13.5,4" />
+        </svg>
+      </span>
+    {:else if status === 'read'}
+      <span class="check-double check-read">
+        <svg width="16" height="14" viewBox="0 0 16 14" fill="none" stroke="var(--color-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="1,6.5 4,10 7.5,4" />
+          <polyline points="7,6.5 10,10 13.5,4" />
+        </svg>
+      </span>
+    {/if}
+  {/key}
 </span>
 
 <style>

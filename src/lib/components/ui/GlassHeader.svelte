@@ -13,12 +13,6 @@
   function handleBack() {
     onBack?.();
   }
-
-  // Dynamic icon import for right action
-  async function getIconComponent(name: string) {
-    const icons = await import('lucide-svelte');
-    return icons[name] || icons.MoreVertical;
-  }
 </script>
 
 <header

@@ -7,16 +7,18 @@ import { browser } from '$app/environment';
 import type { User, Unsubscribe } from 'firebase/auth';
 import { getApp, getAuthInstance, isReady } from './config.js';
 
-let _signInWithCustomToken: (auth: any, token: string) => Promise<any>;
-let _signOut: (auth: any) => Promise<any>;
-let _onAuthStateChanged: (auth: any, cb: (user: any) => void, ...args: any[]) => Unsubscribe;
+let _signInWithCustomToken: ((auth: any, token: string) => Promise<any>) | undefined;
+let _signOut: ((auth: any) => Promise<any>) | undefined;
+let _onAuthStateChanged: ((auth: any, cb: (user: any) => void, ...args: any[]) => Unsubscribe) | undefined;
+let _loaded = false;
 
 async function ensureLoaded() {
-  if (_signInWithCustomToken) return;
+  if (_loaded) return;
   const auth = await import('firebase/auth');
   _signInWithCustomToken = auth.signInWithCustomToken;
   _signOut = auth.signOut;
   _onAuthStateChanged = auth.onAuthStateChanged;
+  _loaded = true;
 }
 
 export type { User as FirebaseUser };
@@ -25,7 +27,7 @@ export async function signInWithCustomToken(token: string): Promise<User | null>
   if (!browser) return null;
   await ensureLoaded();
   const auth = getAuthInstance();
-  const cred = await _signInWithCustomToken(auth, token);
+  const cred = await _signInWithCustomToken!(auth, token);
   return cred.user;
 }
 
@@ -33,7 +35,7 @@ export async function signOut(): Promise<void> {
   if (!browser) return;
   await ensureLoaded();
   const auth = getAuthInstance();
-  await _signOut(auth);
+  await _signOut!(auth);
 }
 
 export function currentUser(): User | null {
@@ -53,5 +55,5 @@ export async function onAuthStateChanged(cb: (user: User | null) => void): Promi
   }
   await ensureLoaded();
   const auth = getAuthInstance();
-  return _onAuthStateChanged(auth, cb);
+  return _onAuthStateChanged!(auth, cb);
 }

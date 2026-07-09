@@ -10,24 +10,26 @@ type DatabaseReference = any;
 type DataSnapshot = any;
 type Unsubscribe = () => void;
 
-let fbRef: (db: any, path: string) => DatabaseReference;
+let fbRef: ((db: any, path: string) => DatabaseReference) | undefined;
 let fbSet: (r: DatabaseReference, value: any) => Promise<void>;
 let fbUpdate: (r: DatabaseReference, values: Record<string, any>) => Promise<void>;
 let fbPush: (r: DatabaseReference, value?: any) => DatabaseReference;
 let fbRemove: (r: DatabaseReference) => Promise<void>;
-let fbOnValue: (r: DatabaseReference, cb: (snap: any) => void) => Unsubscribe;
-let fbOnChildAdded: (r: DatabaseReference, cb: (snap: any, prev: string | null) => void) => Unsubscribe;
-let fbOnChildChanged: (r: DatabaseReference, cb: (snap: any, prev: string | null) => void) => Unsubscribe;
-let fbOnChildRemoved: (r: DatabaseReference, cb: (snap: any) => void) => Unsubscribe;
+let fbOnValue: ((r: any, cb: (snap: any, prev?: string | null | undefined) => void) => Unsubscribe) | undefined;
+let fbOnChildAdded: ((r: any, cb: (snap: any, prev?: string | null | undefined) => void) => Unsubscribe) | undefined;
+let fbOnChildChanged: ((r: any, cb: (snap: any, prev?: string | null | undefined) => void) => Unsubscribe) | undefined;
+let fbOnChildRemoved: ((r: any, cb: (snap: any) => void) => Unsubscribe) | undefined;
 let fbGet: (r: DatabaseReference) => Promise<DataSnapshot>;
 let fbLimitToLast: (count: number) => any;
 let fbQuery: (ref: DatabaseReference, ...constraints: any[]) => any;
 let fbStartAt: (value: any, key?: string) => any;
-let fbTransaction: (r: DatabaseReference, fn: (current: any) => any) => Promise<{ committed: boolean; snapshot: DataSnapshot }>;
-let fbOff: (r: DatabaseReference, event?: string) => void;
+let fbTransaction: ((r: any, fn: (current: any) => any) => Promise<{ committed: boolean; snapshot: DataSnapshot }>) | undefined;
+let fbOff: ((r: any, event?: string, ...args: any[]) => void) | undefined;
+
+let _rtdbLoaded = false;
 
 async function ensureLoaded() {
-  if (fbRef) return;
+  if (_rtdbLoaded) return;
   const db = await import('firebase/database');
   fbRef = db.ref;
   fbSet = db.set;
@@ -42,8 +44,9 @@ async function ensureLoaded() {
   fbLimitToLast = db.limitToLast;
   fbQuery = db.query;
   fbStartAt = db.startAt;
-  fbTransaction = db.runTransaction;
-  fbOff = db.off;
+  fbTransaction = db.runTransaction as any;
+  fbOff = db.off as any;
+  _rtdbLoaded = true;
 }
 
 export type { DatabaseReference as Ref, DataSnapshot, Unsubscribe };
@@ -54,7 +57,7 @@ export function ref(path: string): DatabaseReference {
     return { key: path, parent: null, child: () => null, set: async () => {}, update: async () => {}, push: () => null, remove: async () => {}, onValue: () => () => {}, onChildAdded: () => () => {}, onChildChanged: () => () => {}, onChildRemoved: () => () => {}, get: async () => ({ val: () => null, key: path, exists: () => false, forEach: () => false }) };
   }
   const db = getDatabaseInstance();
-  return fbRef(db, path);
+  return fbRef!(db, path);
 }
 
 export async function set(r: DatabaseReference, value: unknown): Promise<void> {
@@ -77,19 +80,19 @@ export async function remove(r: DatabaseReference): Promise<void> {
 }
 
 export function onValue(r: DatabaseReference, cb: (snap: DataSnapshot) => void): Unsubscribe {
-  return fbOnValue(r, cb);
+  return fbOnValue!(r, cb);
 }
 
-export function onChildAdded(r: DatabaseReference, cb: (snap: DataSnapshot, prev: string | null) => void): Unsubscribe {
-  return fbOnChildAdded(r, cb);
+export function onChildAdded(r: DatabaseReference, cb: (snap: DataSnapshot, prev?: string | null) => void): Unsubscribe {
+  return fbOnChildAdded!(r, cb);
 }
 
-export function onChildChanged(r: DatabaseReference, cb: (snap: DataSnapshot, prev: string | null) => void): Unsubscribe {
-  return fbOnChildChanged(r, cb);
+export function onChildChanged(r: DatabaseReference, cb: (snap: DataSnapshot, prev?: string | null) => void): Unsubscribe {
+  return fbOnChildChanged!(r, cb);
 }
 
 export function onChildRemoved(r: DatabaseReference, cb: (snap: DataSnapshot) => void): Unsubscribe {
-  return fbOnChildRemoved(r, cb);
+  return fbOnChildRemoved!(r, cb);
 }
 
 export async function get(r: DatabaseReference): Promise<DataSnapshot> {
@@ -109,5 +112,5 @@ export async function transaction(
   updateFn: (current: unknown) => unknown,
 ): Promise<{ committed: boolean; snapshot: DataSnapshot }> {
   await ensureLoaded();
-  return fbTransaction(r, updateFn);
+  return fbTransaction!(r, updateFn);
 }

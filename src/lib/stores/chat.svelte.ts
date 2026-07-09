@@ -60,7 +60,8 @@ class ChatStore {
     if (this.sentKeys.size > ChatStore.MAX_SENT_KEYS) {
       const iter = this.sentKeys.values();
       for (let i = 0; i < ChatStore.MAX_SENT_KEYS / 2; i++) {
-        this.sentKeys.delete(iter.next().value);
+        const val = iter.next().value;
+        if (val !== undefined) this.sentKeys.delete(val);
       }
     }
     return true;
@@ -135,7 +136,7 @@ class ChatStore {
       // Fallback: scan users node
       const allSnap = await rtdb.get(rtdb.ref('users'));
       if (allSnap.exists()) {
-        allSnap.forEach((childSnap) => {
+        allSnap.forEach((childSnap: any) => {
           const u = childSnap.val() as User;
           if (u.id === uid) {
             this.userDict.set(uid, u);

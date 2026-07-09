@@ -359,7 +359,7 @@
   <!-- Typing indicator -->
   {#if typingNames.length > 0}
     <div class="px-4 pb-1">
-      <TypingIndicator {typingNames} />
+      <TypingIndicator usernames={typingNames} />
     </div>
   {/if}
 

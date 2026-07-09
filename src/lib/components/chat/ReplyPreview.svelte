@@ -34,7 +34,8 @@
     </p>
     <div class="flex items-center gap-1.5 min-w-0">
       {#if getMessageTypeIcon(message)}
-        <svelte:component this={getMessageTypeIcon(message)} size={12} style="color: var(--text-tertiary); flex-shrink: 0;" />
+        {@const Icon = getMessageTypeIcon(message)!}
+        <Icon size={12} style="color: var(--text-tertiary); flex-shrink: 0;" />
       {/if}
       <p class="text-sm truncate" style="color: var(--text-secondary);">
         {getMessagePreview(message)}

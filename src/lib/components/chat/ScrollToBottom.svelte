@@ -15,6 +15,7 @@
     if (!container) return;
 
     function onScroll() {
+      if (!container) return;
       const { scrollTop, scrollHeight, clientHeight } = container;
       const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
       isScrolledUp = distanceFromBottom > threshold;

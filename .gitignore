@@ -3,6 +3,7 @@ node_modules/
 
 # Build
 .svelte-kit/
+.wrangler/
 .next/
 build/
 
@@ -25,3 +26,9 @@ service-account*.json
 
 # Upload
 upload/
+
+# Dev artifacts
+dev.log
+tool-results/
+db/
+prisma/

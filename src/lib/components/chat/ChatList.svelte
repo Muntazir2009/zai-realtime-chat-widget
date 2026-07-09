@@ -23,7 +23,7 @@
     const snap = await rtdb.get(rtdb.ref('users'));
     if (!snap.exists()) return;
     const users: typeof availableUsers = [];
-    snap.forEach((child) => {
+    snap.forEach((child: any) => {
       const u = child.val() as any;
       if (u.id !== authStore.user?.id) {
         users.push({ id: u.id, username: u.username, displayName: u.displayName });
@@ -185,7 +185,7 @@
           {chatId}
           chatMeta={meta!}
           {userChat}
-          otherUser={chatStore.getOtherParticipant(meta!)}
+          otherUser={chatStore.getOtherParticipant(meta!) ?? null}
           isActive={chatStore.activeChatId === chatId}
           onclick={handleChatClick}
         />
