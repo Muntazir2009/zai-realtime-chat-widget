@@ -166,8 +166,14 @@
 
   async function handleDeleteMessage(msg: Message) {
     if (!chatStore.activeChatId) return;
-    try { await chatStore.deleteMessage(chatStore.activeChatId, msg.id); toastStore.success('Deleted'); }
-    catch { toastStore.error('Failed to delete'); }
+    try {
+      await chatStore.deleteMessage(chatStore.activeChatId, msg.id);
+      toastStore.success('Deleted');
+    } catch (err) {
+      const msg2 = err instanceof Error ? err.message : String(err);
+      console.error('Delete failed:', msg2);
+      // chatStore.deleteMessage already shows toast on failure
+    }
   }
 
   async function handlePinMessage(msg: Message) {
@@ -181,6 +187,16 @@
   }
 
   function handleEditMessage(msg: Message) { editingMsg = msg; editText = msg.c; }
+
+  // Track which message should show its reaction picker (triggered from context menu)
+  let reactionPickerTargetId: string | null = $state(null);
+
+  function handleReactFromMenu(msg: Message) {
+    // Set the target so MessageBubble can pick it up
+    reactionPickerTargetId = msg.id;
+    // Clear after a tick so it can be consumed
+    requestAnimationFrame(() => { reactionPickerTargetId = null; });
+  }
 
   async function saveEdit() {
     if (!chatStore.activeChatId || !editingMsg) return;
@@ -202,7 +218,7 @@
     if (!chatStore.activeChatId) return;
     if (emoji === '❤️') triggerHeartRain = !triggerHeartRain;
     if (emoji === '💋') triggerKissRain = !triggerKissRain;
-    chatStore.sendMessage(chatStore.activeChatId, emoji);
+    chatStore.toggleReaction(chatStore.activeChatId, msg.id, emoji);
   }
 
   function handleStickerSelect(sticker: string) {
@@ -364,6 +380,7 @@
             onImageTap={handleImageTap}
             onReaction={handleReaction}
             onSwipeReply={handleSwipeReply}
+            openReactionPicker={reactionPickerTargetId === msg.id}
           />
         {/each}
       {/each}
@@ -445,6 +462,7 @@
       onPin={handlePinMessage}
       onStar={handleStarMessage}
       onEdit={handleEditMessage}
+      onReact={handleReactFromMenu}
     />
   {/if}
 </div>

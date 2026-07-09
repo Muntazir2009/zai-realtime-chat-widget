@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Message } from '$lib/types/index';
-  import { Reply, Copy, Trash2, Pin, Star, Pencil } from 'lucide-svelte';
+  import { Reply, Copy, Trash2, Pin, Star, Pencil, SmilePlus } from 'lucide-svelte';
   import BottomSheet from '$lib/components/ui/BottomSheet.svelte';
 
   interface Props {
@@ -16,11 +16,12 @@
     onPin?: (msg: Message) => void;
     onStar?: (msg: Message) => void;
     onEdit?: (msg: Message) => void;
+    onReact?: (msg: Message) => void;
   }
 
   let {
     open, onClose, msg, isOwn, isPinned = false, isStarred = false,
-    onReply, onCopy, onDelete, onPin, onStar, onEdit,
+    onReply, onCopy, onDelete, onPin, onStar, onEdit, onReact,
   }: Props = $props();
 
   function handleReply() {
@@ -56,6 +57,12 @@
   function handleEdit() {
     if (!msg) return;
     onEdit?.(msg);
+    onClose();
+  }
+
+  function handleReact() {
+    if (!msg) return;
+    onReact?.(msg);
     onClose();
   }
 </script>
@@ -115,6 +122,16 @@
         <span class="text-sm font-medium">Edit</span>
       </button>
     {/if}
+
+    <!-- React -->
+    <button
+      class="flex items-center gap-3 w-full transition-spring active:scale-95 rounded-[var(--radius-md)]"
+      style="min-height: 44px; padding: 8px 12px; color: var(--text-primary);"
+      onclick={handleReact}
+    >
+      <SmilePlus size={20} />
+      <span class="text-sm font-medium">React</span>
+    </button>
 
     <!-- Divider -->
     <div class="my-1.5 mx-3" style="border-top: 1px solid var(--border-subtle);"></div>

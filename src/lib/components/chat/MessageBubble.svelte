@@ -1,9 +1,10 @@
 <script lang="ts">
-  import type { Message } from '$lib/types/index';
+  import type { Message, Reaction } from '$lib/types/index';
   import Avatar from '$lib/components/ui/Avatar.svelte';
   import DeliveryStatus from '$lib/components/indicators/DeliveryStatus.svelte';
   import AudioPlayer from '$lib/components/media/AudioPlayer.svelte';
   import { Reply as ReplyIcon } from 'lucide-svelte';
+  import { chatStore } from '$lib/stores/chat.svelte';
 
   interface Props {
     msg: Message;
@@ -19,12 +20,14 @@
     onImageTap?: (imageUrl: string, caption?: string) => void;
     onReaction?: (msg: Message, emoji: string) => void;
     onSwipeReply?: (msg: Message) => void;
+    openReactionPicker?: boolean;
   }
 
   let {
     msg, isOwn, showAvatar = false, senderName, isGrouped = false,
     isPinned = false, isStarred = false, replyPreviewMsg,
     onReply, onLongPress, onImageTap, onReaction, onSwipeReply,
+    openReactionPicker = false,
   }: Props = $props();
 
   // --- Swipe physics state ---
@@ -200,6 +203,34 @@
   const isEmojiOnly = $derived(
     msg.t === 'text' && /^[\p{Emoji_Presentation}\p{Extended_Pictographic}\u{FE0F}\u{200D}\u{20E3}]+$/u.test(msg.c.trim()) && msg.c.trim().length <= 8
   );
+
+  // --- Reactions ---
+  let msgReactions = $derived(chatStore.getReactions(msg.id));
+  let showReactionPicker = $state(false);
+
+  // Watch for external trigger to open reaction picker (from context menu)
+  $effect(() => {
+    if (openReactionPicker) {
+      showReactionPicker = true;
+    }
+  });
+
+  function toggleReactionPicker(e?: Event) {
+    if (e) e.stopPropagation();
+    showReactionPicker = !showReactionPicker;
+  }
+
+  function handleReactionSelect(emoji: string) {
+    showReactionPicker = false;
+    onReaction?.(msg, emoji);
+  }
+
+  function handleReactionTap(reaction: Reaction) {
+    // If user already reacted, tapping removes it
+    if (chatStore.hasReacted(msg.id, reaction.emoji)) {
+      onReaction?.(msg, reaction.emoji);
+    }
+  }
 </script>
 
 <div
@@ -313,6 +344,48 @@
       {/if}
     </div>
   </div>
+
+  <!-- Reactions bar -->
+  {#if msgReactions.length > 0 || showReactionPicker}
+    <div class="rxn-bar" class:rxn-bar-own={isOwn}>
+      {#each msgReactions as rxn (rxn.emoji)}
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <button
+          class="rxn-chip {chatStore.hasReacted(msg.id, rxn.emoji) ? 'rxn-chip-active' : ''}"
+          onclick={(e) => { e.stopPropagation(); handleReactionTap(rxn); }}
+          ondblclick={(e) => e.stopPropagation()}
+        >
+          <span class="rxn-emoji">{rxn.emoji}</span>
+          <span class="rxn-count">{rxn.uids.length}</span>
+        </button>
+      {/each}
+      <button
+        class="rxn-add-btn"
+        onclick={(e) => toggleReactionPicker(e)}
+        ondblclick={(e) => e.stopPropagation()}
+        aria-label="Add reaction"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+    </div>
+  {/if}
+
+  <!-- Reaction picker popup -->
+  {#if showReactionPicker}
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div class="rxn-picker-backdrop" onclick={(e) => { if ((e.target as HTMLElement).classList.contains('rxn-picker-backdrop')) toggleReactionPicker(e); }}>
+      <div class="rxn-picker" class:rxn-picker-own={isOwn}>
+        {#each ['❤️', '👍', '😂', '😮', '😢', '🙏', '🔥', '👎'] as emoji}
+          <button
+            class="rxn-picker-btn {chatStore.hasReacted(msg.id, emoji) ? 'rxn-picker-btn-active' : ''}"
+            onclick={() => handleReactionSelect(emoji)}
+          >
+            {emoji}
+          </button>
+        {/each}
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -643,5 +716,127 @@
     z-index: 5;
     transition: opacity 120ms ease;
     box-shadow: 0 4px 16px rgba(153, 27, 27, 0.35);
+  }
+
+  /* === REACTIONS BAR === */
+  .rxn-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 2px;
+    padding: 2px 0;
+    z-index: 2;
+  }
+
+  .rxn-bar-own {
+    justify-content: flex-end;
+  }
+
+  .rxn-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 6px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-primary);
+    font-size: 12px;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: background 120ms ease, transform 120ms ease, border-color 120ms ease;
+    -webkit-tap-highlight-color: transparent;
+    min-height: 26px;
+  }
+  .rxn-chip:active { transform: scale(0.9); }
+
+  .rxn-chip-active {
+    border-color: var(--color-primary);
+    background: color-mix(in srgb, var(--color-primary) 15%, rgba(255,255,255,0.06));
+  }
+
+  .rxn-emoji { font-size: 13px; line-height: 1; }
+
+  .rxn-count {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+  }
+  .rxn-chip-active .rxn-count {
+    color: var(--color-primary);
+  }
+
+  .rxn-add-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    transition: background 120ms ease, transform 120ms ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .rxn-add-btn:active { transform: scale(0.85); background: rgba(255,255,255,0.06); }
+
+  /* === REACTION PICKER === */
+  .rxn-picker-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+  }
+
+  .rxn-picker {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    margin-bottom: 4px;
+    display: flex;
+    gap: 2px;
+    padding: 6px 8px;
+    border-radius: 24px;
+    background: var(--glass-bg, #1a1a1e);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid var(--border-subtle, rgba(255,255,255,0.08));
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 0.5px rgba(255,255,255,0.04);
+    animation: rxnPickerIn 200ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    z-index: 101;
+  }
+
+  .rxn-picker-own {
+    left: auto;
+    right: 0;
+  }
+
+  .rxn-picker-btn {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    font-size: 20px;
+    cursor: pointer;
+    transition: transform 120ms ease, background 120ms ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .rxn-picker-btn:hover { background: rgba(255,255,255,0.08); }
+  .rxn-picker-btn:active { transform: scale(0.85); }
+
+  .rxn-picker-btn-active {
+    background: color-mix(in srgb, var(--color-primary) 20%, transparent);
+    box-shadow: inset 0 0 0 1.5px var(--color-primary);
+  }
+
+  @keyframes rxnPickerIn {
+    from { opacity: 0; transform: translateY(4px) scale(0.95); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
   }
 </style>

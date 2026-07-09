@@ -112,8 +112,9 @@
       await uploadToR2(presign.uploadUrl, file, (pct) => { uploadProgress = pct; });
       await chatStore.sendVoiceMessage(chatStore.activeChatId, presign.publicUrl, duration);
     } catch (err) {
-      console.error('Voice upload failed:', err);
-      toastStore.error('Failed to send voice message');
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('Voice upload failed:', msg);
+      toastStore.error(`Voice failed: ${msg.slice(0, 80)}`);
     } finally {
       isUploading = false;
       uploadProgress = 0;
@@ -142,8 +143,9 @@
       await uploadToR2(presign.uploadUrl, file, (pct) => { uploadProgress = pct; });
       if (onImageSend) onImageSend(presign.publicUrl);
     } catch (err) {
-      console.error('Upload failed:', err);
-      toastStore.error('Failed to upload image');
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('Upload failed:', msg);
+      toastStore.error(`Upload failed: ${msg.slice(0, 80)}`);
     } finally {
       isUploading = false;
       uploadProgress = 0;

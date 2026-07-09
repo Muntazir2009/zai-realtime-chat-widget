@@ -118,6 +118,12 @@ export interface VoiceRecording {
   duration: number;
 }
 
+/* ---------- Reaction ---------- */
+export interface Reaction {
+  emoji: string;
+  uids: string[]; // user IDs who reacted with this emoji
+}
+
 /* ---------- RTDB paths (PRD §IV.2) ---------- */
 export const RTDB_PATHS = {
   CHAT_META: (chatId: string) => `chats/${chatId}/meta`,
@@ -129,6 +135,7 @@ export const RTDB_PATHS = {
   TYPING: (chatId: string, uid: string) => `typing/${chatId}/${uid}`,
   PINNED: (chatId: string) => `chats/${chatId}/pinned`,
   STARRED: (uid: string, chatId: string) => `starred/${uid}/${chatId}`,
+  REACTIONS: (chatId: string, messageId: string) => `reactions/${chatId}/${messageId}`,
   SCHEMA_VERSION: '_schema/v',
 } as const;
 

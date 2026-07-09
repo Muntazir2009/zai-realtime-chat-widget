@@ -36,7 +36,10 @@ export async function requestPresignedUpload(
     }),
   });
 
-  if (!res.ok) throw new Error('Failed to get upload URL');
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Presign request failed (HTTP ${res.status}): ${body || res.statusText}`);
+  }
   return res.json();
 }
 
@@ -62,11 +65,14 @@ export async function uploadToR2(
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve();
       } else {
-        reject(new Error(`Upload failed: ${xhr.status}`));
+        const body = xhr.responseText || '(empty body)';
+        reject(new Error(`R2 upload failed (HTTP ${xhr.status}): ${body.slice(0, 500)}`));
       }
     });
 
-    xhr.addEventListener('error', () => reject(new Error('Upload failed')));
+    xhr.addEventListener('error', () => {
+      reject(new Error(`R2 upload network error (status ${xhr.status}, readyState ${xhr.readyState})`));
+    });
 
     xhr.open('PUT', presignedUrl);
     xhr.setRequestHeader('Content-Type', file.type);

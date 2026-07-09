@@ -7,7 +7,7 @@
 
 import * as rtdb from '$lib/firebase/rtdb.js';
 import type {
-  Message, ChatMeta, UserChat, User, PresenceState, PinnedMessage,
+  Message, ChatMeta, UserChat, User, PresenceState, PinnedMessage, Reaction,
 } from '$lib/types/index.js';
 import { MAX_MESSAGES_IN_MEMORY, RTDB_PATHS } from '$lib/types/index.js';
 import { authStore } from './auth.svelte.js';
@@ -52,6 +52,12 @@ class ChatStore {
   // ---- Starred messages ----
   starredMessageIds: Set<string> = $state(new Set());
   private starredUnsub: (() => void) | null = null;
+
+  // ---- Reactions ----
+  reactions: Map<string, Reaction[]> = $state(new Map()); // messageId → reactions[]
+  private reactionUnsubs: Map<string, () => void> = new Map();
+  private reactionChildChangedUnsubs: Map<string, () => void> = new Map();
+  private reactionChildRemovedUnsubs: Map<string, () => void> = new Map();
 
   // ---- Idempotency tracking (bounded to prevent memory leak) ----
   private sentKeys = new Set<string>();
@@ -205,6 +211,7 @@ class ChatStore {
   async openChat(chatId: string): Promise<void> {
     await this.closeChat();
     this.activeChatId = chatId;
+    this.reactions = new Map();
 
     const meta = this.chats.get(chatId);
     if (!meta) await this.fetchChatMeta(chatId);
@@ -241,6 +248,10 @@ class ChatStore {
       if (this.messages.length > MAX_MESSAGES_IN_MEMORY) {
         this.messages = this.messages.slice(-MAX_MESSAGES_IN_MEMORY);
       }
+      // Attach reaction listener for new messages
+      if (this.activeChatId) {
+        this.attachSingleReactionListener(this.activeChatId, msg.id);
+      }
     });
 
     // Listen for message changes (edits, pin state sync)
@@ -266,6 +277,7 @@ class ChatStore {
     this.attachPresenceListeners(chatId);
     this.attachTypingListener(chatId);
     this.attachPinnedListener(chatId);
+    this.attachReactionListeners(chatId);
     const user = authStore.user;
     if (user) this.attachStarredListener(user.id, chatId);
   }
@@ -287,6 +299,7 @@ class ChatStore {
     this.detachTypingListener();
     this.detachPinnedListener();
     this.detachStarredListener();
+    this.detachReactionListeners();
 
     if (this.activeChatId && this.messages.length > 0) {
       cacheMessages(this.activeChatId, this.messages);
@@ -442,7 +455,10 @@ class ChatStore {
       body: JSON.stringify({ userId: user.id, otherUserId }),
     });
 
-    if (!res.ok) throw new Error('Failed to create chat');
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`Create chat failed (HTTP ${res.status}): ${body || res.statusText}`);
+    }
     const data = await res.json() as { chatId: string };
     const chatId = data.chatId;
 
@@ -769,33 +785,196 @@ class ChatStore {
   }
 
   // ============================================================
-  // Edit message
+  // Edit message — optimistic update
   // ============================================================
 
   async editMessage(chatId: string, messageId: string, newContent: string): Promise<void> {
+    // Optimistic: update local state immediately
+    const prevMessages = this.messages;
+    this.messages = this.messages.map((m) =>
+      m.id === messageId ? { ...m, c: newContent, edited: true } : m,
+    );
     try {
-      await rtdb.update(await rtdb.ref('/'), {
+      const updates: Record<string, unknown> = {
         [`chats/${chatId}/messages/${messageId}/c`]: newContent,
         [`chats/${chatId}/messages/${messageId}/edited`]: true,
-      });
-      // Update local messages array
-      this.messages = this.messages.map((m) =>
-        m.id === messageId ? { ...m, c: newContent, edited: true } : m,
-      );
+      };
+      // Also update inbox preview if this was the last message
+      const lastMsg = this.messages[this.messages.length - 1];
+      if (lastMsg?.id === messageId) {
+        updates[RTDB_PATHS.CHAT_META(chatId) + '/lm'] = newContent.slice(0, 100);
+      }
+      await rtdb.update(await rtdb.ref('/'), updates);
       toastStore.success('Message edited');
     } catch (err) {
-      console.error('[editMessage]', err);
-      toastStore.error('Failed to edit message');
+      // Revert on failure
+      this.messages = prevMessages;
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[editMessage]', msg);
+      toastStore.error(`Edit failed: ${msg.slice(0, 60)}`);
     }
   }
 
   // ============================================================
-  // Delete message
+  // Delete message — optimistic update
   // ============================================================
 
   async deleteMessage(chatId: string, messageId: string): Promise<void> {
-    await rtdb.remove(await rtdb.ref(RTDB_PATHS.CHAT_MESSAGES(chatId) + '/' + messageId));
+    // Optimistic: remove from local array immediately
+    const prevMessages = this.messages;
     this.messages = this.messages.filter((m) => m.id !== messageId);
+    try {
+      await rtdb.remove(await rtdb.ref(RTDB_PATHS.CHAT_MESSAGES(chatId) + '/' + messageId));
+      // Update inbox preview if the deleted message was the last visible one
+      const newLastMsg = this.messages[this.messages.length - 1];
+      const metaUpdates: Record<string, unknown> = {};
+      if (newLastMsg) {
+        metaUpdates[RTDB_PATHS.CHAT_META(chatId) + '/lm'] = newLastMsg.c.slice(0, 100);
+        metaUpdates[RTDB_PATHS.CHAT_META(chatId) + '/ts'] = newLastMsg.ts;
+      } else {
+        metaUpdates[RTDB_PATHS.CHAT_META(chatId) + '/lm'] = null;
+      }
+      await rtdb.update(await rtdb.ref('/'), metaUpdates).catch(() => {
+        // Best-effort meta update — don't fail the delete
+      });
+    } catch (err) {
+      // Revert on failure
+      this.messages = prevMessages;
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[deleteMessage]', msg);
+      toastStore.error(`Delete failed: ${msg.slice(0, 60)}`);
+    }
+  }
+
+  // ============================================================
+  // Reactions
+  // ============================================================
+
+  /** Attach per-message reaction listeners for all current messages */
+  private async attachReactionListeners(chatId: string): Promise<void> {
+    this.detachReactionListeners();
+    // Listen for reactions on each message we currently have
+    for (const msg of this.messages) {
+      this.attachSingleReactionListener(chatId, msg.id);
+    }
+  }
+
+  /** Listen for reactions on a single message */
+  private async attachSingleReactionListener(chatId: string, messageId: string): Promise<void> {
+    if (this.reactionUnsubs.has(messageId)) return;
+
+    const r = await rtdb.ref(RTDB_PATHS.REACTIONS(chatId, messageId));
+
+    const unsub = await rtdb.onChildAdded(r, (snap) => {
+      const emoji = snap.key;
+      if (!emoji) return;
+      const data = snap.val() as { uids?: string[] } | null;
+      const uids = data?.uids ?? [];
+      this.setReaction(messageId, emoji, uids);
+    });
+    this.reactionUnsubs.set(messageId, unsub);
+
+    const changedUnsub = await rtdb.onChildChanged(r, (snap) => {
+      const emoji = snap.key;
+      if (!emoji) return;
+      const data = snap.val() as { uids?: string[] } | null;
+      const uids = data?.uids ?? [];
+      this.setReaction(messageId, emoji, uids);
+    });
+    this.reactionChildChangedUnsubs.set(messageId, changedUnsub);
+
+    const removedUnsub = await rtdb.onChildRemoved(r, (snap) => {
+      const emoji = snap.key;
+      if (!emoji) return;
+      this.removeReaction(messageId, emoji);
+    });
+    this.reactionChildRemovedUnsubs.set(messageId, removedUnsub);
+  }
+
+  /** Update a single reaction entry in the reactions map */
+  private setReaction(messageId: string, emoji: string, uids: string[]): void {
+    const newMap = new Map(this.reactions);
+    const existing = newMap.get(messageId) ?? [];
+    const filtered = existing.filter(r => r.emoji !== emoji);
+    if (uids.length > 0) {
+      filtered.push({ emoji, uids });
+    }
+    newMap.set(messageId, filtered);
+    this.reactions = newMap;
+  }
+
+  /** Remove a reaction entry from the reactions map */
+  private removeReaction(messageId: string, emoji: string): void {
+    const newMap = new Map(this.reactions);
+    const existing = newMap.get(messageId) ?? [];
+    newMap.set(messageId, existing.filter(r => r.emoji !== emoji));
+    this.reactions = newMap;
+  }
+
+  private detachReactionListeners(): void {
+    for (const [, unsub] of this.reactionUnsubs) unsub();
+    this.reactionUnsubs.clear();
+    for (const [, unsub] of this.reactionChildChangedUnsubs) unsub();
+    this.reactionChildChangedUnsubs.clear();
+    for (const [, unsub] of this.reactionChildRemovedUnsubs) unsub();
+    this.reactionChildRemovedUnsubs.clear();
+    this.reactions = new Map();
+  }
+
+  /** Toggle a reaction on a message. Adds or removes based on current state. */
+  async toggleReaction(chatId: string, messageId: string, emoji: string): Promise<void> {
+    const user = authStore.user;
+    if (!user) return;
+
+    const reactionPath = RTDB_PATHS.REACTIONS(chatId, messageId) + '/' + emoji;
+    const snap = await rtdb.get(await rtdb.ref(reactionPath));
+    const existing = snap.exists() ? (snap.val() as { uids?: string[] }) : null;
+    const uids: string[] = existing?.uids ?? [];
+
+    const alreadyReacted = uids.includes(user.id);
+    let newUids: string[];
+
+    if (alreadyReacted) {
+      // Remove own reaction
+      newUids = uids.filter(id => id !== user.id);
+    } else {
+      // Add own reaction
+      newUids = [...uids, user.id];
+    }
+
+    if (newUids.length === 0) {
+      // Remove the node entirely
+      await rtdb.remove(await rtdb.ref(reactionPath)).catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error('[toggleReaction]', msg);
+        toastStore.error(`Reaction failed: ${msg.slice(0, 60)}`);
+      });
+    } else {
+      await rtdb.set(await rtdb.ref(reactionPath), { uids: newUids }).catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error('[toggleReaction]', msg);
+        toastStore.error(`Reaction failed: ${msg.slice(0, 60)}`);
+      });
+    }
+  }
+
+  /** Get reactions for a specific message */
+  getReactions(messageId: string): Reaction[] {
+    return this.reactions.get(messageId) ?? [];
+  }
+
+  /** Check if the current user has reacted with a specific emoji on a message */
+  hasReacted(messageId: string, emoji: string): boolean {
+    const uid = authStore.user?.id;
+    if (!uid) return false;
+    const rxs = this.reactions.get(messageId) ?? [];
+    return rxs.some(r => r.emoji === emoji && r.uids.includes(uid));
+  }
+
+  /** Get a flat count of all reactions on a message */
+  getReactionCount(messageId: string): number {
+    const rxs = this.reactions.get(messageId) ?? [];
+    return rxs.reduce((sum, r) => sum + r.uids.length, 0);
   }
 }
 

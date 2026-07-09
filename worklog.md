@@ -96,3 +96,56 @@ Stage Summary:
 - Bubbles: Telegram-style directional squircles with spring entrance animation
 - Voice: Slide-to-cancel with CSS waveform visualization
 - Backend: All three areas (upload, fan-out, presence) verified correct
+
+---
+Task ID: 4
+Agent: Main Agent
+Task: Fix 5 critical issues: R2 uploads, realtime, reactions, conversation list, error surfacing
+
+Work Log:
+- Read and analyzed all core files: chat.svelte.ts (982 lines), rtdb.ts, storage.ts, r2.ts, firebase-rest.ts, Conversation.svelte, MessageBubble.svelte, MessageContextMenu.svelte, ChatList.svelte, ChatTile.svelte, InputBar.svelte, types/index.ts
+
+1. **R2 Uploads — Surface Real Errors** (storage.ts, InputBar.svelte):
+   - `requestPresignedUpload`: now reads response body on non-2xx and includes HTTP status + body in error message
+   - `uploadToR2` XHR: `load` handler now reads `xhr.responseText` (was silent); `error` handler includes `status` and `readyState`
+   - InputBar: both `sendVoice` and `handleFileSelect` catch blocks now surface `err.message` in toast (was generic "Failed to upload/send")
+
+2. **Realtime — Optimistic Updates** (chat.svelte.ts):
+   - `editMessage`: now updates local messages array BEFORE awaiting RTDB write; reverts on failure
+   - `deleteMessage`: now filters local array BEFORE awaiting RTDB remove; reverts on failure
+   - Both methods now also update `chats/{chatId}/meta` (lm/ts) so inbox preview updates instantly
+   - `onChildAdded` for messages now also calls `attachSingleReactionListener` for new messages
+
+3. **Message Reactions — Full End-to-End** (types/index.ts, chat.svelte.ts, MessageBubble.svelte, MessageContextMenu.svelte, Conversation.svelte):
+   - Added `Reaction` interface and `REACTIONS` RTDB path to types/index.ts
+   - ChatStore: added `reactions` Map, `reactionUnsubs`, `reactionChildChangedUnsubs`, `reactionChildRemovedUnsubs`
+   - Added `attachReactionListeners(chatId)` — attaches onChildAdded/Changed/Removed for each message
+   - Added `attachSingleReactionListener(chatId, messageId)` — per-message 3-listener setup
+   - Added `setReaction`, `removeReaction` — update local reactions Map reactively
+   - Added `toggleReaction(chatId, messageId, emoji)` — reads current state, adds/removes uid, writes to RTDB
+   - Added `getReactions(messageId)`, `hasReacted(messageId, emoji)`, `getReactionCount(messageId)`
+   - MessageBubble: added reaction bar below bubble with chips (emoji + count), active state highlighting, "+" add button
+   - MessageBubble: added inline reaction picker popup (8 emojis) with active state, positioned above bubble
+   - MessageBubble: added `openReactionPicker` prop (watched via $effect) for context menu integration
+   - MessageContextMenu: added "React" button with SmilePlus icon
+   - Conversation: fixed `handleReaction` — was sending emoji as text message, now calls `chatStore.toggleReaction`
+   - Conversation: added `handleReactFromMenu` + `reactionPickerTargetId` state to bridge context menu → MessageBubble
+
+4. **Conversation List — Instant Previews** (chat.svelte.ts):
+   - `editMessage` now updates `chats/{chatId}/meta.lm` when editing the last message → inbox preview updates via existing meta listener
+   - `deleteMessage` now updates `chats/{chatId}/meta.lm` and `.ts` to the new last message → inbox preview updates
+   - Existing listeners already handle real-time: `onChildChanged` on `user_chats/{uid}` updates unread counts, `onValue` on `chats/{chatId}/meta` re-sorts inbox
+
+5. **Debugging — No Swallowed Exceptions**:
+   - All `catch` blocks now extract `err.message` and surface it in toasts
+   - `createDirectChat` now reads response body on non-2xx
+   - `toggleReaction` errors surface real RTDB error messages
+   - `togglePin`, `toggleStar` already had proper error surfacing (unchanged)
+
+Stage Summary:
+- 0 svelte-check errors, 7 warnings (pre-existing)
+- 8 files modified: types/index.ts, storage.ts, chat.svelte.ts, MessageBubble.svelte, MessageContextMenu.svelte, Conversation.svelte, InputBar.svelte
+- Reactions: full RTDB-backed system with real-time sync, per-message listeners, toggle semantics
+- Optimistic: edit and delete update UI instantly, revert on failure
+- Inbox: previews update instantly on edit/delete/send via meta listener
+- Errors: all generic messages replaced with real HTTP status + response body
