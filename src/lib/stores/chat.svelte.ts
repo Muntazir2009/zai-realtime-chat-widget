@@ -87,13 +87,13 @@ class ChatStore {
   // ============================================================
 
   /** Attach RTDB listener to /user_chats/{uid} */
-  loadInbox(uid: string): void {
+  async loadInbox(uid: string): Promise<void> {
     this.detachInboxListener();
 
-    const r = rtdb.ref(RTDB_PATHS.USER_CHATS(uid));
+    const r = await rtdb.ref(RTDB_PATHS.USER_CHATS(uid));
 
     // Load existing children
-    this.inboxUnsub = rtdb.onChildAdded(r, (snap) => {
+    this.inboxUnsub = await rtdb.onChildAdded(r, (snap) => {
       const data = snap.val() as UserChat | null;
       if (!data) return;
       this.userChats.set(data.chatId, data);
@@ -103,7 +103,7 @@ class ChatStore {
     });
 
     // Listen for changes
-    this.inboxChangedUnsub = rtdb.onChildChanged(r, (snap) => {
+    this.inboxChangedUnsub = await rtdb.onChildChanged(r, (snap) => {
       const data = snap.val() as UserChat | null;
       if (!data) return;
       this.userChats.set(data.chatId, data);
@@ -111,7 +111,7 @@ class ChatStore {
   }
 
   private async fetchChatMeta(chatId: string): Promise<void> {
-    const snap = await rtdb.get(rtdb.ref(RTDB_PATHS.CHAT_META(chatId)));
+    const snap = await rtdb.get(await rtdb.ref(RTDB_PATHS.CHAT_META(chatId)));
     if (snap.exists()) {
       const meta = snap.val() as ChatMeta;
       this.chats.set(chatId, meta);
@@ -131,10 +131,10 @@ class ChatStore {
     }
 
     // Try looking up by user ID or username
-    const snap = await rtdb.get(rtdb.ref(`user_index/${uid}`));
+    const snap = await rtdb.get(await rtdb.ref(`user_index/${uid}`));
     if (!snap.exists()) {
       // Fallback: scan users node
-      const allSnap = await rtdb.get(rtdb.ref('users'));
+      const allSnap = await rtdb.get(await rtdb.ref('users'));
       if (allSnap.exists()) {
         allSnap.forEach((childSnap: any) => {
           const u = childSnap.val() as User;
@@ -148,7 +148,7 @@ class ChatStore {
     }
 
     const username = snap.val() as string;
-    const userSnap = await rtdb.get(rtdb.ref(`users/${username}`));
+    const userSnap = await rtdb.get(await rtdb.ref(`users/${username}`));
     if (userSnap.exists()) {
       const user = userSnap.val() as User;
       this.userDict.set(uid, user);
@@ -184,12 +184,12 @@ class ChatStore {
     }
 
     // Attach RTDB listener — PRD §IV.2: limitToLast(50)
-    const msgRef = rtdb.query(
-      rtdb.ref(RTDB_PATHS.CHAT_MESSAGES(chatId)),
-      rtdb.limitToLast(MAX_MESSAGES_IN_MEMORY),
+    const msgRef = await rtdb.query(
+      await rtdb.ref(RTDB_PATHS.CHAT_MESSAGES(chatId)),
+      await rtdb.limitToLast(MAX_MESSAGES_IN_MEMORY),
     );
 
-    this.messageUnsub = rtdb.onChildAdded(msgRef, (snap) => {
+    this.messageUnsub = await rtdb.onChildAdded(msgRef, (snap) => {
       const raw = snap.val() as Message;
       if (!raw) return;
       const msg: Message = { ...raw, edited: raw.edited ?? false };
@@ -202,7 +202,7 @@ class ChatStore {
     });
 
     // Listen for message changes (edits, pin state sync)
-    this.messageChangedUnsub = rtdb.onChildChanged(msgRef, (snap) => {
+    this.messageChangedUnsub = await rtdb.onChildChanged(msgRef, (snap) => {
       const raw = snap.val() as Message;
       if (!raw) return;
       const msg: Message = { ...raw, edited: raw.edited ?? false };
@@ -295,7 +295,7 @@ class ChatStore {
     const idempotencyKey = generateIdempotencyKey();
     if (!this.addSentKey(idempotencyKey)) return;
 
-    const msgRef = rtdb.push(rtdb.ref(RTDB_PATHS.CHAT_MESSAGES(chatId)));
+    const msgRef = await rtdb.push(await rtdb.ref(RTDB_PATHS.CHAT_MESSAGES(chatId)));
     const messageId = msgRef.key ?? idempotencyKey;
 
     const message: Message = {
@@ -304,7 +304,7 @@ class ChatStore {
     };
 
     const updates = this.buildFanOutUpdates(chatId, messageId, message, content.slice(0, 100));
-    await rtdb.update(rtdb.ref('/'), updates);
+    await rtdb.update(await rtdb.ref('/'), updates);
     this.messages = [...this.messages, message].sort((a, b) => a.ts - b.ts);
   }
 
@@ -316,7 +316,7 @@ class ChatStore {
     const idempotencyKey = generateIdempotencyKey();
     if (!this.addSentKey(idempotencyKey)) return;
 
-    const msgRef = rtdb.push(rtdb.ref(RTDB_PATHS.CHAT_MESSAGES(chatId)));
+    const msgRef = await rtdb.push(await rtdb.ref(RTDB_PATHS.CHAT_MESSAGES(chatId)));
     const messageId = msgRef.key ?? idempotencyKey;
 
     const message: Message = {
@@ -325,7 +325,7 @@ class ChatStore {
     };
 
     const updates = this.buildFanOutUpdates(chatId, messageId, message, '📷 Photo');
-    await rtdb.update(rtdb.ref('/'), updates);
+    await rtdb.update(await rtdb.ref('/'), updates);
     this.messages = [...this.messages, message].sort((a, b) => a.ts - b.ts);
   }
 
@@ -337,7 +337,7 @@ class ChatStore {
     const idempotencyKey = generateIdempotencyKey();
     if (!this.addSentKey(idempotencyKey)) return;
 
-    const msgRef = rtdb.push(rtdb.ref(RTDB_PATHS.CHAT_MESSAGES(chatId)));
+    const msgRef = await rtdb.push(await rtdb.ref(RTDB_PATHS.CHAT_MESSAGES(chatId)));
     const messageId = msgRef.key ?? idempotencyKey;
 
     const message: Message = {
@@ -348,7 +348,7 @@ class ChatStore {
     };
 
     const updates = this.buildFanOutUpdates(chatId, messageId, message, '🎙 Voice message');
-    await rtdb.update(rtdb.ref('/'), updates);
+    await rtdb.update(await rtdb.ref('/'), updates);
     this.messages = [...this.messages, message].sort((a, b) => a.ts - b.ts);
   }
 
@@ -405,7 +405,7 @@ class ChatStore {
     const lastMsg = this.messages[this.messages.length - 1];
     if (!lastMsg) return;
 
-    await rtdb.update(rtdb.ref('/'), {
+    await rtdb.update(await rtdb.ref('/'), {
       [RTDB_PATHS.USER_CHAT_ENTRY(user.id, chatId)]: {
         chatId,
         uid: user.id,
@@ -420,13 +420,13 @@ class ChatStore {
   // Presence listeners
   // ============================================================
 
-  private attachPresenceListeners(chatId: string): void {
+  private async attachPresenceListeners(chatId: string): Promise<void> {
     const meta = this.chats.get(chatId);
     if (!meta) return;
     for (const uid of meta.participantIds) {
       if (this.presenceUnsubs.has(uid)) continue;
-      const r = rtdb.ref(RTDB_PATHS.PRESENCE(uid));
-      const unsub = rtdb.onValue(r, (snap) => {
+      const r = await rtdb.ref(RTDB_PATHS.PRESENCE(uid));
+      const unsub = await rtdb.onValue(r, (snap) => {
         if (snap.exists()) {
           this.presence.set(uid, snap.val() as PresenceState);
         }
@@ -444,13 +444,13 @@ class ChatStore {
   // Typing
   // ============================================================
 
-  private attachTypingListener(chatId: string): void {
+  private async attachTypingListener(chatId: string): Promise<void> {
     this.detachTypingListener();
     const meta = this.chats.get(chatId);
     if (!meta) return;
     for (const uid of meta.participantIds) {
-      const r = rtdb.ref(RTDB_PATHS.TYPING(chatId, uid));
-      const unsub = rtdb.onValue(r, (snap) => {
+      const r = await rtdb.ref(RTDB_PATHS.TYPING(chatId, uid));
+      const unsub = await rtdb.onValue(r, (snap) => {
         if (!snap.exists()) return;
         const isTyping = snap.val() as boolean;
         const set = this.typingUsers.get(chatId) ?? new Set();
@@ -475,7 +475,7 @@ class ChatStore {
     this.detachTypingListener();
   }
 
-  reattachListeners(): void {
+  async reattachListeners(): Promise<void> {
     if (this.activeChatId) {
       this.attachTypingListener(this.activeChatId);
     }
@@ -526,11 +526,11 @@ class ChatStore {
   // Pinned messages
   // ============================================================
 
-  attachPinnedListener(chatId: string): void {
+  async attachPinnedListener(chatId: string): Promise<void> {
     this.detachPinnedListener();
-    const r = rtdb.ref(RTDB_PATHS.PINNED(chatId));
+    const r = await rtdb.ref(RTDB_PATHS.PINNED(chatId));
 
-    this.pinnedUnsub = rtdb.onChildAdded(r, (snap) => {
+    this.pinnedUnsub = await rtdb.onChildAdded(r, (snap) => {
       const data = snap.val() as PinnedMessage | null;
       if (!data?.message) return;
       const msg: Message = { ...data.message, edited: data.message.edited ?? false };
@@ -546,7 +546,7 @@ class ChatStore {
       this.pinnedMessages = newMap;
     });
 
-    this.pinnedRemovedUnsub = rtdb.onChildRemoved(r, (snap) => {
+    this.pinnedRemovedUnsub = await rtdb.onChildRemoved(r, (snap) => {
       const data = snap.val() as PinnedMessage | null;
       if (!data) return;
       const newMap = new Map(this.pinnedMessages);
@@ -574,7 +574,7 @@ class ChatStore {
     try {
       if (this.pinnedMessages.has(msg.id)) {
         // Unpin
-        await rtdb.remove(rtdb.ref(RTDB_PATHS.PINNED(chatId) + '/' + msg.id));
+        await rtdb.remove(await rtdb.ref(RTDB_PATHS.PINNED(chatId) + '/' + msg.id));
         toastStore.success('Message unpinned');
       } else if (this.pinnedMessages.size < 3) {
         // Pin
@@ -584,7 +584,7 @@ class ChatStore {
           pinnedAt: Date.now(),
           message: msg,
         };
-        await rtdb.set(rtdb.ref(RTDB_PATHS.PINNED(chatId) + '/' + msg.id), pinned);
+        await rtdb.set(await rtdb.ref(RTDB_PATHS.PINNED(chatId) + '/' + msg.id), pinned);
         toastStore.success('Message pinned');
       } else {
         toastStore.warning('Maximum 3 pinned messages');
@@ -599,11 +599,11 @@ class ChatStore {
   // Starred messages
   // ============================================================
 
-  attachStarredListener(uid: string, chatId: string): void {
+  async attachStarredListener(uid: string, chatId: string): Promise<void> {
     this.detachStarredListener();
-    const r = rtdb.ref(RTDB_PATHS.STARRED(uid, chatId));
+    const r = await rtdb.ref(RTDB_PATHS.STARRED(uid, chatId));
 
-    this.starredUnsub = rtdb.onChildAdded(r, (snap) => {
+    this.starredUnsub = await rtdb.onChildAdded(r, (snap) => {
       const data = snap.val() as { messageId: string } | null;
       if (!data?.messageId) return;
       const newSet = new Set(this.starredMessageIds);
@@ -624,7 +624,7 @@ class ChatStore {
     const user = authStore.user;
     if (!user) return;
 
-    const starRef = rtdb.ref(RTDB_PATHS.STARRED(user.id, chatId) + '/' + msg.id);
+    const starRef = await rtdb.ref(RTDB_PATHS.STARRED(user.id, chatId) + '/' + msg.id);
 
     try {
       if (this.starredMessageIds.has(msg.id)) {
@@ -678,7 +678,7 @@ class ChatStore {
   // ============================================================
 
   async deleteMessage(chatId: string, messageId: string): Promise<void> {
-    await rtdb.remove(rtdb.ref(RTDB_PATHS.CHAT_MESSAGES(chatId) + '/' + messageId));
+    await rtdb.remove(await rtdb.ref(RTDB_PATHS.CHAT_MESSAGES(chatId) + '/' + messageId));
     this.messages = this.messages.filter((m) => m.id !== messageId);
   }
 }

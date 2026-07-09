@@ -1,6 +1,7 @@
 // ============================================================
 // RTDB — thin wrappers, browser-only.
-// Dynamic imports to prevent SSR evaluation.
+// All functions are async and call ensureLoaded() first
+// to guarantee the firebase/database module is available.
 // ============================================================
 
 import { browser } from '$app/environment';
@@ -26,10 +27,17 @@ let fbStartAt: (value: any, key?: string) => any;
 let fbTransaction: ((r: any, fn: (current: any) => any) => Promise<{ committed: boolean; snapshot: DataSnapshot }>) | undefined;
 let fbOff: ((r: any, event?: string, ...args: any[]) => void) | undefined;
 
+let _loadPromise: Promise<void> | null = null;
 let _rtdbLoaded = false;
 
-async function ensureLoaded() {
-  if (_rtdbLoaded) return;
+function ensureLoaded(): Promise<void> {
+  if (_rtdbLoaded) return Promise.resolve();
+  if (_loadPromise) return _loadPromise;
+  _loadPromise = _doLoad();
+  return _loadPromise;
+}
+
+async function _doLoad() {
   const db = await import('firebase/database');
   fbRef = db.ref;
   fbSet = db.set;
@@ -49,15 +57,17 @@ async function ensureLoaded() {
   _rtdbLoaded = true;
 }
 
+// Eagerly start loading in browser
+if (browser) ensureLoaded();
+
 export type { DatabaseReference as Ref, DataSnapshot, Unsubscribe };
 
-export function ref(path: string): DatabaseReference {
+export async function ref(path: string): Promise<DatabaseReference> {
   if (!browser || !isReady()) {
-    // Return a stub reference that silently no-ops (SSR safety)
     return { key: path, parent: null, child: () => null, set: async () => {}, update: async () => {}, push: () => null, remove: async () => {}, onValue: () => () => {}, onChildAdded: () => () => {}, onChildChanged: () => () => {}, onChildRemoved: () => () => {}, get: async () => ({ val: () => null, key: path, exists: () => false, forEach: () => false }) };
   }
-  const db = getDatabaseInstance();
-  return fbRef!(db, path);
+  await ensureLoaded();
+  return fbRef!(getDatabaseInstance(), path);
 }
 
 export async function set(r: DatabaseReference, value: unknown): Promise<void> {
@@ -70,7 +80,8 @@ export async function update(r: DatabaseReference, values: Record<string, unknow
   return fbUpdate(r, values);
 }
 
-export function push(r: DatabaseReference, value?: unknown): DatabaseReference {
+export async function push(r: DatabaseReference, value?: unknown): Promise<DatabaseReference> {
+  await ensureLoaded();
   return fbPush(r, value);
 }
 
@@ -79,19 +90,23 @@ export async function remove(r: DatabaseReference): Promise<void> {
   return fbRemove(r);
 }
 
-export function onValue(r: DatabaseReference, cb: (snap: DataSnapshot) => void): Unsubscribe {
+export async function onValue(r: DatabaseReference, cb: (snap: DataSnapshot) => void): Promise<Unsubscribe> {
+  await ensureLoaded();
   return fbOnValue!(r, cb);
 }
 
-export function onChildAdded(r: DatabaseReference, cb: (snap: DataSnapshot, prev?: string | null) => void): Unsubscribe {
+export async function onChildAdded(r: DatabaseReference, cb: (snap: DataSnapshot, prev?: string | null) => void): Promise<Unsubscribe> {
+  await ensureLoaded();
   return fbOnChildAdded!(r, cb);
 }
 
-export function onChildChanged(r: DatabaseReference, cb: (snap: DataSnapshot, prev?: string | null) => void): Unsubscribe {
+export async function onChildChanged(r: DatabaseReference, cb: (snap: DataSnapshot, prev?: string | null) => void): Promise<Unsubscribe> {
+  await ensureLoaded();
   return fbOnChildChanged!(r, cb);
 }
 
-export function onChildRemoved(r: DatabaseReference, cb: (snap: DataSnapshot) => void): Unsubscribe {
+export async function onChildRemoved(r: DatabaseReference, cb: (snap: DataSnapshot) => void): Promise<Unsubscribe> {
+  await ensureLoaded();
   return fbOnChildRemoved!(r, cb);
 }
 
@@ -100,12 +115,25 @@ export async function get(r: DatabaseReference): Promise<DataSnapshot> {
   return fbGet(r);
 }
 
+export async function query(ref: DatabaseReference, ...constraints: any[]): Promise<DatabaseReference> {
+  await ensureLoaded();
+  return fbQuery(ref, ...constraints);
+}
+
+export async function limitToLast(count: number): Promise<any> {
+  await ensureLoaded();
+  return fbLimitToLast(count);
+}
+
+export async function startAt(value: any, key?: string): Promise<any> {
+  await ensureLoaded();
+  return fbStartAt(value, key);
+}
+
 export function detach(r: DatabaseReference, event?: string): void {
   if (!fbOff) return;
   fbOff(r, event);
 }
-
-export { fbQuery as query, fbLimitToLast as limitToLast, fbStartAt as startAt };
 
 export async function transaction(
   r: DatabaseReference,

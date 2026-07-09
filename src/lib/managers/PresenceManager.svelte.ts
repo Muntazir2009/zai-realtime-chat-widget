@@ -93,10 +93,10 @@ class PresenceManager {
     }
   }
 
-  disconnect(): void {
+  async disconnect(): Promise<void> {
     const uid = this.uid;
     if (uid) {
-      rtdb.remove(rtdb.ref(RTDB_PATHS.PRESENCE(uid))).catch(() => {});
+      rtdb.remove(await rtdb.ref(RTDB_PATHS.PRESENCE(uid))).catch(() => {});
     }
     this.stopHeartbeat();
     this.onlineStatus = 'offline';
@@ -113,8 +113,8 @@ class PresenceManager {
     }
   }
 
-  private writePresence(uid: string, status: PresenceState['status']): void {
-    rtdb.set(rtdb.ref(RTDB_PATHS.PRESENCE(uid)), {
+  private async writePresence(uid: string, status: PresenceState['status']): Promise<void> {
+    rtdb.set(await rtdb.ref(RTDB_PATHS.PRESENCE(uid)), {
       uid,
       status,
       lastSeen: Date.now(),
@@ -124,8 +124,8 @@ class PresenceManager {
     });
   }
 
-  private updateLastSeen(uid: string): void {
-    rtdb.set(rtdb.ref(RTDB_PATHS.PRESENCE(uid)), {
+  private async updateLastSeen(uid: string): Promise<void> {
+    rtdb.set(await rtdb.ref(RTDB_PATHS.PRESENCE(uid)), {
       uid,
       status: this.onlineStatus,
       lastSeen: Date.now(),
@@ -133,13 +133,13 @@ class PresenceManager {
     }).catch(() => {});
   }
 
-  private writeTyping(chatId: string, uid: string, typing: boolean): void {
-    rtdb.set(rtdb.ref(RTDB_PATHS.TYPING(chatId, uid)), { typing, ts: Date.now() })
+  private async writeTyping(chatId: string, uid: string, typing: boolean): Promise<void> {
+    rtdb.set(await rtdb.ref(RTDB_PATHS.TYPING(chatId, uid)), { typing, ts: Date.now() })
       .catch(() => {});
 
     if (!typing) {
-      setTimeout(() => {
-        rtdb.remove(rtdb.ref(RTDB_PATHS.TYPING(chatId, uid))).catch(() => {});
+      setTimeout(async () => {
+        rtdb.remove(await rtdb.ref(RTDB_PATHS.TYPING(chatId, uid))).catch(() => {});
       }, 3000);
     }
   }

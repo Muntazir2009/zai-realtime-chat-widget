@@ -20,7 +20,7 @@
   ];
 
   async function loadAvailableUsers() {
-    const snap = await rtdb.get(rtdb.ref('users'));
+    const snap = await rtdb.get(await rtdb.ref('users'));
     if (!snap.exists()) return;
     const users: typeof availableUsers = [];
     snap.forEach((child: any) => {
