@@ -57,7 +57,7 @@
   const view = $derived(
     !mounted ? 'loading' :
     !authStore?.isAuthenticated ? 'auth' :
-    uiStore?.view ?? 'auth'
+    (uiStore?.view === 'auth' ? 'chatList' : uiStore?.view ?? 'chatList')
   );
 
   // Watch for view changes to trigger side effects (load inbox, go online)
