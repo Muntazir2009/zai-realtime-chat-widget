@@ -25,13 +25,13 @@ async function initFirebase() {
   const { getStorage } = await import('firebase/storage');
 
   const firebaseConfig = {
-    apiKey: import.meta.env.PUBLIC_FIREBASE_API_KEY,
-    authDomain: import.meta.env.PUBLIC_FIREBASE_AUTH_DOMAIN,
-    databaseURL: import.meta.env.PUBLIC_FIREBASE_DATABASE_URL,
-    projectId: import.meta.env.PUBLIC_FIREBASE_PROJECT_ID,
-    storageBucket: import.meta.env.PUBLIC_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: import.meta.env.PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-    appId: import.meta.env.PUBLIC_FIREBASE_APP_ID,
+    apiKey: 'AIzaSyCVFF3L-y4-YOwHD4bMD1jin-o0Bj5IHdU',
+    authDomain: 'chat1306-c3c86.firebaseapp.com',
+    databaseURL: 'https://chat1306-c3c86-default-rtdb.asia-southeast1.firebasedatabase.app',
+    projectId: 'chat1306-c3c86',
+    storageBucket: 'chat1306-c3c86.firebasestorage.app',
+    messagingSenderId: '980298697611',
+    appId: '1:980298697611:web:8dd4306cdc39fd7cb93d8e',
   };
 
   if (getApps().length === 0) {

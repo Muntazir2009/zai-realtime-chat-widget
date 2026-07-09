@@ -263,8 +263,47 @@ export async function rtdbRemove(env: EnvVars, path: string): Promise<void> {
 // ---- Helper ----
 
 /** Extract Cloudflare env from a SvelteKit RequestEvent. */
-export function getEnv(event: { platform?: { env?: Record<string, string> } }): EnvVars {
-  const p = event.platform?.env;
-  if (!p) throw new Error('Cloudflare env bindings not available');
-  return p as unknown as EnvVars;
+// DEBUG: hardcoded credentials — DO NOT COMMIT
+const _HARDCODED_ENV: EnvVars = {
+  FIREBASE_PROJECT_ID: 'chat1306-c3c86',
+  FIREBASE_CLIENT_EMAIL: 'firebase-adminsdk-fbsvc@chat1306-c3c86.iam.gserviceaccount.com',
+  FIREBASE_PRIVATE_KEY: `-----BEGIN PRIVATE KEY-----
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDdRXEF7vc2IV/P
+Gy/GRBhgJHiVYvj4E+4n4dTVkvfJmHtsIWxBnSv9l0D0zKber0D/o62t+iiHTjbj
+cZtHvR7WPu98DN26RoBCsFYQkNbTsknRNi4/nGh0NSK5KfS7EMy2dX8HM4uw0aTY
+m/g5fu03cFSR727T4bLJ/8hpRsukjwKzTUw46DbZj+HBHq3SrHR0bKm3VUINC5Fg
+/nfjRi5znLSZewNtrSDMWih6EzF9Kf8cLEPGwvgQOj2gRiahzFOOLI0SGn5BA/iM
+/0l/y3hcWzegD42QNeNR9wc/frrt931a331uhbz0GQS1hmnXBS8VJ0cK8B3r7bSx
+qkW8YJz3AgMBAAECggEAB1JLZZddHbDoAynSoFxTdCbwyHygYVEDgdVSngiBY23E
+s7S9aMRjFr6A+zikUtz4qRzI2+dZnPSFE2yIZ0zGLu+hK/kfAxFfIBXGm0C3owSU
+tbP1vswVlrbFYdwWCXSKWYU0wU++0Qh2zGYIxhpBjiKM4dFK2P7wVAe/IWCiz1yO
+SWA9BxDbaE3m3XOg0L4XgVWEZQJhvWPk4IPq2wFuZojN0FqD/hGftOHVFLmZYArV
+gmp3BivA6BSjYiRgEsjMmuYHCWvGP6d/4YgLgytYow8AI1tPXWQ2tW0J+8NyL/o9
+eSl3IPwMtp8OTg5/D42Hpm5Wfs0dvmqg9lPG1Fdu+QKBgQDxGRZnwV5cEl2dw6xA
+ZnwpGrDieIOzAbWgs0s8/R3UpeVCsX+ay/xGWHXAYXY0nE0OXFUYZwg4N2d7KQ23
+Os4FOVqaToVkYY2CSB9nhXWjVQG9qDCK/BilQQ6DYTbwFLWIllcvTbLd1FH1fzmg
+6Hzzr8En9DDZWyuTnWgwIugziQKBgQDq8qJGHuTCYYPwXbiFG5GZv0HcUJyzQTYm
+71zFU49OD69CE2MUCTXeHJYzQp6CvB+iglZhMMUwIsdfJjR0dbTFe8Mj4WnQc6Zy
+Xp55xRwRTnX2l08imz9KCDO55rrIYOkCHo5Kpss71dgRYgDcwk9skfc37DwLqNs6
+4Q21fVesfwKBgQCK/TB6bfJM19WaPpSNp8dKFvYECP+7cW/YjaQBK9ZHob+R/CuY
+/KGZmCOB3W28lKKjdb0kzTji16XTTW53w/HC9zZxIHUr0kU25wcbsceIelf/kvcx
+GHXIxsFsId3+96FTdYAbaAqGcYEyKr75MS3feeG7e72xgCqV9bd7kJQWKQKBgQCB
+gb9bQZo9X31X2IFmtdybUCagp7rIwHB2I8kSaE387H5hwMgDelQ8G6vbk6RGUiZp
+8MhmiHiZYQJe+3M8oslDdkYJmC44nhcowek/HBytmX9CrwMLA2Juj3jbx0g8PdcS
+uP8cPTaXw/d3FXt+NImNQiRwqgIrNyepG/bvjKjwRwKBgCZjDFQkxRoC1WGjfArg
+idTz7FOLUHXrlDhDDOHXHP1Nl3kVcO1WAbelpNesIijYM7Ax51uZVqf7mwcu+1L/
+fNyc2qBk/46o+perOEcNkqMo0iz2iwp7CBIadPHL9BHMPM630gn+R8bHj6vf+8PW
+B1IRnaYykoPzceWquR0cchBZ
+-----END PRIVATE KEY-----`,
+  PUBLIC_FIREBASE_DATABASE_URL: 'https://chat1306-c3c86-default-rtdb.asia-southeast1.firebasedatabase.app',
+  PUBLIC_FIREBASE_API_KEY: 'AIzaSyCVFF3L-y4-YOwHD4bMD1jin-o0Bj5IHdU',
+  R2_ACCOUNT_ID: 'd8f886df291319456efe2c1cd0fb33b6',
+  R2_ACCESS_KEY_ID: '6c4c4cc08dc80cbc1063b26585a09ea6',
+  R2_SECRET_ACCESS_KEY: '117e0bfda60047bb682ab6129aa69203db4c1273f6cf9971ca767b45ef4a0e5f',
+  R2_BUCKET_NAME: 'chat',
+  PUBLIC_R2_PUBLIC_URL: 'https://pub-5015d5428b174f55a02bb5e740d63919.r2.dev',
+};
+
+export function getEnv(_event?: { platform?: { env?: Record<string, string> } }): EnvVars {
+  return _HARDCODED_ENV;
 }
