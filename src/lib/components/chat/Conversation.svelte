@@ -185,10 +185,12 @@
   let reactionPickerTargetId: string | null = $state(null);
 
   function handleReactFromMenu(msg: Message) {
-    // Set the target so MessageBubble can pick it up
+    // Set the target so MessageBubble can pick it up.
+    // Use setTimeout instead of rAF — rAF fires before Svelte's $effect
+    // has a chance to propagate the openReactionPicker=true update to
+    // MessageBubble, causing the picker to never open.
     reactionPickerTargetId = msg.id;
-    // Clear after a tick so it can be consumed
-    requestAnimationFrame(() => { reactionPickerTargetId = null; });
+    setTimeout(() => { reactionPickerTargetId = null; }, 300);
   }
 
   async function saveEdit() {

@@ -5,7 +5,7 @@
 // ============================================================
 
 import { browser } from '$app/environment';
-import { getDatabaseInstance, isReady } from './config.js';
+import { getDatabaseInstance, isReady, ensureReady } from './config.js';
 
 type DatabaseReference = any;
 type DataSnapshot = any;
@@ -32,14 +32,20 @@ let fbServerTimestamp: () => any;
 let _loadPromise: Promise<void> | null = null;
 let _rtdbLoaded = false;
 
+/** Ensures both the Firebase app is initialized AND the database module is loaded */
 function ensureLoaded(): Promise<void> {
-  if (_rtdbLoaded) return Promise.resolve();
+  if (_rtdbLoaded && isReady()) return Promise.resolve();
   if (_loadPromise) return _loadPromise;
   _loadPromise = _doLoad();
   return _loadPromise;
 }
 
 async function _doLoad() {
+  // CRITICAL: Wait for Firebase app to be fully initialized FIRST.
+  // Without this, getDatabaseInstance() returns undefined and all
+  // RTDB operations silently use no-op stubs.
+  await ensureReady();
+
   const db = await import('firebase/database');
   fbRef = db.ref;
   fbSet = db.set;
@@ -67,11 +73,22 @@ if (browser) ensureLoaded();
 export type { DatabaseReference as Ref, DataSnapshot, Unsubscribe };
 
 export async function ref(path: string): Promise<DatabaseReference> {
-  if (!browser || !isReady()) {
-    return { key: path, parent: null, child: () => null, set: async () => {}, update: async () => {}, push: () => null, remove: async () => {}, onValue: () => () => {}, onChildAdded: () => () => {}, onChildChanged: () => () => {}, onChildRemoved: () => () => {}, get: async () => ({ val: () => null, key: path, exists: () => false, forEach: () => false }) };
+  if (!browser) {
+    return _stubRef(path);
   }
+  // Always await full initialization — do NOT early-return with stub
+  // when Firebase is still loading (that was the root cause of all
+  // real-time features silently failing).
   await ensureLoaded();
-  return fbRef!(getDatabaseInstance(), path);
+  if (!isReady() || !fbRef) {
+    console.warn('[rtdb] ref() called but Firebase not ready, returning stub for:', path);
+    return _stubRef(path);
+  }
+  return fbRef(getDatabaseInstance(), path);
+}
+
+function _stubRef(path: string): DatabaseReference {
+  return { key: path, parent: null, child: () => null, set: async () => {}, update: async () => {}, push: () => null, remove: async () => {}, onValue: () => () => {}, onChildAdded: () => () => {}, onChildChanged: () => () => {}, onChildRemoved: () => () => {}, get: async () => ({ val: () => null, key: path, exists: () => false, forEach: () => false }) };
 }
 
 export async function set(r: DatabaseReference, value: unknown): Promise<void> {

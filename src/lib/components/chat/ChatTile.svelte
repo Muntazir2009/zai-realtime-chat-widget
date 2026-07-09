@@ -31,11 +31,12 @@
     if (!chatMeta) return 'Loading...';
     const lm = chatMeta.lm;
     if (!lm) return 'No messages yet';
-    if (lm.startsWith('📷')) return 'Photo';
+    if (lm.startsWith('📷')) return '📷 Photo';
+    if (lm.startsWith('🎙')) return '🎙 Voice message';
     return lm;
   }
 
-  const hasPhotoPreview = $derived(chatMeta?.lm?.startsWith('📷') ?? false);
+  const hasMediaPreview = $derived((chatMeta?.lm?.startsWith('📷') ?? false) || (chatMeta?.lm?.startsWith('🎙') ?? false));
 </script>
 
 <button
@@ -63,7 +64,7 @@
     </div>
     <div class="tile-bottom">
       <p class="tile-preview">
-        {#if hasPhotoPreview}
+        {#if hasMediaPreview}
           <Camera size={13} class="tile-preview-icon" />
         {/if}
         {lastMessagePreview()}

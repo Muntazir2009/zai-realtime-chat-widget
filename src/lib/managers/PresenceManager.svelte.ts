@@ -6,6 +6,7 @@
 // ============================================================
 
 import * as rtdb from '$lib/firebase/rtdb.js';
+import { isReady as firebaseIsReady } from '$lib/firebase/config.js';
 import { authStore } from '$lib/stores/auth.svelte.js';
 import type { PresenceState } from '$lib/types/index.js';
 import { TYPING_DEBOUNCE_MS, RTDB_PATHS } from '$lib/types/index.js';
@@ -47,8 +48,35 @@ class PresenceManager {
 
     // Queue the onDisconnect cleanup FIRST — this is the critical fix.
     // Firebase guarantees this fires even if the client crashes or loses network.
+    // Guard: only attempt onDisconnect if Firebase RTDB is fully initialized.
+    // The pieceNum_ crash occurs when the SDK internals aren't ready.
+    if (!firebaseIsReady()) {
+      console.warn('[PresenceManager] Firebase not ready, will retry goOnline in 2s');
+      // Retry after Firebase has had time to initialize
+      setTimeout(() => { if (this.uid === uid && this.onlineStatus === 'online') this.goOnline(); }, 2000);
+      this.writePresence(uid, 'online');
+      return;
+    }
+
+    this.setupOnDisconnect(uid);
+
+    if (!this.heartbeatTimer) {
+      this.heartbeatTimer = setInterval(() => {
+        this.updateLastSeen(uid);
+      }, HEARTBEAT_INTERVAL_MS);
+    }
+
+    this.disconnectQueued = true;
+  }
+
+  private setupOnDisconnect(uid: string): void {
     const presenceRef = rtdb.ref(RTDB_PATHS.PRESENCE(uid));
     presenceRef.then((ref) => {
+      if (!ref || typeof ref.onDisconnect !== 'function') {
+        console.warn('[PresenceManager] Invalid ref for onDisconnect, skipping');
+        this.writePresence(uid, 'online');
+        return;
+      }
       rtdb.onDisconnectSet(ref, {
         uid,
         status: 'offline',
@@ -59,18 +87,23 @@ class PresenceManager {
         this.writePresence(uid, 'online');
       }).catch((err) => {
         console.warn('[PresenceManager] Failed to queue onDisconnect:', err);
-        // Still try to write online status
+        // Retry once after 3s (RTDB WebSocket may not be connected yet)
+        setTimeout(() => {
+          if (this.uid === uid && this.onlineStatus === 'online') {
+            rtdb.onDisconnectSet(ref, {
+              uid,
+              status: 'offline',
+              lastSeen: rtdb.serverTimestamp(),
+              typing: false,
+            }).then(() => this.writePresence(uid, 'online')).catch(() => {});
+          }
+        }, 3000);
         this.writePresence(uid, 'online');
       });
+    }).catch((err) => {
+      console.warn('[PresenceManager] Failed to get presence ref:', err);
+      this.writePresence(uid, 'online');
     });
-
-    if (!this.heartbeatTimer) {
-      this.heartbeatTimer = setInterval(() => {
-        this.updateLastSeen(uid);
-      }, HEARTBEAT_INTERVAL_MS);
-    }
-
-    this.disconnectQueued = true;
   }
 
   goAway(): void {
@@ -150,11 +183,15 @@ class PresenceManager {
 
   async disconnect(): Promise<void> {
     const uid = this.uid;
-    if (uid) {
-      const ref = await rtdb.ref(RTDB_PATHS.PRESENCE(uid));
-      // Cancel the onDisconnect hook and explicitly remove
-      rtdb.onDisconnectCancel(ref).catch(() => {});
-      rtdb.remove(ref).catch(() => {});
+    if (uid && firebaseIsReady()) {
+      try {
+        const ref = await rtdb.ref(RTDB_PATHS.PRESENCE(uid));
+        // Cancel the onDisconnect hook and explicitly remove
+        rtdb.onDisconnectCancel(ref).catch(() => {});
+        rtdb.remove(ref).catch(() => {});
+      } catch (err) {
+        console.warn('[PresenceManager] disconnect error:', err);
+      }
     }
     this.stopHeartbeat();
     this.onlineStatus = 'offline';
