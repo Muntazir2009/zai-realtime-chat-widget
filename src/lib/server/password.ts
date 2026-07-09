@@ -1,15 +1,14 @@
 // ============================================================
 // Cloudflare Workers-compatible password hashing via Web Crypto API.
-// Uses PBKDF2-SHA256 (OWASP 2023 recommendation: 600k iterations).
-// Replaces Bun.password (argon2id) which is not available on Workers.
-//
+// Uses PBKDF2-SHA256.
+// Cloudflare Workers caps PBKDF2 at 100,000 iterations.
 // Storage format: pbkdf2_sha256$<iterations>$<salt_b64>$<hash_b64>
 //
-// NOTE: Existing argon2id hashes (from Bun.password) will NOT verify.
-// Users must re-register after migration.
+// NOTE: Existing hashes with different iteration counts will NOT verify.
+// Users must re-register after any iteration count change.
 // ============================================================
 
-const ITERATIONS = 600_000;
+const ITERATIONS = 100_000;
 const HASH_LENGTH = 32; // 256 bits
 const SALT_LENGTH = 16; // 128 bits
 const ALGO = 'PBKDF2';
