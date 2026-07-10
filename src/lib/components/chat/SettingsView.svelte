@@ -1,7 +1,7 @@
 <script lang="ts">
   import {
     LogOut, Check, Moon, Sun, Smartphone, Shield, Palette, Info, Settings,
-    Flame, Eye, EyeOff, TypeCaret, MessageSquare, Minus, Circle, Square,
+    Flame, Eye, ALargeSmall, MessageSquare, Minus, Circle, Square,
     Wifi, WifiOff, Activity, Clock, Trash2
   } from 'lucide-svelte';
   import { themeManager } from '$lib/managers/ThemeManager.svelte';
@@ -165,7 +165,7 @@
                 : 'background: var(--bg-surface); border-color: var(--border-subtle); color: var(--text-primary);'}
               onclick={() => prefsStore.setFontSize(f.size)}
             >
-              <TypeCaret size={f.size === 'small' ? 12 : f.size === 'large' ? 18 : 15} />
+              <ALargeSmall size={f.size === 'small' ? 12 : f.size === 'large' ? 18 : 15} />
               {f.label}
             </button>
           {/each}
@@ -213,6 +213,7 @@
               <p class="text-[11px]" style="color: var(--text-tertiary);">Let others see when you're active</p>
             </div>
           </div>
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
           <button
             class="toggle-track"
             class:toggle-on={prefsStore.showOnline}
@@ -223,6 +224,7 @@
             }}
             role="switch"
             aria-checked={prefsStore.showOnline}
+            aria-label="Toggle online status"
           >
             <div class="toggle-thumb"></div>
           </button>
@@ -239,12 +241,14 @@
               <p class="text-[11px]" style="color: var(--text-tertiary);">Show when you've read messages</p>
             </div>
           </div>
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
           <button
             class="toggle-track"
             class:toggle-on={prefsStore.sendReadReceipts}
             onclick={() => prefsStore.setSendReadReceipts(!prefsStore.sendReadReceipts)}
             role="switch"
             aria-checked={prefsStore.sendReadReceipts}
+            aria-label="Toggle read receipts"
           >
             <div class="toggle-thumb"></div>
           </button>
@@ -261,12 +265,14 @@
               <p class="text-[11px]" style="color: var(--text-tertiary);">Show when you're typing a message</p>
             </div>
           </div>
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
           <button
             class="toggle-track"
             class:toggle-on={prefsStore.sendTypingIndicators}
             onclick={() => prefsStore.setSendTypingIndicators(!prefsStore.sendTypingIndicators)}
             role="switch"
             aria-checked={prefsStore.sendTypingIndicators}
+            aria-label="Toggle typing indicators"
           >
             <div class="toggle-thumb"></div>
           </button>
