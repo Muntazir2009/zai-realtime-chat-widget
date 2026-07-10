@@ -366,3 +366,24 @@ Stage Summary:
 - Settings: Confirmation dialogs on all destructive actions, 4 new notification toggles, compact mode, about section, clear cache, version badge
 - Animations: 8 new animation keyframes, stagger helper, conversation slide transition, blur tab crossfade, spring toggles, glass press feedback, reduced-motion support
 - Pre-existing svelte-check errors unchanged (toastStore, canvas-confetti, Symbol.iterator — not introduced by this change)
+
+---
+Task ID: 10
+Agent: Main Agent
+Task: Fix 4 bugs: swipe snap-back, nav/input conflict, heart easter egg, GIF env
+
+Work Log:
+- Fixed swipe-to-reply not snapping back: removed competing springBack() RAF loop, now uses pure CSS transition (isSwiping false → transition animates displayOffset back to 0). Increased transition to 400ms for smoother spring feel.
+- Fixed nav/input conflict: `showNav` derived now excludes `view === 'conversation'`, so bottom nav is hidden when in a chat (user has back button). This stops the nav overlapping the input bar.
+- Replaced confetti easter egg with floating hearts: Complete rewrite of EasterEggFx.svelte — removed canvas-confetti dependency, created pure CSS/SVG heart animation. 25 hearts in wave 1 + 15 in staggered wave 2. Hearts float upward with scale/rotation/fade. Uses heart SVG path with randomized colors (#ef4444, #ec4899, #f43f5e, etc.), sizes, and delays.
+- Fixed GIF API env: Changed from `process.env.GIPHY_API_KEY` to `$env/dynamic/private` + `import.meta.env` fallback. SvelteKit doesn't expose `process.env` the same way — `$env/dynamic/private` is the correct server-side approach. Created `.env.example` for documentation. Re-added API key to `.env` (was lost).
+
+Stage Summary:
+- 4 files modified: MessageBubble.svelte, +page.svelte, EasterEggFx.svelte, api/gifs/search/+server.ts
+- 2 files created: .env.example
+- Swipe: bubbles now cleanly snap back with CSS spring transition
+- Nav: hidden in conversation view, input bar no longer conflicts
+- Hearts: beautiful floating heart animation replaces generic confetti
+- GIFs: proper SvelteKit env loading ($env/dynamic/private + import.meta.env)
+- canvas-confetti no longer imported anywhere (can be removed from package.json)
+- Commit 3910566e pushed to main
