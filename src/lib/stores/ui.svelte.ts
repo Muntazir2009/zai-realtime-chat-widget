@@ -5,6 +5,7 @@
 // ============================================================
 
 import type { Message } from '$lib/types/index.js';
+import { chatStore } from './chat.svelte.js';
 
 export type TabId = 'global' | 'dms' | 'settings';
 
@@ -25,12 +26,17 @@ class UIStore {
     }
   }
 
+  /** Navigate to a tab. If currently in a conversation, close it first (synchronously). */
   setTab(tab: TabId): void {
-    this.tab = tab;
-    // If user taps a nav tab while inside a conversation, go back to chat list
+    // Close any active chat BEFORE changing view — this clears
+    // activeChatId, detaches RTDB listeners, and resets messages
+    // so no stale state leaks into the tab view.
     if (this.view === 'conversation') {
-      this.view = 'chatList';
+      chatStore.closeChat();
+      this.replyTo = null;
     }
+    this.tab = tab;
+    this.view = 'chatList';
   }
 
   setReplyTo(msg: Message | null): void {

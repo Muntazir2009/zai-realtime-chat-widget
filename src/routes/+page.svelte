@@ -73,11 +73,6 @@
     if (v === _prevView) return;
     _prevView = v;
 
-    // Leaving conversation — always close the active chat to clean up listeners & state
-    if (v !== 'conversation' && chatStore.activeChatId) {
-      chatStore.closeChat();
-    }
-
     if (v === 'chatList' && authStore.user) {
       chatStore.loadInbox(authStore.user.id);
       presenceManager.goOnline();
