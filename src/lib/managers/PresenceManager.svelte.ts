@@ -100,41 +100,41 @@ class PresenceManager {
     this.disconnectQueued = true;
   }
 
-  private setupOnDisconnect(uid: string): void {
-    const presenceRef = rtdb.ref(RTDB_PATHS.PRESENCE(uid));
-    presenceRef.then((ref) => {
-      if (!ref || typeof ref.onDisconnect !== 'function') {
-        console.warn('[PresenceManager] Invalid ref for onDisconnect, skipping');
-        this.writePresence(uid, 'online');
-        return;
-      }
-      rtdb.onDisconnectSet(ref, {
+  private async setupOnDisconnect(uid: string): Promise<void> {
+    try {
+      const ref = await rtdb.ref(RTDB_PATHS.PRESENCE(uid));
+      // In Firebase v9+, onDisconnect is a standalone function (not a ref method).
+      // rtdb.onDisconnectSet handles this internally.
+      await rtdb.onDisconnectSet(ref, {
         uid,
         status: 'offline',
         lastSeen: rtdb.serverTimestamp(),
         typing: false,
-      }).then(() => {
-        // Only set to online AFTER the disconnect hook is successfully queued
-        this.writePresence(uid, 'online');
-      }).catch((err) => {
-        console.warn('[PresenceManager] Failed to queue onDisconnect:', err);
-        // Retry once after 3s (RTDB WebSocket may not be connected yet)
-        setTimeout(() => {
-          if (this.uid === uid && this.onlineStatus === 'online') {
-            rtdb.onDisconnectSet(ref, {
+      });
+      // Only set to online AFTER the disconnect hook is successfully queued
+      this.writePresence(uid, 'online');
+    } catch (err) {
+      console.warn('[PresenceManager] Failed to queue onDisconnect:', err);
+      // Retry once after 3s (RTDB WebSocket may not be connected yet)
+      setTimeout(async () => {
+        if (this.uid === uid && this.onlineStatus === 'online') {
+          try {
+            const ref = await rtdb.ref(RTDB_PATHS.PRESENCE(uid));
+            await rtdb.onDisconnectSet(ref, {
               uid,
               status: 'offline',
               lastSeen: rtdb.serverTimestamp(),
               typing: false,
-            }).then(() => this.writePresence(uid, 'online')).catch(() => {});
+            });
+            this.writePresence(uid, 'online');
+          } catch {
+            // Give up on retry — write online presence anyway
+            this.writePresence(uid, 'online');
           }
-        }, 3000);
-        this.writePresence(uid, 'online');
-      });
-    }).catch((err) => {
-      console.warn('[PresenceManager] Failed to get presence ref:', err);
+        }
+      }, 3000);
       this.writePresence(uid, 'online');
-    });
+    }
   }
 
   goAway(): void {
