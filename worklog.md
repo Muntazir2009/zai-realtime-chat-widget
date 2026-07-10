@@ -275,3 +275,26 @@ Stage Summary:
 - Text visibility: white received bubbles with dark text (#1a1a2e), green sent bubbles with white text
 - Smooth animations throughout: view transitions, tab crossfade, nav pill bounce, input slide-up, bubble spring
 - All hardcoded dark/crimson colors replaced with CSS variable references
+
+---
+Task ID: 8
+Agent: Main Agent
+Task: Fix 4 critical issues: nav tabs, voice uploads, delete chat, liquid glass input
+
+Work Log:
+- Diagnosed navigation tabs not working: TWO root causes found
+  1. `<Global />` typo on line 140 of +page.svelte (should be `<GlobalView />`)
+  2. `$state()` wrapper on store singletons (uiStore, authStore, chatStore, presenceManager) created double-proxying that broke Svelte 5 reactivity — BottomNavBar's `uiStore.setTab()` updated the class property but the $derived in +page.svelte didn't re-compute because the outer $state proxy intercepted the signal chain
+  3. Invalid `key={tabKey}` attribute on a `<div>` (not valid in Svelte) — replaced with proper `{#key tabKey}` block
+- Fixed voice/image uploads: storage.ts POSTs to `/api/upload/file` but this endpoint was NEVER created. Created `src/routes/api/upload/file/+server.ts` — accepts FormData, validates folder/size, uploads to R2 via S3 SDK PutObjectCommand, returns {publicUrl, key}
+- Added delete chat: new `deleteChat(chatId)` method in chat.svelte.ts removes user_chats entry from RTDB, cleans up local state (userChats, chats Maps, meta listener), with error handling via toastStore. Updated ChatTile context menu from "Close chat" to "Delete chat" with red danger styling
+- Liquid glass morphism ON InputBar: replaced solid bg-surface with `rgba(255,255,255,0.52)` + `backdrop-filter: blur(40px) saturate(220%) brightness(1.06)`, added `::before` pseudo for top-half inner highlight gradient, `::after` pseudo for specular shine line, elevated multi-layer box-shadow with inset highlights. Children elevated with `z-index: 1`
+- Fixed VoiceRecorder send button shadow (was hardcoded `rgba(220, 38, 38, 0.35)` crimson red — now uses `color-mix(in srgb, var(--color-primary) 35%, transparent)`)
+
+Stage Summary:
+- 6 files modified: +page.svelte, ChatTile.svelte, InputBar.svelte, VoiceRecorder.svelte, chat.svelte.ts, +server.ts (new)
+- Navigation: tabs now fully functional — clicking Global/Chats/Settings switches views with animation
+- Uploads: /api/upload/file endpoint enables voice messages and image uploads to reach R2
+- Delete: long-press on DM list item → "Delete chat" removes it from inbox and Firebase
+- Input: liquid glass effect applied directly ON the input bar element (not behind)
+- Commit c06f8a91 pushed to main
