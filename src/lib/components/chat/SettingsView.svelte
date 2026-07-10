@@ -29,7 +29,7 @@
   <!-- Header -->
   <header class="glass-header safe-top flex items-center justify-between px-4" style="height: 60px; min-height: 60px; z-index: 50;">
     <div class="flex items-center gap-3">
-      <div class="w-8 h-8 rounded-xl flex items-center justify-center" style="background: linear-gradient(135deg, #dc2626, #ef4444);">
+      <div class="w-8 h-8 rounded-xl flex items-center justify-center" style="background: linear-gradient(135deg, var(--color-primary), var(--color-accent));">
         <Settings size={16} color="white" />
       </div>
       <div>
@@ -47,7 +47,7 @@
       <div class="flex items-center gap-3">
         <div
           class="w-14 h-14 rounded-2xl flex items-center justify-center font-bold text-white text-xl flex-shrink-0 shadow-md"
-          style="background: linear-gradient(135deg, #ef4444, #dc2626);"
+          style="background: linear-gradient(135deg, var(--color-primary), var(--color-accent));"
         >
           {authStore.user?.displayName?.charAt(0).toUpperCase() || '?'}
         </div>
@@ -112,7 +112,7 @@
     <section class="animate-fade-in" style="animation-delay: 150ms;">
       <button
         class="w-full glass flex items-center justify-center gap-2.5 min-h-[48px] rounded-[var(--radius-lg)] font-semibold text-sm transition-all duration-200 active:scale-[0.97]"
-        style="background: rgba(239, 68, 68, 0.08); color: var(--color-danger); border-color: rgba(239, 68, 68, 0.12);"
+        style="background: color-mix(in srgb, var(--color-danger) 8%, transparent); color: var(--color-danger); border-color: color-mix(in srgb, var(--color-danger) 12%, transparent);"
         onclick={handleLogout}
       >
         <LogOut size={18} />

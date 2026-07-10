@@ -254,7 +254,7 @@
     min-width: 80px;
     padding: 6px 10px;
     border-radius: var(--radius-md);
-    background: rgba(239, 68, 68, 0.08);
+    background: color-mix(in srgb, var(--color-danger) 8%, transparent);
     color: var(--color-danger);
     font-size: 13px;
     font-weight: 600;

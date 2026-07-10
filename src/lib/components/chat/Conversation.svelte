@@ -680,7 +680,7 @@
   .msg-scroll::-webkit-scrollbar { width: 0px; }
 
   .scroll-bottom-pad {
-    height: 80px;
+    height: 16px;
     flex-shrink: 0;
   }
 
@@ -698,17 +698,17 @@
     padding: 3px 10px;
     border-radius: 99px;
     background: var(--bg-elevated);
-    border: 1px solid rgba(255,255,255,0.04);
+    border: 1px solid var(--border-subtle);
     color: var(--text-tertiary);
     font-size: 11px;
     font-weight: 500;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
   }
 
   /* === SCROLL FAB === */
   .scroll-fab {
     position: absolute;
-    bottom: 100px;
+    bottom: 160px;
     right: 12px;
     border-radius: 50%;
     border: none;
@@ -929,11 +929,11 @@
     min-width: 180px;
     padding: 5px;
     border-radius: var(--radius-lg, 16px);
-    background: rgba(30, 30, 40, 0.95);
+    background: var(--bg-elevated);
     backdrop-filter: blur(24px) saturate(200%);
     -webkit-backdrop-filter: blur(24px) saturate(200%);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 1px rgba(0,0,0,0.2);
+    border: 1px solid var(--border-subtle);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.12), 0 0 1px rgba(0,0,0,0.06);
     z-index: 61;
     animation: scaleIn 200ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
   }

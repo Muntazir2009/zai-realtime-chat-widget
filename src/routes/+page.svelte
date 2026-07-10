@@ -1,6 +1,6 @@
 <script lang="ts">
   import { browser } from '$app/environment';
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import ToastContainer from '$lib/components/ui/ToastContainer.svelte';
   import ConnectionStatus from '$lib/components/indicators/ConnectionStatus.svelte';
 
@@ -18,6 +18,8 @@
   let BottomNavBar: any = $state(null);
 
   let _prevView: string | null = null;
+  let _prevTab: string | null = null;
+  let viewKey = $state(0);
 
   onMount(async () => {
     if (!browser) return;
@@ -75,8 +77,11 @@
   // Determine which tab content to show when in chatList view
   const activeTab = $derived(uiStore?.tab ?? 'dms');
 
-  // Whether to show the bottom nav bar — hidden in conversation view (it has its own back nav)
+  // Whether to show the bottom nav bar — always visible when authenticated
   const showNav = $derived(view !== 'loading' && view !== 'auth');
+
+  // Unique key for tab transitions
+  const tabKey = $derived(activeTab);
 
   // Watch for view changes to trigger side effects (load inbox, go online)
   $effect(() => {
@@ -94,6 +99,15 @@
       presenceManager?.disconnect();
     }
   });
+
+  // Watch for tab changes to bump the key for animation
+  $effect(() => {
+    const t = activeTab;
+    if (t !== _prevTab) {
+      _prevTab = t;
+      viewKey++;
+    }
+  });
 </script>
 
 {#if view === 'loading'}
@@ -106,24 +120,28 @@
     </div>
   </div>
 {:else if view === 'auth' && AuthScreen}
-  {@const Auth = AuthScreen}
-  <Auth />
+  <div class="animate-view-enter">
+    <AuthScreen />
+  </div>
 {:else}
   <!-- Authenticated shell: content + bottom nav (always visible) -->
   <div class="h-full flex flex-col" style="background-color: var(--bg-page);">
-    <div class="flex-1 min-h-0" class:has-nav={showNav}>
+    <div class="flex-1 min-h-0 has-nav" class:has-nav={showNav}>
       {#if view === 'conversation' && Conversation}
-        {@const Conv = Conversation}
-        <Conv />
-      {:else if activeTab === 'dms' && ChatList}
-        {@const List = ChatList}
-        <List />
-      {:else if activeTab === 'global' && GlobalView}
-        {@const Global = GlobalView}
-        <Global />
-      {:else if activeTab === 'settings' && SettingsView}
-        {@const Settings = SettingsView}
-        <Settings />
+        <div class="animate-view-enter h-full">
+          <Conversation />
+        </div>
+      {:else}
+        <!-- Tab views with crossfade transition -->
+        <div class="animate-tab-enter h-full" key={tabKey}>
+          {#if activeTab === 'dms' && ChatList}
+            <ChatList />
+          {:else if activeTab === 'global' && GlobalView}
+            <Global />
+          {:else if activeTab === 'settings' && SettingsView}
+            <SettingsView />
+          {/if}
+        </div>
       {/if}
     </div>
 

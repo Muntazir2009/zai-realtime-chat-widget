@@ -279,7 +279,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, var(--color-primary), color-mix(in srgb, var(--color-primary) 80%, #7f1d1d));
+    background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
     box-shadow: 0 2px 8px color-mix(in srgb, var(--color-primary) 25%, transparent);
   }
 
@@ -532,7 +532,7 @@
     font-weight: 700;
     font-size: 14px;
     color: white;
-    background: linear-gradient(135deg, var(--color-primary), color-mix(in srgb, var(--color-primary) 80%, #7f1d1d));
+    background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
     box-shadow: 0 2px 6px color-mix(in srgb, var(--color-primary) 20%, transparent);
   }
 

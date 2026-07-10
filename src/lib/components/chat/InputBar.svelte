@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Loader2 } from 'lucide-svelte';
+  import { Loader2, Send, ImagePlus, Mic, Sticker, Gif } from 'lucide-svelte';
   import VoiceRecorder from '$lib/components/media/VoiceRecorder.svelte';
   import StickerPicker from '$lib/components/pickers/StickerPicker.svelte';
   import GIFPicker from '$lib/components/pickers/GIFPicker.svelte';
@@ -27,6 +27,7 @@
   let textareaEl: HTMLTextAreaElement | null = $state(null);
   let typingTimer: ReturnType<typeof setTimeout> | null = null;
   let fileInputEl: HTMLInputElement | null = $state(null);
+  let isFocused = $state(false);
 
   let hasText = $derived(message.trim().length > 0);
 
@@ -153,24 +154,28 @@
 {#if isRecording}
   <VoiceRecorder onSend={sendVoice} onCancel={cancelRecording} />
 {:else}
-  <div class="safe-bottom" style="margin: 0 6px 6px;">
+  <div class="input-shell safe-bottom" style="padding: 0 8px 8px;">
 
     <!-- Upload progress -->
     {#if isUploading}
-      <div class="flex items-center gap-1.5 px-3 pb-1.5">
-        <Loader2 size={12} class="animate-spin text-red-500" />
-        <div class="flex-1 h-[3px] rounded-full overflow-hidden" style="background: rgba(255,255,255,0.08);">
-          <div class="h-full rounded-full bg-red-500 transition-all duration-200" style="width: {uploadProgress}%;"></div>
+      <div class="upload-progress">
+        <Loader2 size={12} class="animate-spin" style="color: var(--color-primary);" />
+        <div class="upload-bar">
+          <div class="upload-bar-fill" style="width: {uploadProgress}%;"></div>
         </div>
-        <span class="text-[11px] font-semibold tabular-nums" style="color: var(--text-tertiary);">{Math.round(uploadProgress)}%</span>
+        <span class="upload-pct">{Math.round(uploadProgress)}%</span>
       </div>
     {/if}
 
     <!-- Picker panels -->
     {#if isTrayOpen}
-      <StickerPicker onStickerSelect={handleSticker} />
+      <div class="picker-panel animate-tab-enter">
+        <StickerPicker onStickerSelect={handleSticker} />
+      </div>
     {:else if isGifOpen}
-      <GIFPicker onGifSelect={handleGif} />
+      <div class="picker-panel animate-tab-enter">
+        <GIFPicker onGifSelect={handleGif} />
+      </div>
     {/if}
 
     <!-- Hidden file input -->
@@ -183,15 +188,11 @@
     />
 
     <!-- Input Row -->
-    <div class="flex items-end gap-1.5 bg-[#111114]/90 backdrop-blur-md
-                border border-white/[0.06] rounded-[1.6rem] px-2 py-1.5
-                transition-all duration-200">
+    <div class="input-row" class:input-row-focused={isFocused} class:input-row-active={hasText}>
 
       <button onclick={handleMediaUpload} aria-label="Add media"
-        class="w-11 h-11 rounded-full active:scale-95 transition-all duration-200
-               flex items-center justify-center text-xl"
-        style="color: var(--text-tertiary);">
-        +
+        class="input-action-btn">
+        <ImagePlus size={20} />
       </button>
 
       <textarea
@@ -199,38 +200,193 @@
         bind:value={message}
         oninput={emitTyping}
         onkeydown={handleKeydown}
+        onfocus={() => (isFocused = true)}
+        onblur={() => (isFocused = false)}
         placeholder="Message..."
         rows="1"
-        class="flex-1 resize-none bg-transparent outline-none max-h-32
-               text-[15px] leading-snug py-2 px-1"
-        style="color: var(--text-primary);"
+        class="input-textarea"
       ></textarea>
 
-      <button onclick={() => { isTrayOpen = !isTrayOpen; isGifOpen = false; }}
-        class="active:scale-95 transition-all duration-200
-               px-1.5 h-11 flex items-center justify-center rounded-full
-               text-[11px] font-bold tracking-wide"
-        style="color: {isTrayOpen ? 'var(--color-primary)' : 'var(--text-tertiary)'};">
-        GIF
-      </button>
-
       {#if hasText}
+        <button onclick={() => { isTrayOpen = !isTrayOpen; isGifOpen = false; }}
+          class="input-action-btn" class:action-active={isTrayOpen}
+          style="color: {isTrayOpen ? 'var(--color-primary)' : 'var(--text-tertiary)'};">
+          <Sticker size={18} />
+        </button>
+
         <button onclick={handleSend}
-          class="bg-red-600 rounded-full w-11 h-11 flex items-center justify-center
-                 text-white active:scale-95 transition-all duration-200
-                 shadow-[0_2px_10px_rgba(220,38,38,0.35)]">
-          ➤
+          class="send-btn">
+          <Send size={18} />
         </button>
       {:else}
+        <button onclick={() => { isTrayOpen = !isTrayOpen; isGifOpen = false; }}
+          class="input-action-btn" class:action-active={isTrayOpen}
+          style="color: {isTrayOpen ? 'var(--color-primary)' : 'var(--text-tertiary)'};">
+          <Sticker size={18} />
+        </button>
+
         <button
           onclick={handleVoiceRecord}
-          class="w-11 h-11 rounded-full active:scale-95 transition-all duration-200
-                 flex items-center justify-center text-lg"
-          style="color: var(--text-tertiary);">
-          🎤
+          class="input-action-btn">
+          <Mic size={20} />
         </button>
       {/if}
 
     </div>
   </div>
 {/if}
+
+<style>
+  .input-shell {
+    flex-shrink: 0;
+    animation: inputSlideUp 250ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+
+  @keyframes inputSlideUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Upload progress */
+  .upload-progress {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px 6px;
+    animation: fadeIn 200ms ease both;
+  }
+
+  .upload-bar {
+    flex: 1;
+    height: 3px;
+    border-radius: 2px;
+    overflow: hidden;
+    background: var(--input-bg);
+  }
+
+  .upload-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--color-primary);
+    transition: width 200ms ease;
+  }
+
+  .upload-pct {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    font-variant-numeric: tabular-nums;
+    min-width: 28px;
+    text-align: right;
+  }
+
+  /* Picker panels */
+  .picker-panel {
+    margin-bottom: 8px;
+  }
+
+  /* Input row */
+  .input-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    padding: 6px 6px 6px 4px;
+    border-radius: 28px;
+    background: var(--bg-surface);
+    border: 1.5px solid var(--border-subtle);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.03);
+    transition: border-color 250ms ease, box-shadow 250ms ease, background-color 250ms ease;
+  }
+
+  .input-row-focused {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 12%, transparent),
+                0 1px 4px rgba(0, 0, 0, 0.04),
+                0 4px 16px rgba(0, 0, 0, 0.03);
+    background: var(--bg-surface);
+  }
+
+  .input-row-active {
+    border-color: color-mix(in srgb, var(--color-primary) 25%, var(--border-subtle));
+  }
+
+  /* Textarea */
+  .input-textarea {
+    flex: 1;
+    resize: none;
+    background: transparent;
+    outline: none;
+    border: none;
+    font-size: 15px;
+    line-height: 1.45;
+    padding: 6px 4px;
+    max-height: 128px;
+    min-height: 36px;
+    color: var(--text-primary);
+    font-family: var(--font-sans, inherit);
+  }
+
+  .input-textarea::placeholder {
+    color: var(--text-tertiary);
+  }
+
+  /* Action buttons */
+  .input-action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1),
+                color 150ms ease,
+                background 150ms ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .input-action-btn:active {
+    transform: scale(0.88);
+  }
+
+  .input-action-btn.action-active {
+    background: var(--color-primary-light, #d1fae5);
+    color: var(--color-primary);
+  }
+
+  /* Send button */
+  .send-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+    border-radius: 50%;
+    border: none;
+    background: var(--color-primary);
+    color: var(--color-primary-foreground);
+    cursor: pointer;
+    transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1),
+                box-shadow 200ms ease,
+                background-color 200ms ease;
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--color-primary) 35%, transparent);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .send-btn:active {
+    transform: scale(0.88);
+    box-shadow: 0 1px 4px color-mix(in srgb, var(--color-primary) 20%, transparent);
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+</style>

@@ -495,11 +495,12 @@
   /* Received bubble — elevated surface */
   .bbl-recv {
     background: var(--color-received);
-    color: var(--color-received-foreground, #1e293b);
+    color: var(--color-received-foreground, #1a1a2e);
     border-radius: 20px 20px 20px 6px;
     box-shadow:
-      0 1px 3px rgba(0, 0, 0, 0.06),
-      0 4px 16px rgba(0, 0, 0, 0.08);
+      0 1px 3px rgba(0, 0, 0, 0.04),
+      0 2px 8px rgba(0, 0, 0, 0.06);
+    border: 1px solid var(--border-subtle);
   }
 
   .bbl-recv.bbl-grouped {
@@ -808,7 +809,7 @@
     transition: background 120ms ease, transform 120ms ease;
     -webkit-tap-highlight-color: transparent;
   }
-  .rxn-add-btn:active { transform: scale(0.85); background: rgba(255,255,255,0.06); }
+  .rxn-add-btn:active { transform: scale(0.85); background: var(--input-bg); }
 
   /* === REACTION PICKER === */
   .rxn-picker-backdrop {
@@ -826,11 +827,9 @@
     gap: 2px;
     padding: 6px 8px;
     border-radius: 24px;
-    background: var(--glass-bg, #1a1a1e);
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
-    border: 1px solid var(--border-subtle, rgba(255,255,255,0.08));
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 0.5px rgba(255,255,255,0.04);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15), 0 0 0 0.5px rgba(0,0,0,0.04);
     animation: rxnPickerIn 200ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
     z-index: 101;
   }
@@ -854,7 +853,7 @@
     transition: transform 120ms ease, background 120ms ease;
     -webkit-tap-highlight-color: transparent;
   }
-  .rxn-picker-btn:hover { background: rgba(255,255,255,0.08); }
+  .rxn-picker-btn:hover { background: var(--input-bg); }
   .rxn-picker-btn:active { transform: scale(0.85); }
 
   .rxn-picker-btn-active {

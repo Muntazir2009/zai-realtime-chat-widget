@@ -48,12 +48,14 @@
   --color-primary: #059669;
   --color-primary-foreground: #ffffff;
   --color-accent: #10b981;
+  --color-primary-hover: #047857;
+  --color-primary-light: #d1fae5;
 
   /* Semantic colours */
   --color-sent: #059669;
   --color-sent-foreground: #ffffff;
-  --color-received: #f1f5f9;
-  --color-received-foreground: #0f172a;
+  --color-received: #ffffff;
+  --color-received-foreground: #1a1a2e;
   --color-danger: #ef4444;
   --color-warning: #f59e0b;
 }
@@ -62,20 +64,20 @@
    §VI.3 — Glass Materials (Light)
    ============================================================ */
 :root {
-  --glass-bg: rgba(255, 255, 255, 0.70);
-  --glass-blur: blur(16px) saturate(180%);
-  --glass-border: 1px solid rgba(255, 255, 255, 0.18);
-  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-blur: blur(20px) saturate(200%);
+  --glass-border: 1px solid rgba(5, 150, 105, 0.08);
+  --glass-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
 
   --bg-page: #f0fdf4;
   --bg-surface: #ffffff;
-  --bg-elevated: #ffffff;
+  --bg-elevated: #f8faf9;
   --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-tertiary: #94a3b8;
-  --border-subtle: rgba(5, 150, 105, 0.08);
-  --input-bg: #ecfdf5;
-  --overlay-bg: rgba(0, 0, 0, 0.4);
+  --text-secondary: #334155;
+  --text-tertiary: #64748b;
+  --border-subtle: rgba(5, 150, 105, 0.10);
+  --input-bg: #f0fdf4;
+  --overlay-bg: rgba(0, 0, 0, 0.3);
 
   color-scheme: light;
 }
@@ -209,7 +211,7 @@ select {
   background: var(--glass-bg);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
-  border-bottom: var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .glass-input {
@@ -278,6 +280,66 @@ select {
 .transition-spring {
   transition: transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1),
               opacity 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ============================================================
+   Bottom Nav Spacing — prevents content overlap
+   ============================================================
+*/
+.has-nav {
+  padding-bottom: 68px;
+}
+
+/* ============================================================
+   View Transition Animations
+   ============================================================
+*/
+@keyframes viewFadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes viewFadeSlideOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.animate-view-enter {
+  animation: viewFadeSlideIn 280ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* Tab content crossfade */
+@keyframes tabCrossfade {
+  from { opacity: 0; transform: translateY(6px) scale(0.99); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.animate-tab-enter {
+  animation: tabCrossfade 220ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* Nav pill sliding indicator */
+@keyframes navIndicatorSlide {
+  from { transform: scaleX(0.8); opacity: 0.6; }
+  to   { transform: scaleX(1); opacity: 1; }
+}
+
+/* Subtle page background shift */
+@keyframes bgShift {
+  from { background-color: var(--bg-page); }
+  to   { background-color: var(--bg-page); }
 }
 
 /* ============================================================

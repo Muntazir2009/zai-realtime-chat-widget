@@ -242,3 +242,36 @@ Stage Summary:
 - 4 files modified: rtdb.ts, PresenceManager.svelte.ts, Conversation.svelte, ChatTile.svelte
 - ROOT CAUSE FOUND AND FIXED: rtdb.ts was not awaiting Firebase app initialization → all RTDB operations returned no-op stubs → everything real-time was silently broken
 - With this fix: reactions, presence, typing, message edit/delete/pin/star, inbox sorting, and DM previews all work in real-time
+
+---
+Task ID: 7
+Agent: Main Agent
+Task: Fix navigation, input box, text visibility, light green theme, smooth animations
+
+Work Log:
+- Diagnosed root causes: app.html had `class="crimson-dark"` forcing dark theme; no `.has-nav` CSS class causing nav overlap; InputBar had hardcoded `bg-[#111114]/90` dark colors
+- Fixed app.html: removed `crimson-dark` class, set light theme-color meta to #f0fdf4
+- Enhanced app.css light green theme: `--bg-page: #f0fdf4`, `--bg-elevated: #f8faf9`, `--color-received: #ffffff`, `--color-received-foreground: #1a1a2e`, `--glass-blur: blur(20px) saturate(200%)`
+- Added new CSS variables: `--color-primary-hover`, `--color-primary-light: #d1fae5`
+- Added `.has-nav { padding-bottom: 68px; }` class for nav bar spacing
+- Added view transition animations: `viewFadeSlideIn`, `tabCrossfade`, `navPillBounce` keyframes
+- Fixed +page.svelte: added `animate-view-enter` on view changes, `animate-tab-enter` with key-based re-render on tab switch, removed invalid `@const` inside divs
+- Fixed Conversation.svelte: reduced scroll-bottom-pad from 80px to 16px, moved scroll FAB from bottom:100px to bottom:160px, replaced hardcoded `rgba(30, 30, 40, 0.95)` menu background with `var(--bg-elevated)`, replaced hardcoded `rgba(255,255,255,0.04)` date-chip border with `var(--border-subtle)`
+- Completely rewrote InputBar.svelte: replaced all hardcoded dark colors with CSS variables, added proper focus state with green glow, professional send button with primary color, proper icon buttons with hover/active states, smooth slide-up entrance animation
+- Rewrote BottomNavBar.svelte: proper glass morphism with `var(--glass-bg)` and backdrop-filter, green pill bounce animation on tab switch, removed `safe-bottom` class duplication
+- Fixed MessageBubble.svelte: updated received bubble to use `border: 1px solid var(--border-subtle)`, lighter shadow, reaction picker background from hardcoded dark to `var(--bg-surface)`, hover/active states using `var(--input-bg)`
+- Fixed AuthScreen.svelte: replaced crimson gradient orbs with emerald green, logo gradient from red to green, error border from red-rgba to `color-mix`
+- Fixed SettingsView.svelte: header icon and profile avatar gradients from crimson to `var(--color-primary)`/`var(--color-accent)`, logout button from red-rgba to `color-mix`
+- Fixed GlobalView.svelte: header icon gradient from crimson to primary/accent, empty state background from red-rgba to primary color-mix
+- Fixed ChatList.svelte: logo gradient from crimson-dark mix to primary/accent
+- Fixed VoiceRecorder.svelte: cancel zone background from red-rgba to color-mix
+
+Stage Summary:
+- Build passes cleanly (no Svelte errors)
+- 12 files modified: app.html, app.css, +page.svelte, Conversation.svelte, InputBar.svelte, BottomNavBar.svelte, MessageBubble.svelte, AuthScreen.svelte, SettingsView.svelte, GlobalView.svelte, ChatList.svelte, VoiceRecorder.svelte
+- Light green theme is now DEFAULT (no more crimson-dark on html element)
+- Navigation bar works: tabs switch with animated pill indicator, content transitions with crossfade
+- Input box is visible: fully themed with CSS variables, green send button, proper focus ring
+- Text visibility: white received bubbles with dark text (#1a1a2e), green sent bubbles with white text
+- Smooth animations throughout: view transitions, tab crossfade, nav pill bounce, input slide-up, bubble spring
+- All hardcoded dark/crimson colors replaced with CSS variable references

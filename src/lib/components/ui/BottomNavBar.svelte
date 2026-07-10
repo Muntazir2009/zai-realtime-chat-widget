@@ -4,7 +4,7 @@
 
   const tabs: { id: TabId; label: string; icon: typeof Globe }[] = [
     { id: 'global', label: 'Global', icon: Globe },
-    { id: 'dms', label: 'DMs', icon: MessageCircle },
+    { id: 'dms', label: 'Chats', icon: MessageCircle },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
@@ -15,7 +15,7 @@
 
 <!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
 <nav
-  class="nav-bar glass-header safe-bottom"
+  class="nav-bar"
   role="tablist"
   aria-label="Main navigation"
 >
@@ -47,14 +47,19 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 8px 16px 10px;
-    padding-bottom: max(10px, env(safe-area-inset-bottom, 0px) + 6px);
+    padding: 6px 16px;
+    padding-bottom: max(6px, env(safe-area-inset-bottom, 0px) + 4px);
+    background: var(--glass-bg);
+    backdrop-filter: blur(24px) saturate(200%);
+    -webkit-backdrop-filter: blur(24px) saturate(200%);
+    border-top: 1px solid var(--border-subtle);
+    box-shadow: 0 -2px 16px rgba(0, 0, 0, 0.04);
   }
 
   .nav-pill-track {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 2px;
     padding: 4px;
     border-radius: var(--radius-pill);
     background: var(--input-bg);
@@ -66,9 +71,9 @@
     align-items: center;
     justify-content: center;
     gap: 6px;
-    min-height: 40px;
-    min-width: 44px;
-    padding: 6px 18px;
+    min-height: 42px;
+    min-width: 80px;
+    padding: 6px 16px;
     border-radius: var(--radius-pill);
     border: none;
     cursor: pointer;
@@ -77,14 +82,14 @@
     font-size: 13px;
     font-weight: 600;
     letter-spacing: 0.01em;
-    transition: all 250ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: all 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
     -webkit-tap-highlight-color: transparent;
     position: relative;
     user-select: none;
   }
 
   .nav-pill:active {
-    transform: scale(0.93);
+    transform: scale(0.92);
   }
 
   .nav-pill-label {
@@ -92,10 +97,32 @@
     line-height: 1;
   }
 
+  .nav-pill-icon {
+    transition: transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
   .nav-pill-active {
     background: var(--color-primary);
     color: var(--color-primary-foreground);
-    box-shadow: 0 2px 12px color-mix(in srgb, var(--color-primary) 30%, transparent);
+    box-shadow: 0 2px 12px color-mix(in srgb, var(--color-primary) 35%, transparent);
+    animation: navPillBounce 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
   }
 
+  .nav-pill-active .nav-pill-icon {
+    transform: scale(1.1);
+  }
+
+  @keyframes navPillBounce {
+    0% {
+      transform: scale(0.9);
+      opacity: 0.7;
+    }
+    50% {
+      transform: scale(1.05);
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
 </style>
