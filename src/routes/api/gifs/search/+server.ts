@@ -1,8 +1,8 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
-// GIPHY public beta key for development
-const GIPHY_API_KEY = 'GlVGYTkrSLWSBnllca54iNt0yFbjz7L65';
+// GIPHY API key — set GIPHY_API_KEY env var for production, falls back to public beta key
+const GIPHY_API_KEY = process.env.GIPHY_API_KEY || 'GlVGYTkrSLWSBnllca54iNt0yFbjz7L65';
 const GIPHY_BASE = 'https://api.giphy.com/v1/gifs';
 
 interface GifItem {

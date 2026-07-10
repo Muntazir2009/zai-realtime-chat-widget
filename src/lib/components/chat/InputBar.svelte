@@ -173,7 +173,7 @@
 {#if isRecording}
   <VoiceRecorder onSend={sendVoice} onCancel={cancelRecording} />
 {:else}
-  <div class="input-shell safe-bottom" style="padding: 0 8px 8px;">
+  <div class="input-shell safe-bottom" style="padding: 0 8px 2px;">
 
     <!-- Upload progress -->
     {#if isUploading}
