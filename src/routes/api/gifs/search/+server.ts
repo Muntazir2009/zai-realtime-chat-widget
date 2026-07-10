@@ -1,8 +1,14 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { env } from '$env/dynamic/private';
 
-// GIPHY API key — set GIPHY_API_KEY env var for production, falls back to public beta key
-const GIPHY_API_KEY = process.env.GIPHY_API_KEY || 'GlVGYTkrSLWSBnllca54iNt0yFbjz7L65';
+// GIPHY API key — from env var or fallback to public beta key
+function getGiphyKey(): string {
+  // Try SvelteKit $env first, then import.meta.env (Vite dev), then fallback
+  return env?.GIPHY_API_KEY
+    || (import.meta as any).env?.GIPHY_API_KEY
+    || 'GlVGYTkrSLWSBnllca54iNt0yFbjz7L65';
+}
 const GIPHY_BASE = 'https://api.giphy.com/v1/gifs';
 
 interface GifItem {
@@ -67,6 +73,7 @@ export const GET: RequestHandler = async ({ url }) => {
   const offset = parseInt(url.searchParams.get('offset') || '0');
 
   // Try GIPHY API first
+  const GIPHY_API_KEY = getGiphyKey();
   if (GIPHY_API_KEY) {
     try {
       const endpoint = query === 'trending'

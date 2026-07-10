@@ -41,7 +41,6 @@
   let swipeTriggered = $state(false);
   let displayOffset = $state(0);
   let longPressTimer: ReturnType<typeof setTimeout> | null = null;
-  let springRaf: number | null = null;
   let lastTapTime = 0;
   let touchStartTime = 0;
 
@@ -49,40 +48,7 @@
   const ELASTIC_FACTOR = 0.25;
   const VELOCITY_THRESHOLD = 0.3;
 
-  // Damped spring constants
-  const SPRING_STIFFNESS = 180;
-  const SPRING_DAMPING = 12;
-
-  function springBack() {
-    const step = (lastTime: number) => {
-      const now = performance.now();
-      const dt = Math.min((now - lastTime) / 1000, 0.032);
-      const force = -SPRING_STIFFNESS * currentOffset - SPRING_DAMPING * (currentOffset !== 0 ? 1 : 0) * (currentOffset > 0 ? 1 : -1);
-      velocityX += force * dt * 0.001;
-      velocityX *= 0.92;
-      currentOffset += velocityX;
-      if (Math.abs(currentOffset) < 0.3 && Math.abs(velocityX) < 0.3) {
-        currentOffset = 0;
-        displayOffset = 0;
-        springRaf = null;
-        return;
-      }
-      displayOffset = currentOffset;
-      springRaf = requestAnimationFrame(() => step(now));
-    };
-    velocityX = 0;
-    springRaf = requestAnimationFrame((t) => step(t));
-  }
-
-  function cancelSpring() {
-    if (springRaf !== null) {
-      cancelAnimationFrame(springRaf);
-      springRaf = null;
-    }
-  }
-
   function handleTouchStart(e: TouchEvent) {
-    cancelSpring();
     touchStartX = e.touches[0].clientX;
     touchStartY = e.touches[0].clientY;
     lastTouchX = touchStartX;
@@ -140,14 +106,11 @@
 
     if (shouldTrigger) {
       onSwipeReply?.(msg);
-      currentOffset = 0;
-      displayOffset = 0;
-    } else {
-      springBack();
     }
-
+    // Always snap back via CSS transition (isSwiping → false enables it)
     isSwiping = false;
     swipeTriggered = false;
+    displayOffset = 0;
   }
 
   function handleContextMenu(e: MouseEvent) {
@@ -238,7 +201,7 @@
   class:msg-own={isOwn}
   class:msg-other={!isOwn}
   class:msg-grouped={isGrouped}
-  style="transform: translateX({displayOffset}px); transition: {isSwiping ? 'none' : 'transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1)'};"
+  style="transform: translateX({displayOffset}px); transition: {isSwiping ? 'none' : 'transform 400ms cubic-bezier(0.34, 1.56, 0.64, 1)'};"
   role="article"
   aria-label="Message from {isOwn ? 'you' : senderName || 'unknown'}"
   oncontextmenu={handleContextMenu}
