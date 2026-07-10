@@ -27,6 +27,10 @@ class UIStore {
 
   setTab(tab: TabId): void {
     this.tab = tab;
+    // If user taps a nav tab while inside a conversation, go back to chat list
+    if (this.view === 'conversation') {
+      this.view = 'chatList';
+    }
   }
 
   setReplyTo(msg: Message | null): void {
