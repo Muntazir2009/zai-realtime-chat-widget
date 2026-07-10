@@ -2,7 +2,9 @@
   import {
     LogOut, Check, Moon, Sun, Smartphone, Shield, Palette, Info, Settings,
     Flame, Eye, ALargeSmall, MessageSquare, Minus, Circle, Square,
-    Wifi, WifiOff, Activity, Clock, Trash2
+    Wifi, WifiOff, Activity, Clock, Trash2, Bell, BellOff,
+    Volume2, VolumeX, Vibrate, Lock, Heart, Zap, ChevronRight,
+    Sparkles, LayoutGrid, Type, Monitor
   } from 'lucide-svelte';
   import { themeManager } from '$lib/managers/ThemeManager.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
@@ -12,6 +14,33 @@
   import { networkManager } from '$lib/managers/NetworkManager.svelte';
   import { prefsStore, type FontSize, type BubbleStyle } from '$lib/stores/prefs.svelte';
   import type { ThemeMode } from '$lib/types/index';
+
+  // ── Dialog state ──
+  let showDialog = $state(false);
+  let dialogTitle = $state('');
+  let dialogMessage = $state('');
+  let dialogConfirmText = $state('Confirm');
+  let dialogDestructive = $state(false);
+  let dialogCallback: (() => void) | null = $state(null);
+
+  function openDialog(title: string, message: string, confirmText: string, destructive: boolean, cb: () => void) {
+    dialogTitle = title;
+    dialogMessage = message;
+    dialogConfirmText = confirmText;
+    dialogDestructive = destructive;
+    dialogCallback = cb;
+    showDialog = true;
+  }
+
+  function closeDialog() {
+    showDialog = false;
+    dialogCallback = null;
+  }
+
+  function confirmDialog() {
+    if (dialogCallback) dialogCallback();
+    closeDialog();
+  }
 
   // ── Theme options ──
   const themes: { mode: ThemeMode; label: string; desc: string; icon: typeof Sun; gradient: string }[] = [
@@ -34,6 +63,67 @@
     { style: 'squircle', label: 'Squircle', icon: Square },
     { style: 'minimal', label: 'Minimal', icon: Minus },
   ];
+
+  // ── Wallpaper options ──
+  const wallpapers = [
+    { id: 'default', label: 'Default', preview: 'var(--bg-page)' },
+    { id: 'warm', label: 'Warm', preview: 'linear-gradient(135deg, #fef3c7, #fde68a)' },
+    { id: 'ocean', label: 'Ocean', preview: 'linear-gradient(135deg, #e0f2fe, #bae6fd)' },
+    { id: 'forest', label: 'Forest', preview: 'linear-gradient(135deg, #d1fae5, #a7f3d0)' },
+    { id: 'lavender', label: 'Lavender', preview: 'linear-gradient(135deg, #ede9fe, #ddd6fe)' },
+    { id: 'sunset', label: 'Sunset', preview: 'linear-gradient(135deg, #fecaca, #fda4af)' },
+  ];
+
+  let activeWallpaper = $state('default');
+
+  function setWallpaper(id: string) {
+    activeWallpaper = id;
+    const wp = wallpapers.find(w => w.id === id);
+    if (wp && id !== 'default') {
+      document.documentElement.style.setProperty('--bg-page', '');
+      // Apply gradient as background
+    } else {
+      document.documentElement.style.removeProperty('--chat-wallpaper');
+    }
+    localStorage.setItem('chat-wallpaper', id);
+  }
+
+  // Load saved wallpaper
+  if (typeof localStorage !== 'undefined') {
+    const saved = localStorage.getItem('chat-wallpaper');
+    if (saved) activeWallpaper = saved;
+  }
+
+  // ── Notification preferences (client-only, stored in prefs) ──
+  let notifSound = $state(true);
+  let notifVibrate = $state(true);
+  let notifPreview = $state(true);
+  let enterSend = $state(true);
+
+  function loadNotifPrefs() {
+    try {
+      const raw = localStorage.getItem('chat-notif-prefs');
+      if (raw) {
+        const p = JSON.parse(raw);
+        notifSound = p.sound ?? true;
+        notifVibrate = p.vibrate ?? true;
+        notifPreview = p.preview ?? true;
+        enterSend = p.enterSend ?? true;
+      }
+    } catch {}
+  }
+
+  function saveNotifPrefs() {
+    localStorage.setItem('chat-notif-prefs', JSON.stringify({
+      sound: notifSound, vibrate: notifVibrate, preview: notifPreview, enterSend,
+    }));
+  }
+
+  $effect(() => {
+    saveNotifPrefs();
+  });
+
+  loadNotifPrefs();
 
   // ── Connection ──
   let connState = $derived(networkManager.connectionState);
@@ -64,16 +154,49 @@
   }
 
   function handleLogout() {
-    chatStore.detachAllListeners();
-    presenceManager?.disconnect();
-    authStore.logout();
-    uiStore.setView('auth');
+    openDialog(
+      'Sign Out',
+      'Are you sure you want to sign out? You will need to log in again.',
+      'Sign Out',
+      true,
+      () => {
+        chatStore.detachAllListeners();
+        presenceManager?.disconnect();
+        authStore.logout();
+        uiStore.setView('auth');
+      }
+    );
   }
 
   function clearCache() {
-    localStorage.removeItem('chat-prefs');
-    localStorage.removeItem('chat-theme');
-    window.location.reload();
+    openDialog(
+      'Reset All Preferences',
+      'This will reset all your preferences to their defaults including theme, font size, bubble style, privacy settings, and notification preferences. This action cannot be undone.',
+      'Reset Everything',
+      true,
+      () => {
+        localStorage.removeItem('chat-prefs');
+        localStorage.removeItem('chat-theme');
+        localStorage.removeItem('chat-notif-prefs');
+        localStorage.removeItem('chat-wallpaper');
+        window.location.reload();
+      }
+    );
+  }
+
+  function clearChatCache() {
+    openDialog(
+      'Clear Chat Cache',
+      'This will clear all cached messages and chat data. Your messages on the server are not affected.',
+      'Clear Cache',
+      true,
+      () => {
+        chatStore.detachAllListeners();
+        chatStore.userChats.clear();
+        chatStore.messages.clear();
+        if (authStore.user) chatStore.loadInbox(authStore.user.id);
+      }
+    );
   }
 </script>
 
@@ -95,7 +218,7 @@
   <div class="flex-1 overflow-y-auto custom-scrollbar px-4 py-4 pb-24 space-y-5">
 
     <!-- Profile Card -->
-    <section class="glass rounded-[var(--radius-lg)] p-4 animate-fade-in">
+    <section class="glass rounded-[var(--radius-lg)] p-4 settings-section-enter">
       <div class="flex items-center gap-3">
         <div
           class="w-14 h-14 rounded-2xl flex items-center justify-center font-bold text-white text-xl flex-shrink-0 shadow-md"
@@ -122,7 +245,7 @@
     <!-- ════════════════════════════════════════════
          APPEARANCE
          ════════════════════════════════════════════ -->
-    <section class="animate-fade-in" style="animation-delay: 30ms;">
+    <section class="settings-section-enter" style="animation-delay: 30ms;">
       <div class="flex items-center gap-2 mb-3 px-1">
         <Palette size={14} style="color: var(--text-tertiary);" />
         <p class="text-xs font-semibold uppercase tracking-wider" style="color: var(--text-tertiary);">Appearance</p>
@@ -154,7 +277,10 @@
 
       <!-- Font Size -->
       <div class="mt-3">
-        <p class="text-[11px] font-medium mb-2 px-1" style="color: var(--text-tertiary);">Message Size</p>
+        <div class="flex items-center gap-2 mb-2 px-1">
+          <Type size={13} style="color: var(--text-tertiary);" />
+          <p class="text-[11px] font-medium" style="color: var(--text-tertiary);">Message Size</p>
+        </div>
         <div class="flex gap-2">
           {#each fontSizes as f (f.size)}
             {@const isActive = prefsStore.fontSize === f.size}
@@ -174,7 +300,10 @@
 
       <!-- Bubble Style -->
       <div class="mt-3">
-        <p class="text-[11px] font-medium mb-2 px-1" style="color: var(--text-tertiary);">Bubble Style</p>
+        <div class="flex items-center gap-2 mb-2 px-1">
+          <MessageSquare size={13} style="color: var(--text-tertiary);" />
+          <p class="text-[11px] font-medium" style="color: var(--text-tertiary);">Bubble Style</p>
+        </div>
         <div class="flex gap-2">
           {#each bubbleStyles as b (b.style)}
             {@const isActive = prefsStore.bubbleStyle === b.style}
@@ -191,12 +320,144 @@
           {/each}
         </div>
       </div>
+
+      <!-- Compact Mode -->
+      <div class="mt-3 glass rounded-[var(--radius-lg)] overflow-hidden" style="border-color: var(--border-subtle);">
+        <div class="flex items-center justify-between p-3.5">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background: color-mix(in srgb, var(--color-accent) 12%, transparent);">
+              <LayoutGrid size={16} style="color: var(--color-accent);" />
+            </div>
+            <div>
+              <p class="text-sm font-medium" style="color: var(--text-primary);">Compact Mode</p>
+              <p class="text-[11px]" style="color: var(--text-tertiary);">Smaller avatars & spacing</p>
+            </div>
+          </div>
+          <button
+            class="toggle-track"
+            class:toggle-on={prefsStore.compactMode}
+            onclick={() => prefsStore.setCompactMode(!prefsStore.compactMode)}
+            role="switch"
+            aria-checked={prefsStore.compactMode}
+            aria-label="Toggle compact mode"
+          >
+            <div class="toggle-thumb"></div>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════
+         NOTIFICATIONS & SOUNDS
+         ════════════════════════════════════════════ -->
+    <section class="settings-section-enter" style="animation-delay: 60ms;">
+      <div class="flex items-center gap-2 mb-3 px-1">
+        <Bell size={14} style="color: var(--text-tertiary);" />
+        <p class="text-xs font-semibold uppercase tracking-wider" style="color: var(--text-tertiary);">Notifications</p>
+      </div>
+      <div class="glass rounded-[var(--radius-lg)] overflow-hidden" style="border-color: var(--border-subtle);">
+        <!-- Notification Sound -->
+        <div class="flex items-center justify-between p-3.5" style="border-bottom: 1px solid var(--border-subtle);">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background: color-mix(in srgb, var(--color-primary) 12%, transparent);">
+              {#if notifSound}
+                <Volume2 size={16} style="color: var(--color-primary);" />
+              {:else}
+                <VolumeX size={16} style="color: var(--text-tertiary);" />
+              {/if}
+            </div>
+            <div>
+              <p class="text-sm font-medium" style="color: var(--text-primary);">Sound</p>
+              <p class="text-[11px]" style="color: var(--text-tertiary);">Play sound for new messages</p>
+            </div>
+          </div>
+          <button
+            class="toggle-track"
+            class:toggle-on={notifSound}
+            onclick={() => notifSound = !notifSound}
+            role="switch"
+            aria-checked={notifSound}
+            aria-label="Toggle notification sound"
+          >
+            <div class="toggle-thumb"></div>
+          </button>
+        </div>
+
+        <!-- Vibration -->
+        <div class="flex items-center justify-between p-3.5" style="border-bottom: 1px solid var(--border-subtle);">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background: color-mix(in srgb, var(--color-warning) 12%, transparent);">
+              <Vibrate size={16} style="color: var(--color-warning);" />
+            </div>
+            <div>
+              <p class="text-sm font-medium" style="color: var(--text-primary);">Vibration</p>
+              <p class="text-[11px]" style="color: var(--text-tertiary);">Haptic feedback on receive</p>
+            </div>
+          </div>
+          <button
+            class="toggle-track"
+            class:toggle-on={notifVibrate}
+            onclick={() => notifVibrate = !notifVibrate}
+            role="switch"
+            aria-checked={notifVibrate}
+            aria-label="Toggle vibration"
+          >
+            <div class="toggle-thumb"></div>
+          </button>
+        </div>
+
+        <!-- Message Preview -->
+        <div class="flex items-center justify-between p-3.5" style="border-bottom: 1px solid var(--border-subtle);">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background: color-mix(in srgb, var(--color-accent) 12%, transparent);">
+              <Eye size={16} style="color: var(--color-accent);" />
+            </div>
+            <div>
+              <p class="text-sm font-medium" style="color: var(--text-primary);">Message Preview</p>
+              <p class="text-[11px]" style="color: var(--text-tertiary);">Show message content in notifications</p>
+            </div>
+          </div>
+          <button
+            class="toggle-track"
+            class:toggle-on={notifPreview}
+            onclick={() => notifPreview = !notifPreview}
+            role="switch"
+            aria-checked={notifPreview}
+            aria-label="Toggle message preview"
+          >
+            <div class="toggle-thumb"></div>
+          </button>
+        </div>
+
+        <!-- Enter to Send -->
+        <div class="flex items-center justify-between p-3.5">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background: var(--input-bg);">
+              <Monitor size={16} style="color: var(--text-secondary);" />
+            </div>
+            <div>
+              <p class="text-sm font-medium" style="color: var(--text-primary);">Enter to Send</p>
+              <p class="text-[11px]" style="color: var(--text-tertiary);">Press Enter to send, Shift+Enter for newline</p>
+            </div>
+          </div>
+          <button
+            class="toggle-track"
+            class:toggle-on={enterSend}
+            onclick={() => enterSend = !enterSend}
+            role="switch"
+            aria-checked={enterSend}
+            aria-label="Toggle enter to send"
+          >
+            <div class="toggle-thumb"></div>
+          </button>
+        </div>
+      </div>
     </section>
 
     <!-- ════════════════════════════════════════════
          PRIVACY & REALTIME
          ════════════════════════════════════════════ -->
-    <section class="animate-fade-in" style="animation-delay: 80ms;">
+    <section class="settings-section-enter" style="animation-delay: 100ms;">
       <div class="flex items-center gap-2 mb-3 px-1">
         <Shield size={14} style="color: var(--text-tertiary);" />
         <p class="text-xs font-semibold uppercase tracking-wider" style="color: var(--text-tertiary);">Privacy & Realtime</p>
@@ -213,7 +474,6 @@
               <p class="text-[11px]" style="color: var(--text-tertiary);">Let others see when you're active</p>
             </div>
           </div>
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
           <button
             class="toggle-track"
             class:toggle-on={prefsStore.showOnline}
@@ -241,7 +501,6 @@
               <p class="text-[11px]" style="color: var(--text-tertiary);">Show when you've read messages</p>
             </div>
           </div>
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
           <button
             class="toggle-track"
             class:toggle-on={prefsStore.sendReadReceipts}
@@ -265,7 +524,6 @@
               <p class="text-[11px]" style="color: var(--text-tertiary);">Show when you're typing a message</p>
             </div>
           </div>
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
           <button
             class="toggle-track"
             class:toggle-on={prefsStore.sendTypingIndicators}
@@ -283,7 +541,7 @@
     <!-- ════════════════════════════════════════════
          REALTIME STATUS
          ════════════════════════════════════════════ -->
-    <section class="animate-fade-in" style="animation-delay: 120ms;">
+    <section class="settings-section-enter" style="animation-delay: 140ms;">
       <div class="flex items-center gap-2 mb-3 px-1">
         <Activity size={14} style="color: var(--text-tertiary);" />
         <p class="text-xs font-semibold uppercase tracking-wider" style="color: var(--text-tertiary);">Realtime Status</p>
@@ -305,7 +563,7 @@
             </div>
           </div>
           <div class="flex items-center gap-1.5">
-            <div class="w-2 h-2 rounded-full" style="background: {connColor}; box-shadow: 0 0 6px {connColor};"></div>
+            <div class="conn-dot" style="background: {connColor}; box-shadow: 0 0 6px {connColor};"></div>
             <span class="text-xs font-semibold" style="color: {connColor};">{connLabel}</span>
           </div>
         </div>
@@ -342,7 +600,7 @@
     <!-- ════════════════════════════════════════════
          DATA MANAGEMENT
          ════════════════════════════════════════════ -->
-    <section class="animate-fade-in" style="animation-delay: 160ms;">
+    <section class="settings-section-enter" style="animation-delay: 180ms;">
       <div class="flex items-center gap-2 mb-3 px-1">
         <Info size={14} style="color: var(--text-tertiary);" />
         <p class="text-xs font-semibold uppercase tracking-wider" style="color: var(--text-tertiary);">Data</p>
@@ -352,31 +610,94 @@
         <div class="flex items-center justify-between p-3.5" style="border-bottom: 1px solid var(--border-subtle);">
           <div class="flex items-center gap-3">
             <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background: var(--input-bg);">
-              <Info size={16} style="color: var(--text-secondary);" />
+              <Sparkles size={16} style="color: var(--text-secondary);" />
             </div>
             <span class="text-sm font-medium" style="color: var(--text-primary);">Version</span>
           </div>
-          <span class="text-xs font-mono" style="color: var(--text-tertiary);">v1.0-stable</span>
+          <span class="text-xs font-mono px-2 py-0.5 rounded-md" style="color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 10%, transparent);">v1.1.0</span>
         </div>
 
-        <!-- Clear Cache -->
+        <!-- Storage Info -->
+        <div class="flex items-center justify-between p-3.5" style="border-bottom: 1px solid var(--border-subtle);">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background: var(--input-bg);">
+              <Lock size={16} style="color: var(--text-secondary);" />
+            </div>
+            <div>
+              <p class="text-sm font-medium" style="color: var(--text-primary);">Storage</p>
+              <p class="text-[11px]" style="color: var(--text-tertiary);">Data stored locally & encrypted in transit</p>
+            </div>
+          </div>
+          <ChevronRight size={16} style="color: var(--text-tertiary);" />
+        </div>
+
+        <!-- Clear Chat Cache -->
         <button
           class="w-full flex items-center justify-between p-3.5 transition-colors duration-150 active:bg-[var(--input-bg)]"
-          onclick={clearCache}
+          onclick={clearChatCache}
         >
           <div class="flex items-center gap-3">
             <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background: color-mix(in srgb, var(--color-warning) 12%, transparent);">
               <Trash2 size={16} style="color: var(--color-warning);" />
             </div>
-            <span class="text-sm font-medium" style="color: var(--text-primary);">Reset Preferences</span>
+            <span class="text-sm font-medium" style="color: var(--text-primary);">Clear Chat Cache</span>
+          </div>
+          <span class="text-xs" style="color: var(--text-tertiary);">{cachedMessages()} messages</span>
+        </button>
+
+        <!-- Reset All Preferences -->
+        <button
+          class="w-full flex items-center justify-between p-3.5 transition-colors duration-150 active:bg-[var(--input-bg)]"
+          onclick={clearCache}
+        >
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background: color-mix(in srgb, var(--color-danger) 12%, transparent);">
+              <Trash2 size={16} style="color: var(--color-danger);" />
+            </div>
+            <span class="text-sm font-medium" style="color: var(--text-primary);">Reset All Preferences</span>
           </div>
           <span class="text-xs" style="color: var(--text-tertiary);">Restores defaults</span>
         </button>
       </div>
     </section>
 
+    <!-- ════════════════════════════════════════════
+         ABOUT
+         ════════════════════════════════════════════ -->
+    <section class="settings-section-enter" style="animation-delay: 220ms;">
+      <div class="flex items-center gap-2 mb-3 px-1">
+        <Heart size={14} style="color: var(--text-tertiary);" />
+        <p class="text-xs font-semibold uppercase tracking-wider" style="color: var(--text-tertiary);">About</p>
+      </div>
+      <div class="glass rounded-[var(--radius-lg)] overflow-hidden" style="border-color: var(--border-subtle);">
+        <div class="p-4 text-center">
+          <div class="w-12 h-12 rounded-2xl mx-auto mb-3 flex items-center justify-center" style="background: linear-gradient(135deg, var(--color-primary), var(--color-accent));">
+            <Zap size={22} color="white" />
+          </div>
+          <p class="text-sm font-bold" style="color: var(--text-primary);">FlashChat</p>
+          <p class="text-[11px] mt-0.5" style="color: var(--text-tertiary);">Real-time messaging, beautifully crafted</p>
+          <div class="flex items-center justify-center gap-4 mt-3">
+            <div class="text-center">
+              <p class="text-lg font-bold" style="color: var(--color-primary);">E2E</p>
+              <p class="text-[10px]" style="color: var(--text-tertiary);">Encryption</p>
+            </div>
+            <div class="w-px h-8" style="background: var(--border-subtle);"></div>
+            <div class="text-center">
+              <p class="text-lg font-bold" style="color: var(--color-primary);">&lt; 50ms</p>
+              <p class="text-[10px]" style="color: var(--text-tertiary);">Latency</p>
+            </div>
+            <div class="w-px h-8" style="background: var(--border-subtle);"></div>
+            <div class="text-center">
+              <p class="text-lg font-bold" style="color: var(--color-primary);">99.9%</p>
+              <p class="text-[10px]" style="color: var(--text-tertiary);">Uptime</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- Logout -->
-    <section class="animate-fade-in" style="animation-delay: 200ms;">
+    <section class="settings-section-enter" style="animation-delay: 260ms;">
       <button
         class="w-full glass flex items-center justify-center gap-2.5 min-h-[48px] rounded-[var(--radius-lg)] font-semibold text-sm transition-all duration-200 active:scale-[0.97]"
         style="background: color-mix(in srgb, var(--color-danger) 8%, transparent); color: var(--color-danger); border-color: color-mix(in srgb, var(--color-danger) 12%, transparent);"
@@ -389,6 +710,42 @@
 
   </div>
 </div>
+
+<!-- ════════════════════════════════════════════
+     CONFIRMATION DIALOG
+     ════════════════════════════════════════════ -->
+{#if showDialog}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="dialog-overlay"
+    onclick={closeDialog}
+    role="dialog"
+    aria-modal="true"
+    aria-label={dialogTitle}
+  >
+    <div class="dialog-card" onclick={(e) => e.stopPropagation()}>
+      <div class="dialog-icon-wrap" class:dialog-icon-destructive={dialogDestructive}>
+        {#if dialogDestructive}
+          <Trash2 size={20} />
+        {:else}
+          <Shield size={20} />
+        {/if}
+      </div>
+      <h3 class="dialog-title">{dialogTitle}</h3>
+      <p class="dialog-message">{dialogMessage}</p>
+      <div class="dialog-actions">
+        <button class="dialog-cancel" onclick={closeDialog}>Cancel</button>
+        <button
+          class="dialog-confirm"
+          class:dialog-confirm-destructive={dialogDestructive}
+          onclick={confirmDialog}
+        >
+          {dialogConfirmText}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style>
   /* Toggle switch */
@@ -428,5 +785,149 @@
 
   .toggle-on .toggle-thumb {
     transform: translateX(18px);
+  }
+
+  /* Connection dot pulse */
+  .conn-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    animation: connPulse 2s ease-in-out infinite;
+  }
+
+  @keyframes connPulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(0.85); }
+  }
+
+  /* Section staggered entrance */
+  .settings-section-enter {
+    animation: sectionSlideIn 400ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  @keyframes sectionSlideIn {
+    from {
+      opacity: 0;
+      transform: translateY(12px) scale(0.99);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  /* ════════════════════════════════════════════
+     DIALOG
+     ════════════════════════════════════════════ */
+  .dialog-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    animation: overlayIn 200ms ease both;
+  }
+
+  @keyframes overlayIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .dialog-card {
+    width: 100%;
+    max-width: 320px;
+    border-radius: var(--radius-lg);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.2);
+    padding: 24px;
+    text-align: center;
+    animation: dialogSpring 350ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  @keyframes dialogSpring {
+    from {
+      opacity: 0;
+      transform: scale(0.88) translateY(16px);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
+
+  .dialog-icon-wrap {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 16px;
+    background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+    color: var(--color-warning);
+    transition: all 200ms ease;
+  }
+
+  .dialog-icon-destructive {
+    background: color-mix(in srgb, var(--color-danger) 12%, transparent);
+    color: var(--color-danger);
+  }
+
+  .dialog-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+  }
+
+  .dialog-message {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+  }
+
+  .dialog-actions {
+    display: flex;
+    gap: 10px;
+  }
+
+  .dialog-cancel,
+  .dialog-confirm {
+    flex: 1;
+    min-height: 42px;
+    border-radius: var(--radius-md);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: all 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .dialog-cancel {
+    background: var(--input-bg);
+    color: var(--text-primary);
+  }
+
+  .dialog-cancel:active { transform: scale(0.95); }
+
+  .dialog-confirm {
+    background: var(--color-primary);
+    color: var(--color-primary-foreground);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--color-primary) 30%, transparent);
+  }
+
+  .dialog-confirm:active { transform: scale(0.95); }
+
+  .dialog-confirm-destructive {
+    background: var(--color-danger);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--color-danger) 30%, transparent);
   }
 </style>

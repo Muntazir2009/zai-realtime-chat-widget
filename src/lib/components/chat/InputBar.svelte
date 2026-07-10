@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Loader2, Send, ImagePlus, Mic, Sticker, Gif } from 'lucide-svelte';
+  import { Loader2, Send, ImagePlus, Mic, Sticker } from 'lucide-svelte';
   import VoiceRecorder from '$lib/components/media/VoiceRecorder.svelte';
   import StickerPicker from '$lib/components/pickers/StickerPicker.svelte';
   import GIFPicker from '$lib/components/pickers/GIFPicker.svelte';
@@ -31,6 +31,7 @@
   let isFocused = $state(false);
 
   let hasText = $derived(message.trim().length > 0);
+  let activePicker = $derived(isGifOpen ? 'gif' : isTrayOpen ? 'sticker' : null);
 
   // ── Auto-resize ──
   $effect(() => {
@@ -82,15 +83,31 @@
     }
   }
 
+  // ── Pickers ──
+  function openPicker(type: 'sticker' | 'gif') {
+    if (type === 'gif') {
+      isGifOpen = !isGifOpen;
+      isTrayOpen = false;
+    } else {
+      isTrayOpen = !isTrayOpen;
+      isGifOpen = false;
+    }
+  }
+
+  function closeAllPickers() {
+    isTrayOpen = false;
+    isGifOpen = false;
+  }
+
   // ── Sticker ──
   function handleSticker(sticker: string) {
-    isTrayOpen = false;
+    closeAllPickers();
     onStickerSelect?.(sticker);
   }
 
   // ── GIF ──
   function handleGif(gifUrl: string) {
-    isGifOpen = false;
+    closeAllPickers();
     onGifSelect?.(gifUrl);
   }
 
@@ -170,13 +187,17 @@
     {/if}
 
     <!-- Picker panels -->
-    {#if isTrayOpen}
-      <div class="picker-panel animate-tab-enter">
-        <StickerPicker onStickerSelect={handleSticker} />
-      </div>
-    {:else if isGifOpen}
-      <div class="picker-panel animate-tab-enter">
-        <GIFPicker onGifSelect={handleGif} />
+    {#if activePicker}
+      <div class="picker-panel">
+        {#if activePicker === 'gif'}
+          <div class="picker-animate-in">
+            <GIFPicker onGifSelect={handleGif} />
+          </div>
+        {:else}
+          <div class="picker-animate-in">
+            <StickerPicker onStickerSelect={handleSticker} />
+          </div>
+        {/if}
       </div>
     {/if}
 
@@ -190,7 +211,18 @@
     />
 
     <!-- Input Row -->
-    <div class="input-row" class:input-row-focused={isFocused} class:input-row-active={hasText}>
+    <div class="input-row" class:input-row-focused={isFocused} class:input-row-active={hasText} class:input-row-picker-open={!!activePicker}>
+
+      <!-- Left: GIF button -->
+      <button
+        onclick={() => openPicker('gif')}
+        class="input-action-btn action-gif"
+        class:action-active={isGifOpen}
+        style="color: {isGifOpen ? 'var(--color-primary)' : 'var(--text-tertiary)'};"
+        aria-label="GIF picker"
+      >
+        <span class="gif-btn-label">GIF</span>
+      </button>
 
       <button onclick={handleMediaUpload} aria-label="Add media"
         class="input-action-btn">
@@ -210,9 +242,12 @@
       ></textarea>
 
       {#if hasText}
-        <button onclick={() => { isTrayOpen = !isTrayOpen; isGifOpen = false; }}
-          class="input-action-btn" class:action-active={isTrayOpen}
-          style="color: {isTrayOpen ? 'var(--color-primary)' : 'var(--text-tertiary)'};">
+        <button
+          onclick={() => openPicker('sticker')}
+          class="input-action-btn"
+          class:action-active={isTrayOpen}
+          style="color: {isTrayOpen ? 'var(--color-primary)' : 'var(--text-tertiary)'};"
+        >
           <Sticker size={18} />
         </button>
 
@@ -221,9 +256,12 @@
           <Send size={18} />
         </button>
       {:else}
-        <button onclick={() => { isTrayOpen = !isTrayOpen; isGifOpen = false; }}
-          class="input-action-btn" class:action-active={isTrayOpen}
-          style="color: {isTrayOpen ? 'var(--color-primary)' : 'var(--text-tertiary)'};">
+        <button
+          onclick={() => openPicker('sticker')}
+          class="input-action-btn"
+          class:action-active={isTrayOpen}
+          style="color: {isTrayOpen ? 'var(--color-primary)' : 'var(--text-tertiary)'};"
+        >
           <Sticker size={18} />
         </button>
 
@@ -285,19 +323,38 @@
   /* Picker panels */
   .picker-panel {
     margin-bottom: 8px;
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+
+  .picker-animate-in {
+    animation: pickerExpand 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  @keyframes pickerExpand {
+    0% {
+      opacity: 0;
+      max-height: 0;
+      transform: translateY(8px);
+    }
+    100% {
+      opacity: 1;
+      max-height: 340px;
+      transform: translateY(0);
+    }
   }
 
   /* Input row */
   .input-row {
     display: flex;
     align-items: flex-end;
-    gap: 4px;
-    padding: 6px 6px 6px 4px;
+    gap: 2px;
+    padding: 4px 4px 4px 2px;
     border-radius: 28px;
     background: var(--bg-surface);
     border: 1.5px solid var(--border-subtle);
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.03);
-    transition: border-color 250ms ease, box-shadow 250ms ease, background-color 250ms ease;
+    transition: border-color 250ms ease, box-shadow 250ms ease, background-color 250ms ease, transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
   .input-row-focused {
@@ -310,6 +367,11 @@
 
   .input-row-active {
     border-color: color-mix(in srgb, var(--color-primary) 25%, var(--border-subtle));
+  }
+
+  .input-row-picker-open {
+    border-bottom-left-radius: var(--radius-lg);
+    border-bottom-right-radius: var(--radius-lg);
   }
 
   /* Textarea */
@@ -326,6 +388,7 @@
     min-height: 36px;
     color: var(--text-primary);
     font-family: var(--font-sans, inherit);
+    transition: opacity 150ms ease;
   }
 
   .input-textarea::placeholder {
@@ -337,10 +400,10 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
-    min-width: 40px;
-    min-height: 40px;
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    min-height: 38px;
     border-radius: 50%;
     border: none;
     background: transparent;
@@ -361,15 +424,26 @@
     color: var(--color-primary);
   }
 
+  .action-gif {
+    position: relative;
+  }
+
+  .gif-btn-label {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    line-height: 1;
+  }
+
   /* Send button */
   .send-btn {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
-    min-width: 40px;
-    min-height: 40px;
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    min-height: 38px;
     border-radius: 50%;
     border: none;
     background: var(--color-primary);

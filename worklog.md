@@ -298,3 +298,71 @@ Stage Summary:
 - Delete: long-press on DM list item → "Delete chat" removes it from inbox and Firebase
 - Input: liquid glass effect applied directly ON the input bar element (not behind)
 - Commit c06f8a91 pushed to main
+
+---
+Task ID: 9
+Agent: Main Agent
+Task: Add GIF picker, reset confirmation, smooth animations, expanded settings
+
+Work Log:
+- Created `/api/gifs/search/+server.ts` — GIPHY API proxy endpoint with curated fallback (24 GIFs)
+  - Searches GIPHY trending/search API with 5s timeout
+  - Falls back to curated GIF collection on API failure
+  - Returns categories (Trending, Reactions, Love, Happy, Sad, etc.) for chip navigation
+  - Supports pagination (offset/limit params)
+- Completely rewrote `GIFPicker.svelte`:
+  - Category chips with horizontal scroll (Trending, Reactions, Love, Happy, Sad, Angry, Dance, Animals, Memes)
+  - Search bar with debounced input (300ms), clear button, focus ring animation
+  - 3-column GIF grid with lazy loading, infinite scroll, skeleton loading states
+  - GIF hover/press shows "GIF" badge overlay
+  - Error state with retry button, empty state with search suggestion
+  - All animations: chip fade-in, grid item scale-in, shimmer skeleton loading
+  - Custom scrollbar styling
+- Updated `InputBar.svelte`:
+  - Added GIF button (bold "GIF" text label) on LEFT side of input, before image button
+  - Refactored picker management: `activePicker` derived state, `openPicker(type)` function
+  - Picker panels now animate with `pickerExpand` (scale + translateY + max-height transition)
+  - `input-row-picker-open` class rounds bottom corners when picker is open
+  - Close all pickers when GIF/sticker is selected
+- Completely rewrote `SettingsView.svelte`:
+  - **Confirmation dialog system**: reusable `openDialog()` with title, message, confirm text, destructive flag
+    - Reset All Preferences: shows warning dialog before clearing localStorage
+    - Clear Chat Cache: shows confirmation before clearing cached messages
+    - Sign Out: shows confirmation dialog (was instant before)
+    - Dialog has spring animation, backdrop blur, destructive red styling
+  - **Notifications & Sounds section** (new):
+    - Sound toggle (notification sound on/off)
+    - Vibration toggle (haptic feedback)
+    - Message Preview toggle (show content in notifications)
+    - Enter to Send toggle (Enter sends, Shift+Enter for newline)
+    - All persisted to localStorage `chat-notif-prefs`
+  - **Compact Mode toggle** (new — was in prefsStore but never exposed in UI)
+  - **About section** (new): FlashChat branding with E2E Encryption, <50ms Latency, 99.9% Uptime stats
+  - **Storage info row** (new): shows "Data stored locally & encrypted in transit"
+  - **Clear Chat Cache button** (new): clears cached messages without resetting preferences
+  - Version bumped to v1.1.0 with styled badge
+  - Staggered section entrance animations (each section slides in with increasing delay)
+  - Connection status dot has pulse animation
+  - All toggle switches use spring physics (cubic-bezier 0.34, 1.56, 0.64, 1)
+- Added new CSS animations to `app.css` (§VII — Enhanced Animations):
+  - `springScaleIn`: scale with overshoot for modals
+  - `conversationSlideIn/Out`: iOS-like slide from right for conversation view
+  - `slideUpSmooth`: for picker panels
+  - `fadeScaleIn`: for dialogs
+  - `listFadeIn`: quick fade for list items
+  - `.animate-stagger`: parent class that staggers children with 30ms delays
+  - `tabSlideIn`: improved tab transition with subtle blur effect
+  - Toggle track/thumb: enhanced spring transition curves
+  - Glass cards: subtle scale(0.995) press feedback
+  - Global `scroll-behavior: smooth`
+  - `prefers-reduced-motion` media query: disables all animations for accessibility
+- Updated `+page.svelte`:
+  - Conversation uses `animate-conv-enter` (slide from right) instead of generic fade
+  - Tab content uses `animate-tab-enter-smooth` (with blur effect) instead of basic crossfade
+
+Stage Summary:
+- 6 files modified/created: GIFPicker.svelte, InputBar.svelte, SettingsView.svelte, +page.svelte, app.css, api/gifs/search/+server.ts (new)
+- GIF: Full-featured picker with GIPHY API, categories, search, infinite scroll, skeleton loading
+- Settings: Confirmation dialogs on all destructive actions, 4 new notification toggles, compact mode, about section, clear cache, version badge
+- Animations: 8 new animation keyframes, stagger helper, conversation slide transition, blur tab crossfade, spring toggles, glass press feedback, reduced-motion support
+- Pre-existing svelte-check errors unchanged (toastStore, canvas-confetti, Symbol.iterator — not introduced by this change)

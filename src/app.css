@@ -1450,3 +1450,188 @@ input, textarea, [contenteditable="true"] {
 .crimson-glow {
   animation: crimsonGlow 4s ease-in-out infinite;
 }
+
+/* ============================================================
+   §VII — Enhanced Animations (Smooth & Low-Latency)
+   ============================================================ */
+
+/* Smooth scale-in with spring overshoot */
+@keyframes springScaleIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.03);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.animate-spring-scale {
+  animation: springScaleIn 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  will-change: transform, opacity;
+}
+
+/* Conversation slide-in from right (like native iOS) */
+@keyframes conversationSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.animate-conv-enter {
+  animation: conversationSlideIn 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: transform, opacity;
+}
+
+/* Conversation slide-out to right */
+@keyframes conversationSlideOut {
+  0% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+}
+.animate-conv-exit {
+  animation: conversationSlideOut 200ms cubic-bezier(0.4, 0, 0.8, 0.4) both;
+  will-change: transform, opacity;
+}
+
+/* Slide up from bottom (pickers, panels) */
+@keyframes slideUpSmooth {
+  0% {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.animate-slide-up-smooth {
+  animation: slideUpSmooth 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: transform, opacity;
+}
+
+/* Fade scale for modals/dialogs */
+@keyframes fadeScaleIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.92) translateY(12px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+.animate-fade-scale-in {
+  animation: fadeScaleIn 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: transform, opacity;
+}
+
+/* Quick fade for list items */
+@keyframes listFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-list-fade-in {
+  animation: listFadeIn 180ms ease-out both;
+  will-change: transform, opacity;
+}
+
+/* Button press ripple feedback */
+@keyframes buttonRipple {
+  0% {
+    transform: scale(0);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(2.5);
+    opacity: 0;
+  }
+}
+
+/* Staggered children animation helper — apply to parent with
+   individual children using nth-child delays or inline style */
+.animate-stagger > * {
+  animation: listFadeIn 250ms ease-out both;
+}
+.animate-stagger > *:nth-child(1)  { animation-delay: 0ms; }
+.animate-stagger > *:nth-child(2)  { animation-delay: 30ms; }
+.animate-stagger > *:nth-child(3)  { animation-delay: 60ms; }
+.animate-stagger > *:nth-child(4)  { animation-delay: 90ms; }
+.animate-stagger > *:nth-child(5)  { animation-delay: 120ms; }
+.animate-stagger > *:nth-child(6)  { animation-delay: 150ms; }
+.animate-stagger > *:nth-child(7)  { animation-delay: 180ms; }
+.animate-stagger > *:nth-child(8)  { animation-delay: 210ms; }
+.animate-stagger > *:nth-child(9)  { animation-delay: 240ms; }
+.animate-stagger > *:nth-child(10) { animation-delay: 270ms; }
+.animate-stagger > *:nth-child(n+11) { animation-delay: 300ms; }
+
+/* Smooth cross-fade for tab content (improved) */
+@keyframes tabSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.995);
+    filter: blur(2px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+.animate-tab-enter-smooth {
+  animation: tabSlideIn 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: transform, opacity, filter;
+}
+
+/* Toggle switch smooth transition enhancement */
+.toggle-track {
+  transition: background 280ms cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.toggle-thumb {
+  transition: transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 280ms ease;
+}
+
+/* Micro-interaction: press feedback on glass cards */
+.glass {
+  transition: transform 150ms cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 200ms ease;
+}
+.glass:active {
+  transform: scale(0.995);
+}
+
+/* Global smooth scroll */
+* {
+  scroll-behavior: smooth;
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -111,12 +111,12 @@
   <div class="h-full flex flex-col" style="background-color: var(--bg-page);">
     <div class="flex-1 min-h-0 has-nav" class:has-nav={showNav}>
       {#if view === 'conversation' && Conversation}
-        <div class="animate-view-enter h-full">
+        <div class="animate-conv-enter h-full">
           <Conversation />
         </div>
       {:else}
         {#key tabKey}
-          <div class="animate-tab-enter h-full">
+          <div class="animate-tab-enter-smooth h-full">
             {#if activeTab === 'dms' && ChatList}
               <ChatList />
             {:else if activeTab === 'global' && GlobalView}
