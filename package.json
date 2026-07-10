@@ -16,6 +16,7 @@
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
     "@tailwindcss/vite": "^4.0.0",
     "blurhash": "^2.0.5",
+    "canvas-confetti": "^1.9.4",
     "date-fns": "^4.1.0",
     "firebase": "^11.4.0",
     "idb": "^8.0.2",

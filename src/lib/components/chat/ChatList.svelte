@@ -1,10 +1,9 @@
 <script lang="ts">
-  import { Plus, MessageSquare, X, Loader2, Search, Filter } from 'lucide-svelte';
+  import { Plus, MessageSquare, X, Loader2, Search } from 'lucide-svelte';
   import ChatTile from './ChatTile.svelte';
   import { chatStore } from '$lib/stores/chat.svelte';
   import { uiStore } from '$lib/stores/ui.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
-  import { toastStore } from '$lib/stores/toast.svelte';
   import * as rtdb from '$lib/firebase/rtdb';
 
   let showNewChat = $state(false);
@@ -81,37 +80,6 @@
     return inbox;
   });
 
-  // Handle swipe actions from ChatTile
-  async function handleTileAction(chatId: string, action: string) {
-    switch (action) {
-      case 'mute': {
-        const userChat = chatStore.userChats.get(chatId);
-        if (userChat) {
-          const newMuted = !(userChat.muted ?? false);
-          await rtdb.update(await rtdb.ref(`user_chats/${authStore.user?.id}/${chatId}`), { muted: newMuted });
-          toastStore.success(newMuted ? 'Chat muted' : 'Chat unmuted');
-        }
-        break;
-      }
-      case 'pin': {
-        const userChat = chatStore.userChats.get(chatId);
-        if (userChat) {
-          const newPinned = !(userChat.pinned ?? false);
-          await rtdb.update(await rtdb.ref(`user_chats/${authStore.user?.id}/${chatId}`), { pinned: newPinned });
-          toastStore.success(newPinned ? 'Chat pinned' : 'Chat unpinned');
-        }
-        break;
-      }
-      case 'delete':
-        toastStore.success('Chat deleted');
-        break;
-    }
-  }
-
-  function toggleSearch() {
-    showSearch = !showSearch;
-    if (!showSearch) searchQuery = '';
-  }
 </script>
 
 <div class="chatlist-shell" style="background-color: var(--bg-page);">
@@ -135,7 +103,7 @@
         </div>
       </div>
       <div class="cl-header-actions">
-        <button class="cl-icon-btn" onclick={toggleSearch} aria-label="Search chats">
+        <button class="cl-icon-btn" onclick={() => { showSearch = !showSearch; if (!showSearch) searchQuery = ''; }} aria-label="Search chats">
           <Search size={19} />
         </button>
         <button class="cl-new-btn" onclick={handleShowNewChat} aria-label="New chat">
@@ -264,7 +232,7 @@
           otherUser={meta ? (chatStore.getOtherParticipant(meta) ?? null) : null}
           isActive={chatStore.activeChatId === chatId}
           onclick={handleChatClick}
-          onSwipeAction={handleTileAction}
+          
         />
       {/each}
     {/if}

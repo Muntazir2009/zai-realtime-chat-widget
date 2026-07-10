@@ -8,13 +8,12 @@
   import ScrollToBottom from './ScrollToBottom.svelte';
   import TypingIndicator from '$lib/components/indicators/TypingIndicator.svelte';
   import Avatar from '$lib/components/ui/Avatar.svelte';
-  import ParticleRain from '$lib/components/effects/ParticleRain.svelte';
   import { chatStore } from '$lib/stores/chat.svelte';
   import { uiStore } from '$lib/stores/ui.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
-  import { toastStore } from '$lib/stores/toast.svelte';
   import type { Message } from '$lib/types/index';
   import { format, isToday, isYesterday, startOfDay } from 'date-fns';
+  import EasterEggFx from './EasterEggFx.svelte';
 
   let messagesContainer: HTMLDivElement | undefined = $state();
   let showMenu = $state(false);
@@ -25,8 +24,7 @@
   let showLightbox = $state(false);
   let editingMsg: Message | null = $state(null);
   let editText = $state('');
-  let triggerHeartRain = $state(false);
-  let triggerKissRain = $state(false);
+  let triggerEasterEgg = $state(0);
   let isNearBottom = $state(true);
   let prevMsgCount = 0;
   let showScrollFab = $state(false);
@@ -136,8 +134,7 @@
   function handleSend(content: string) {
     if (!chatStore.activeChatId) return;
     const easter = checkEasterEgg(content);
-    if (easter === 'heart') triggerHeartRain = !triggerHeartRain;
-    else if (easter === 'kiss') triggerKissRain = !triggerKissRain;
+    if (easter === 'heart' || easter === 'kiss') triggerEasterEgg++;
     const replyToId = uiStore.replyTo?.id;
     chatStore.sendMessage(chatStore.activeChatId, content, replyToId);
     uiStore.setReplyTo(null);
@@ -211,16 +208,14 @@
 
   function handleReaction(msg: Message, emoji: string) {
     if (!chatStore.activeChatId) return;
-    if (emoji === '❤️') triggerHeartRain = !triggerHeartRain;
-    if (emoji === '💋') triggerKissRain = !triggerKissRain;
+    if (emoji === '❤️' || emoji === '💋') triggerEasterEgg++;
     chatStore.toggleReaction(chatStore.activeChatId, msg.id, emoji);
   }
 
   function handleStickerSelect(sticker: string) {
     if (!chatStore.activeChatId) return;
     chatStore.sendMessage(chatStore.activeChatId, sticker);
-    if (['❤️', '💕', '💗'].includes(sticker)) triggerHeartRain = !triggerHeartRain;
-    if (['💋', '😘'].includes(sticker)) triggerKissRain = !triggerKissRain;
+    if (['❤️', '💕', '💗', '💋', '😘'].includes(sticker)) triggerEasterEgg++;
   }
 
   function handleGifSelect(gifUrl: string) {
@@ -263,8 +258,9 @@
 <svelte:window ontouchstart={handleGlobalTouchStart} onkeydown={handleKeyDown} />
 
 <div class="conv-shell" style="background: var(--bg-page);">
-  <ParticleRain type="heart" trigger={triggerHeartRain} />
-  <ParticleRain type="kiss" trigger={triggerKissRain} />
+  {#if triggerEasterEgg > 0}
+    <EasterEggFx trigger={triggerEasterEgg} />
+  {/if}
 
   <!-- Premium Glass Header -->
   <header class="header-glass safe-top">
@@ -684,7 +680,7 @@
   .msg-scroll::-webkit-scrollbar { width: 0px; }
 
   .scroll-bottom-pad {
-    height: 16px;
+    height: 80px;
     flex-shrink: 0;
   }
 

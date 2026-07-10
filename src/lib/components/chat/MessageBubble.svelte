@@ -266,14 +266,16 @@
     <div class="msg-avatar-spacer"></div>
   {/if}
 
-  <!-- Bubble -->
-  <div
-    class="msg-bubble {isOwn ? 'bbl-sent' : 'bbl-recv'} {isGrouped ? 'bbl-grouped' : ''} {isPinned ? 'bbl-pinned' : ''} {isEmojiOnly ? 'bbl-emoji' : ''}"
-    onclick={handleDoubleTap}
-    role="button"
-    tabindex="0"
-    onkeydown={handleBubbleKeydown}
-  >
+  <!-- Bubble + Reactions wrapper (stacked vertically) -->
+  <div class="msg-content">
+    <!-- Bubble -->
+    <div
+      class="msg-bubble {isOwn ? 'bbl-sent' : 'bbl-recv'} {isGrouped ? 'bbl-grouped' : ''} {isPinned ? 'bbl-pinned' : ''} {isEmojiOnly ? 'bbl-emoji' : ''}"
+      onclick={handleDoubleTap}
+      role="button"
+      tabindex="0"
+      onkeydown={handleBubbleKeydown}
+    >
     <!-- Reply Preview -->
     {#if msg.rid}
       <div class="rply-bar">
@@ -381,7 +383,8 @@
       </div>
     </div>
   {/if}
-</div>
+  </div><!-- /msg-content -->
+</div><!-- /msg-row -->
 
 <style>
   /* === ROW LAYOUT === */
@@ -417,6 +420,17 @@
     padding-bottom: 8px;
   }
 
+  /* === BUBBLE + REACTIONS WRAPPER === */
+  .msg-content {
+    display: flex;
+    flex-direction: column;
+    max-width: min(82%, 360px);
+    min-width: fit-content;
+  }
+
+  .msg-own .msg-content { align-items: flex-end; }
+  .msg-other .msg-content { align-items: flex-start; }
+
   /* === AVATAR COLUMN — aligned with bottom of the message stack === */
   .msg-avatar-col {
     width: 32px;
@@ -439,7 +453,7 @@
     transition: transform 120ms cubic-bezier(0.34, 1.56, 0.64, 1),
                 box-shadow 200ms ease,
                 opacity 150ms ease;
-    max-width: min(82%, 360px);
+    max-width: 100%;
     min-width: fit-content;
     animation: bubbleSpring 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
   }
@@ -737,7 +751,7 @@
     flex-wrap: wrap;
     gap: 4px;
     margin-top: 2px;
-    padding: 2px 0;
+    padding: 0;
     z-index: 2;
   }
 
@@ -751,8 +765,8 @@
     gap: 3px;
     padding: 2px 6px;
     border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-elevated);
     color: var(--text-primary);
     font-size: 12px;
     line-height: 1.2;
@@ -765,7 +779,7 @@
 
   .rxn-chip-active {
     border-color: var(--color-primary);
-    background: color-mix(in srgb, var(--color-primary) 15%, rgba(255,255,255,0.06));
+    background: color-mix(in srgb, var(--color-primary) 12%, var(--bg-elevated));
   }
 
   .rxn-emoji { font-size: 13px; line-height: 1; }

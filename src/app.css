@@ -67,14 +67,14 @@
   --glass-border: 1px solid rgba(255, 255, 255, 0.18);
   --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
 
-  --bg-page: #f8fafc;
+  --bg-page: #f0fdf4;
   --bg-surface: #ffffff;
   --bg-elevated: #ffffff;
   --text-primary: #0f172a;
-  --text-secondary: #64748b;
+  --text-secondary: #475569;
   --text-tertiary: #94a3b8;
-  --border-subtle: rgba(0, 0, 0, 0.06);
-  --input-bg: #f1f5f9;
+  --border-subtle: rgba(5, 150, 105, 0.08);
+  --input-bg: #ecfdf5;
   --overlay-bg: rgba(0, 0, 0, 0.4);
 
   color-scheme: light;

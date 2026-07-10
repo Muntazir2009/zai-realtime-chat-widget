@@ -43,9 +43,8 @@ class AuthStore {
         signInWithCustomToken(storedToken)
           .then((fbUser) => {
             if (!fbUser) {
-              this.clearStorage();
-              this.user = null;
-              this.token = null;
+              // Token expired — attempt silent re-login with stored credentials
+              this.silentReLogin();
             } else {
               // Refresh token from Firebase
               fbUser.getIdToken().then((newToken) => {
@@ -57,9 +56,8 @@ class AuthStore {
             }
           })
           .catch(() => {
-            this.clearStorage();
-            this.user = null;
-            this.token = null;
+            // Token completely invalid — attempt silent re-login
+            this.silentReLogin();
           });
       }
     } catch {
@@ -71,12 +69,52 @@ class AuthStore {
     // Listen for Firebase auth state changes (handles token expiry etc.)
     onAuthStateChanged((fbUser) => {
       if (!fbUser && this.isAuthenticated) {
-        // Token expired or revoked
-        this.user = null;
-        this.token = null;
-        this.clearStorage();
+        // Token expired — attempt silent re-login
+        this.silentReLogin();
       }
     });
+  }
+
+  /** Attempt to silently re-login using stored username/password */
+  private silentReLogin(): void {
+    const storedCreds = typeof localStorage !== 'undefined'
+      ? localStorage.getItem('chat-auth-creds')
+      : null;
+    if (!storedCreds) {
+      this.user = null;
+      this.token = null;
+      this.clearStorage();
+      return;
+    }
+    try {
+      const { username, password } = JSON.parse(storedCreds) as { username: string; password: string };
+      // Fire-and-forget re-login
+      fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      })
+        .then((res) => {
+          if (!res.ok) throw new Error('failed');
+          return res.json();
+        })
+        .then(async (authResp) => {
+          await this.applyAuthResponse(authResp);
+        })
+        .catch(() => {
+          // Credentials also expired — force manual login
+          this.user = null;
+          this.token = null;
+          this.clearStorage();
+          if (typeof localStorage !== 'undefined') {
+            localStorage.removeItem('chat-auth-creds');
+          }
+        });
+    } catch {
+      this.user = null;
+      this.token = null;
+      this.clearStorage();
+    }
   }
 
   async login(username: string, password: string): Promise<void> {
@@ -101,6 +139,10 @@ class AuthStore {
       };
 
       await this.applyAuthResponse(authResp);
+      // Store credentials for silent re-login on token expiry
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('chat-auth-creds', JSON.stringify({ username, password }));
+      }
     } finally {
       this.isLoading = false;
     }
@@ -128,6 +170,9 @@ class AuthStore {
       };
 
       await this.applyAuthResponse(authResp);
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('chat-auth-creds', JSON.stringify({ username, password }));
+      }
     } finally {
       this.isLoading = false;
     }
@@ -137,7 +182,7 @@ class AuthStore {
     fbSignOut().catch(() => {});
     this.user = null;
     this.token = null;
-    this.clearStorage();
+    this.clearAllStorage();
     clearAllCache();
   }
 
@@ -175,6 +220,14 @@ class AuthStore {
     if (typeof localStorage === 'undefined') return;
     localStorage.removeItem(STORAGE_TOKEN_KEY);
     localStorage.removeItem(STORAGE_USER_KEY);
+    // Note: intentionally keep chat-auth-creds for silent re-login
+  }
+
+  clearAllStorage(): void {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.removeItem(STORAGE_TOKEN_KEY);
+    localStorage.removeItem(STORAGE_USER_KEY);
+    localStorage.removeItem('chat-auth-creds');
   }
 }
 

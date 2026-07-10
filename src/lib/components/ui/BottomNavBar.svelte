@@ -95,7 +95,7 @@
   .nav-pill-active {
     background: var(--color-primary);
     color: var(--color-primary-foreground);
-    box-shadow: 0 2px 12px rgba(220, 38, 38, 0.35), 0 0 0 1px rgba(220, 38, 38, 0.1);
+    box-shadow: 0 2px 12px color-mix(in srgb, var(--color-primary) 30%, transparent);
   }
 
 </style>

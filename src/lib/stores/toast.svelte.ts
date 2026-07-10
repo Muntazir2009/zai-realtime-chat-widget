@@ -6,7 +6,7 @@ export interface Toast {
   id: string;
   message: string;
   type: ToastType;
-  duration?: number; // ms, default 3000
+  duration?: number;
   icon?: Snippet;
 }
 
@@ -14,28 +14,15 @@ class ToastStore {
   toasts: Toast[] = $state([]);
   private _nextId = 0;
 
-  show(message: string, type: ToastType = 'info', duration = 3000): void {
-    const id = `toast_${++this._nextId}`;
-    const toast: Toast = { id, message, type, duration };
-    this.toasts = [...this.toasts, toast];
+  // All toast methods are no-ops — toasts are disabled
+  show(_message: string, _type: ToastType = 'info', _duration = 0): void {}
+  success(_message: string, _duration = 0) {}
+  error(_message: string, _duration = 0) {}
+  info(_message: string, _duration = 0) {}
+  warning(_message: string, _duration = 0) {}
 
-    if (duration > 0) {
-      setTimeout(() => this.dismiss(id), duration);
-    }
-  }
-
-  success(message: string, duration = 3000) { this.show(message, 'success', duration); }
-  error(message: string, duration = 4000) { this.show(message, 'error', duration); }
-  info(message: string, duration = 3000) { this.show(message, 'info', duration); }
-  warning(message: string, duration = 3500) { this.show(message, 'warning', duration); }
-
-  dismiss(id: string): void {
-    this.toasts = this.toasts.filter((t) => t.id !== id);
-  }
-
-  dismissAll(): void {
-    this.toasts = [];
-  }
+  dismiss(_id: string): void {}
+  dismissAll(): void { this.toasts = []; }
 }
 
 export const toastStore = new ToastStore();
