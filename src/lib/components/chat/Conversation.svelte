@@ -41,9 +41,16 @@
     return chatStore.presence.get(otherUser.id) ?? null;
   });
 
-  let typingNames = $derived(
-    chatStore.activeChatId ? chatStore.getTypingUsersForChat(chatStore.activeChatId) : [],
-  );
+  let typingNames = $derived.by(() => {
+    if (!chatStore.activeChatId || !authStore.user) return [];
+    const chatId = chatStore.activeChatId;
+    const uids = chatStore.typingUsers.get(chatId);
+    if (!uids) return [];
+    // Only show OTHER users typing, not yourself
+    return Array.from(uids)
+      .filter(uid => uid !== authStore.user!.id)
+      .map(uid => chatStore.userDict.get(uid)?.displayName ?? 'Someone');
+  });
 
   let sortedPinned = $derived.by(() => {
     return Array.from(chatStore.pinnedMessages.entries())
@@ -401,18 +408,31 @@
   <!-- Edit Bar -->
   {#if editingMsg}
     <div class="edit-bar">
-      <div class="edit-accent"></div>
-      <span class="edit-label">Edit</span>
-      <textarea
-        bind:value={editText}
-        rows={1}
-        class="edit-input"
-        style="color: var(--text-primary); -webkit-user-select: text; user-select: text;"
-      ></textarea>
-      <button class="edit-save" onclick={saveEdit}>Save</button>
-      <button class="edit-cancel" onclick={cancelEdit} aria-label="Cancel edit">
-        <X size={14} />
-      </button>
+      <div class="edit-header">
+        <div class="edit-badge">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+          <span>Edit message</span>
+        </div>
+      </div>
+      <div class="edit-body">
+        <textarea
+          bind:value={editText}
+          rows={2}
+          class="edit-input"
+          style="color: var(--text-primary); -webkit-user-select: text; user-select: text;"
+          placeholder="Edit your message..."
+        ></textarea>
+        <div class="edit-actions">
+          <button class="edit-cancel" onclick={cancelEdit}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            <span>Cancel</span>
+          </button>
+          <button class="edit-save" onclick={saveEdit}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            <span>Save</span>
+          </button>
+        </div>
+      </div>
     </div>
   {/if}
 
@@ -830,89 +850,122 @@
 
   /* === EDIT BAR === */
   .edit-bar {
+    flex-shrink: 0;
+    padding: 0 10px 6px;
+    animation: editSlideIn 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+
+  @keyframes editSlideIn {
+    from { opacity: 0; transform: translateY(8px) scale(0.97); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  .edit-header {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    background: var(--bg-elevated);
-    border-top: 0.5px solid var(--border-subtle);
-    animation: fadeIn 200ms ease both;
-    flex-shrink: 0;
+    padding: 0 4px 6px;
   }
 
-  .edit-accent {
-    width: 3px;
-    align-self: stretch;
-    border-radius: 2px;
-    background: var(--color-primary);
-    flex-shrink: 0;
-  }
-
-  .edit-label {
+  .edit-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 99px;
+    background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+    color: var(--color-primary);
     font-size: 11px;
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--color-primary);
-    flex-shrink: 0;
+    letter-spacing: 0.03em;
+  }
+
+  .edit-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 16px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06), 0 0 0 0.5px rgba(0, 0, 0, 0.03);
   }
 
   .edit-input {
-    flex: 1;
-    min-height: 34px;
-    max-height: 100px;
-    padding: 6px 10px;
-    border-radius: var(--radius-sm, 8px);
+    width: 100%;
+    min-height: 56px;
+    max-height: 120px;
+    padding: 10px 12px;
+    border-radius: 12px;
     outline: none;
     resize: none;
-    font-size: 14px;
-    line-height: 1.4;
+    font-size: 15px;
+    line-height: 1.45;
     background: var(--input-bg);
-    border: 1px solid var(--border-subtle);
+    border: 1.5px solid var(--border-subtle);
     color: var(--text-primary);
     font-family: var(--font-sans, inherit);
+    transition: border-color 200ms ease, box-shadow 200ms ease;
+    -webkit-user-select: text;
+    user-select: text;
   }
+
   .edit-input:focus {
-    box-shadow: 0 0 0 2px var(--color-primary);
     border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 12%, transparent);
+  }
+
+  .edit-input::placeholder {
+    color: var(--text-tertiary);
+  }
+
+  .edit-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .edit-cancel {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 7px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: var(--input-bg);
+    border: 1px solid var(--border-subtle);
+    cursor: pointer;
+    transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1), background 150ms ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .edit-cancel:active {
+    transform: scale(0.94);
+    background: var(--border-subtle);
   }
 
   .edit-save {
-    min-width: 44px;
-    min-height: 34px;
-    padding: 0 12px;
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    justify-content: center;
-    border-radius: var(--radius-sm, 8px);
-    font-size: 12px;
+    gap: 5px;
+    padding: 7px 16px;
+    border-radius: 10px;
+    font-size: 13px;
     font-weight: 600;
     background: var(--color-primary);
     color: var(--color-primary-foreground);
     border: none;
     cursor: pointer;
-    transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
-    flex-shrink: 0;
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--color-primary) 30%, transparent);
+    transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 200ms ease;
     -webkit-tap-highlight-color: transparent;
   }
-  .edit-save:active { transform: scale(0.9); }
 
-  .edit-cancel {
-    min-width: 34px;
-    min-height: 34px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radius-sm, 8px);
-    color: var(--text-tertiary);
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
-    flex-shrink: 0;
-    -webkit-tap-highlight-color: transparent;
+  .edit-save:active {
+    transform: scale(0.94);
+    box-shadow: 0 1px 4px color-mix(in srgb, var(--color-primary) 20%, transparent);
   }
-  .edit-cancel:active { transform: scale(0.9); }
 
   /* === MENU OVERLAY === */
   .menu-overlay {
