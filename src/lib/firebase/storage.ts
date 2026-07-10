@@ -1,18 +1,40 @@
 // ============================================================
-// Storage — R2-backed media uploads via server-side proxy.
-// The client sends the file to /api/upload/file, which uploads
-// to R2 server-side (no CORS issues).
+// Storage — Firebase Storage uploads (client-side).
+// Uploads directly to Firebase Storage from the browser.
+// No server proxy needed — Firebase Storage handles CORS natively.
 // ============================================================
+
+import { browser } from '$app/environment';
+import { ensureReady, isReady } from './config.js';
 
 export interface UploadResult {
   publicUrl: string;
   key: string;
 }
 
+let _fbStorage: any = null;
+let _fbUploadBytesResumable: any = null;
+let _fbGetDownloadURL: any = null;
+let _fbRef: any = null;
+
+async function ensureStorageLoaded() {
+  if (_fbStorage) return;
+  await ensureReady();
+  if (!isReady()) throw new Error('Firebase not initialized');
+
+  const mod = await import('firebase/storage');
+  _fbStorage = mod.getStorage;
+  _fbUploadBytesResumable = mod.uploadBytesResumable;
+  _fbGetDownloadURL = mod.getDownloadURL;
+  _fbRef = mod.ref;
+
+  const app = (await import('firebase/app')).getApps()[0];
+  _fbStorage = mod.getStorage(app);
+}
+
 /**
- * Upload a file to R2 through the server-side proxy.
- * This avoids CORS issues with direct browser → R2 uploads.
- * Returns the public URL and R2 object key.
+ * Upload a file to Firebase Storage.
+ * Returns the public download URL and storage path.
  */
 export async function uploadFile(
   file: File | Blob,
@@ -20,55 +42,40 @@ export async function uploadFile(
   filename?: string,
   onProgress?: (pct: number) => void,
 ): Promise<UploadResult> {
+  if (!browser) throw new Error('Uploads only work in the browser');
+
+  await ensureStorageLoaded();
+
   const name = filename || (file instanceof File ? file.name : `upload-${Date.now()}.bin`);
+  const timestamp = Date.now();
+  const sanitized = name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const storagePath = `${folder}/${timestamp}-${sanitized}`;
 
-  return new Promise((resolve, reject) => {
-    const formData = new FormData();
-    formData.append('file', file, name);
-    formData.append('folder', folder);
+  const storageRef = _fbRef(_fbStorage, storagePath);
+  const uploadTask = _fbUploadBytesResumable(storageRef, file);
 
-    const xhr = new XMLHttpRequest();
-
-    xhr.upload.addEventListener('progress', (e) => {
-      if (e.lengthComputable && onProgress) {
-        onProgress(Math.round((e.loaded / e.total) * 100));
-      }
-    });
-
-    xhr.addEventListener('load', () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          const data = JSON.parse(xhr.responseText);
-          if (data.publicUrl && data.key) {
-            resolve({ publicUrl: data.publicUrl, key: data.key });
-          } else if (data.error) {
-            reject(new Error(`Upload server error: ${data.error}`));
-          } else {
-            reject(new Error(`Upload server returned invalid response: ${xhr.responseText.slice(0, 300)}`));
-          }
-        } catch {
-          reject(new Error(`Upload server returned non-JSON: ${xhr.responseText.slice(0, 300)}`));
+  return new Promise<UploadResult>((resolve, reject) => {
+    uploadTask.on(
+      'state_changed',
+      (snapshot: any) => {
+        if (onProgress && snapshot.bytesTransferred !== undefined && snapshot.totalBytes !== undefined) {
+          const pct = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+          onProgress(pct);
         }
-      } else {
-        let detail = xhr.responseText || '(empty body)';
+      },
+      (error: any) => {
+        console.error('[uploadFile] Firebase Storage error:', error);
+        reject(new Error(`Upload failed: ${error.message || 'Unknown error'}`));
+      },
+      async () => {
         try {
-          const parsed = JSON.parse(xhr.responseText);
-          detail = parsed.error || parsed.message || detail;
-        } catch { /* use raw text */ }
-        reject(new Error(`Upload failed (HTTP ${xhr.status}): ${detail.slice(0, 500)}`));
-      }
-    });
-
-    xhr.addEventListener('error', () => {
-      reject(new Error(`Upload network error (status ${xhr.status}, readyState ${xhr.readyState})`));
-    });
-
-    xhr.addEventListener('timeout', () => {
-      reject(new Error('Upload timed out'));
-    });
-
-    xhr.open('POST', '/api/upload/file');
-    xhr.timeout = 120_000; // 2 minutes
-    xhr.send(formData);
+          const downloadUrl = await _fbGetDownloadURL(uploadTask.snapshot.ref);
+          resolve({ publicUrl: downloadUrl, key: storagePath });
+        } catch (err: any) {
+          console.error('[uploadFile] Failed to get download URL:', err);
+          reject(new Error(`Upload succeeded but failed to get URL: ${err.message}`));
+        }
+      },
+    );
   });
 }
