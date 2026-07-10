@@ -69,7 +69,9 @@ class AuthStore {
     // Listen for Firebase auth state changes (handles token expiry etc.)
     onAuthStateChanged((fbUser) => {
       if (!fbUser && this.isAuthenticated) {
-        // Token expired — attempt silent re-login
+        // Firebase reports signed out but we think we're signed in.
+        // This can happen on token expiry. Attempt silent re-login.
+        // Don't clear auth here — let silentReLogin handle it.
         this.silentReLogin();
       }
     });
@@ -81,9 +83,7 @@ class AuthStore {
       ? localStorage.getItem('chat-auth-creds')
       : null;
     if (!storedCreds) {
-      this.user = null;
-      this.token = null;
-      this.clearStorage();
+      // No stored creds — keep current session (token may still work for RTDB)
       return;
     }
     try {
@@ -102,18 +102,12 @@ class AuthStore {
           await this.applyAuthResponse(authResp);
         })
         .catch(() => {
-          // Credentials also expired — force manual login
-          this.user = null;
-          this.token = null;
-          this.clearStorage();
-          if (typeof localStorage !== 'undefined') {
-            localStorage.removeItem('chat-auth-creds');
-          }
+          // Re-login failed (network error, bad creds, etc.)
+          // Don't clear auth — the stored token may still work for RTDB reads.
+          // Only clear if Firebase auth state explicitly reports signed out.
         });
     } catch {
-      this.user = null;
-      this.token = null;
-      this.clearStorage();
+      // Corrupted creds — ignore, don't clear existing session
     }
   }
 
