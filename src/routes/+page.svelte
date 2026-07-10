@@ -63,7 +63,7 @@
   );
 
   const activeTab = $derived(uiStore.tab ?? 'dms');
-  const showNav = $derived(view !== 'loading' && view !== 'auth' && view !== 'conversation');
+  const showNav = $derived(view !== 'loading' && view !== 'auth');
   const tabKey = $derived(activeTab);
 
   // Watch for view changes to trigger side effects (load inbox, go online)
