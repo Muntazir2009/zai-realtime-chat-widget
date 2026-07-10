@@ -3,7 +3,7 @@
     LogOut, Check, Moon, Sun, Smartphone, Shield, Palette, Info, Settings,
     Flame, Eye, ALargeSmall, MessageSquare, Minus, Circle, Square,
     Wifi, WifiOff, Activity, Clock, Trash2, Bell, BellOff,
-    Volume2, VolumeX, Vibrate, Lock, Heart, Zap, ChevronRight,
+    Volume2, VolumeX, Vibrate, Lock, ChevronRight,
     Sparkles, LayoutGrid, Type, Monitor
   } from 'lucide-svelte';
   import { themeManager } from '$lib/managers/ThemeManager.svelte';
@@ -658,41 +658,6 @@
           </div>
           <span class="text-xs" style="color: var(--text-tertiary);">Restores defaults</span>
         </button>
-      </div>
-    </section>
-
-    <!-- ════════════════════════════════════════════
-         ABOUT
-         ════════════════════════════════════════════ -->
-    <section class="settings-section-enter" style="animation-delay: 220ms;">
-      <div class="flex items-center gap-2 mb-3 px-1">
-        <Heart size={14} style="color: var(--text-tertiary);" />
-        <p class="text-xs font-semibold uppercase tracking-wider" style="color: var(--text-tertiary);">About</p>
-      </div>
-      <div class="glass rounded-[var(--radius-lg)] overflow-hidden" style="border-color: var(--border-subtle);">
-        <div class="p-4 text-center">
-          <div class="w-12 h-12 rounded-2xl mx-auto mb-3 flex items-center justify-center" style="background: linear-gradient(135deg, var(--color-primary), var(--color-accent));">
-            <Zap size={22} color="white" />
-          </div>
-          <p class="text-sm font-bold" style="color: var(--text-primary);">FlashChat</p>
-          <p class="text-[11px] mt-0.5" style="color: var(--text-tertiary);">Real-time messaging, beautifully crafted</p>
-          <div class="flex items-center justify-center gap-4 mt-3">
-            <div class="text-center">
-              <p class="text-lg font-bold" style="color: var(--color-primary);">E2E</p>
-              <p class="text-[10px]" style="color: var(--text-tertiary);">Encryption</p>
-            </div>
-            <div class="w-px h-8" style="background: var(--border-subtle);"></div>
-            <div class="text-center">
-              <p class="text-lg font-bold" style="color: var(--color-primary);">&lt; 50ms</p>
-              <p class="text-[10px]" style="color: var(--text-tertiary);">Latency</p>
-            </div>
-            <div class="w-px h-8" style="background: var(--border-subtle);"></div>
-            <div class="text-center">
-              <p class="text-lg font-bold" style="color: var(--color-primary);">99.9%</p>
-              <p class="text-[10px]" style="color: var(--text-tertiary);">Uptime</p>
-            </div>
-          </div>
-        </div>
       </div>
     </section>
 

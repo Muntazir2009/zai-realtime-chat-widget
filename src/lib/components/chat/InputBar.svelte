@@ -173,7 +173,7 @@
 {#if isRecording}
   <VoiceRecorder onSend={sendVoice} onCancel={cancelRecording} />
 {:else}
-  <div class="input-shell safe-bottom" style="padding: 0 8px 2px; margin-bottom: 68px;">
+  <div class="input-shell safe-bottom" style="padding: 0 8px 2px; margin-bottom: 62px;">
 
     <!-- Upload progress -->
     {#if isUploading}
@@ -213,7 +213,13 @@
     <!-- Input Row -->
     <div class="input-row" class:input-row-focused={isFocused} class:input-row-active={hasText} class:input-row-picker-open={!!activePicker}>
 
-      <!-- Left: GIF button -->
+      <!-- Left: Image upload -->
+      <button onclick={handleMediaUpload} aria-label="Add media"
+        class="input-action-btn">
+        <ImagePlus size={20} />
+      </button>
+
+      <!-- GIF button -->
       <button
         onclick={() => openPicker('gif')}
         class="input-action-btn action-gif"
@@ -222,11 +228,6 @@
         aria-label="GIF picker"
       >
         <span class="gif-btn-label">GIF</span>
-      </button>
-
-      <button onclick={handleMediaUpload} aria-label="Add media"
-        class="input-action-btn">
-        <ImagePlus size={20} />
       </button>
 
       <textarea
@@ -279,6 +280,8 @@
 <style>
   .input-shell {
     flex-shrink: 0;
+    padding-left: 16px;
+    padding-right: 16px;
     animation: inputSlideUp 250ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
   }
 

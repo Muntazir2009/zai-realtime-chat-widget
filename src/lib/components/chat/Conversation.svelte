@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { ChevronLeft, MoreVertical, Clock, Image as ImageIcon, Pin, X } from 'lucide-svelte';
+  import { ChevronLeft, MoreVertical, Clock, Image as ImageIcon, Pin, X, Trash2, BellOff, Bell } from 'lucide-svelte';
   import MessageBubble from './MessageBubble.svelte';
   import Lightbox from '$lib/components/media/Lightbox.svelte';
+  import MediaGallery from '$lib/components/media/MediaGallery.svelte';
   import MessageContextMenu from './MessageContextMenu.svelte';
   import InputBar from './InputBar.svelte';
   import ReplyPreview from './ReplyPreview.svelte';
@@ -11,12 +12,15 @@
   import { chatStore } from '$lib/stores/chat.svelte';
   import { uiStore } from '$lib/stores/ui.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
+  import { toastStore } from '$lib/stores/toast.svelte';
   import type { Message } from '$lib/types/index';
   import { format, isToday, isYesterday, startOfDay } from 'date-fns';
   import EasterEggFx from './EasterEggFx.svelte';
 
   let messagesContainer: HTMLDivElement | undefined = $state();
   let showMenu = $state(false);
+  let showMediaGallery = $state(false);
+  let isMuted = $state(false);
   let contextMenuMsg: Message | null = $state(null);
   let showContextMenu = $state(false);
   let lightboxImages = $state<Array<{url: string; caption?: string}>>([]);
@@ -259,6 +263,25 @@
     if (e.key === 'Escape' && showMenu) {
       showMenu = false;
     }
+    if (e.key === 'Escape' && showMediaGallery) {
+      showMediaGallery = false;
+    }
+  }
+
+  // Media items for gallery (image + GIF messages)
+  let mediaItems = $derived.by(() => {
+    return chatStore.messages
+      .filter(m => (m.t === 'image' || m.t === 'gif') && m.mu)
+      .map(m => ({ url: m.mu!, type: m.t === 'gif' ? 'image' as const : 'image' as const, id: m.id }));
+  });
+
+  function handleClearChat() {
+    if (!chatStore.activeChatId) return;
+    showMenu = false;
+    // Use a simple confirm dialog via chatStore
+    if (confirm('Clear all messages in this chat? This cannot be undone.')) {
+      chatStore.clearChat?.(chatStore.activeChatId);
+    }
   }
 </script>
 
@@ -478,17 +501,38 @@
   {/if}
 </div>
 
-<!-- Menu Overlay — no notifications -->
+<!-- Menu Overlay -->
 {#if showMenu}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div class="menu-overlay" style="background: var(--overlay-bg);" onclick={() => (showMenu = false)} onkeydown={(e) => e.key === 'Escape' && (showMenu = false)} role="button" tabindex="-1">
     <div class="menu-sheet">
-      <button class="menu-item" onclick={() => (showMenu = false, uiStore.openMediaGallery())}>
+      <button class="menu-item" onclick={() => { showMenu = false; showMediaGallery = true; }}>
         <ImageIcon size={17} style="color: var(--text-secondary);" />
         <span>View media</span>
+        {#if mediaItems.length > 0}
+          <span class="menu-badge">{mediaItems.length}</span>
+        {/if}
+      </button>
+      <button class="menu-item" onclick={() => { showMenu = false; isMuted = !isMuted; }}>
+        {#if isMuted}
+          <BellOff size={17} style="color: var(--text-secondary);" />
+          <span>Unmute chat</span>
+        {:else}
+          <Bell size={17} style="color: var(--text-secondary);" />
+          <span>Mute chat</span>
+        {/if}
+      </button>
+      <button class="menu-item menu-item-danger" onclick={() => { showMenu = false; handleClearChat(); }}>
+        <Trash2 size={17} style="color: var(--color-danger);" />
+        <span style="color: var(--color-danger);">Clear chat</span>
       </button>
     </div>
   </div>
+{/if}
+
+<!-- Media Gallery -->
+{#if showMediaGallery}
+  <MediaGallery items={mediaItems} onClose={() => (showMediaGallery = false)} />
 {/if}
 
 <style>
@@ -1009,6 +1053,21 @@
     -webkit-tap-highlight-color: transparent;
   }
   .menu-item:active { transform: scale(0.96); background: var(--input-bg); }
+
+  .menu-badge {
+    margin-left: auto;
+    padding: 1px 7px;
+    border-radius: 99px;
+    background: color-mix(in srgb, var(--color-primary) 15%, transparent);
+    color: var(--color-primary);
+    font-size: 11px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .menu-item-danger:active {
+    background: color-mix(in srgb, var(--color-danger) 8%, transparent);
+  }
 
   /* === UTILITIES === */
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }

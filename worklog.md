@@ -387,3 +387,28 @@ Stage Summary:
 - GIFs: proper SvelteKit env loading ($env/dynamic/private + import.meta.env)
 - canvas-confetti no longer imported anywhere (can be removed from package.json)
 - Commit 3910566e pushed to main
+
+---
+Task ID: 9
+Agent: Main Agent
+Task: Multiple UI improvements: swipe fix, easter egg, input bar, settings, 3-dot menu
+
+Work Log:
+- Fixed fully-swiped bubble getting stuck by using requestAnimationFrame to split the snap-back across two frames (first enable CSS transition, then set offset to 0)
+- Completely rewrote EasterEggFx with 5 particle types: hearts, mini-hearts, trail hearts, sparkle stars, and glow orbs across 3 staggered waves
+- Moved input bar closer to nav (margin-bottom: 68px → 62px) and decreased width (padding-left/right: 16px)
+- Swapped GIF button and image upload button positions on input bar (ImagePlus now first, GIF second)
+- Removed About section from SettingsView and cleaned up unused imports (Heart, Zap)
+- Fixed 3-dot menu: replaced broken uiStore.openMediaGallery() with local showMediaGallery state + MediaGallery component rendering
+- Added working menu items: View Media (with count badge), Mute/Unmute chat, Clear chat
+- Added missing toastStore import to Conversation.svelte
+- Fixed Svelte class directive conflict (class= + class: on same element)
+
+Stage Summary:
+- Swipe-to-reply now always snaps back smoothly (rAF split fix)
+- Love easter egg has 3 waves with hearts, sparkles, glow orbs, and trailing particles
+- Input bar sits slightly lower with more breathing room, narrower width
+- Settings page no longer shows About section
+- 3-dot menu now has 3 working features: View Media, Mute, Clear chat
+- No new svelte-check errors introduced
+- Pre-existing errors: SettingsView Symbol.iterator, clear, dynamic import default export

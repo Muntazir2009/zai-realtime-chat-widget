@@ -107,10 +107,14 @@
     if (shouldTrigger) {
       onSwipeReply?.(msg);
     }
-    // Always snap back via CSS transition (isSwiping → false enables it)
+    // Enable CSS transition first, then snap back in the next frame
+    // so the browser paints the old offset with the transition enabled,
+    // which allows the spring animation to actually play.
     isSwiping = false;
     swipeTriggered = false;
-    displayOffset = 0;
+    requestAnimationFrame(() => {
+      displayOffset = 0;
+    });
   }
 
   function handleContextMenu(e: MouseEvent) {
