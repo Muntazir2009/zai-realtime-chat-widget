@@ -7,6 +7,7 @@
   import { chatStore } from '$lib/stores/chat.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
   import { uploadFile } from '$lib/firebase/storage';
+  import { prefsStore } from '$lib/stores/prefs.svelte';
 
   interface Props {
     onSend: (content: string) => void;
@@ -51,6 +52,7 @@
   // ── Typing presence ──
   function emitTyping() {
     if (!chatStore.activeChatId) return;
+    if (!prefsStore.sendTypingIndicators) return;
     presenceManager.setTyping(chatStore.activeChatId);
     if (typingTimer) clearTimeout(typingTimer);
     typingTimer = setTimeout(() => {

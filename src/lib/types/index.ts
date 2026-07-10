@@ -88,7 +88,7 @@ export interface AuthState {
 export type ConnectionState = 'active' | 'dormant' | 'disconnected';
 
 /* ---------- Theme (PRD §VI, §VII) ---------- */
-export type ThemeMode = 'light' | 'dark' | 'amoled';
+export type ThemeMode = 'light' | 'dark' | 'amoled' | 'crimson';
 
 /* ---------- Gesture ---------- */
 export type SwipeDirection = 'left' | 'right' | 'up' | 'down';

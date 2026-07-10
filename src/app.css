@@ -64,6 +64,9 @@
    §VI.3 — Glass Materials (Light)
    ============================================================ */
 :root {
+  /* User-adjustable defaults */
+  --msg-font-size: 15px;
+  --bubble-radius: 16px;
   --glass-bg: rgba(255, 255, 255, 0.72);
   --glass-blur: blur(20px) saturate(200%);
   --glass-border: 1px solid rgba(5, 150, 105, 0.08);
