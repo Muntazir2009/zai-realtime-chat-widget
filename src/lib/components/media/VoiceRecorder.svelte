@@ -367,7 +367,7 @@
     border-radius: 50%;
     background: var(--color-primary);
     color: var(--color-primary-foreground);
-    box-shadow: 0 2px 10px rgba(220, 38, 38, 0.35);
+    box-shadow: 0 2px 10px color-mix(in srgb, var(--color-primary) 35%, transparent);
     cursor: pointer;
     flex-shrink: 0;
     transition: transform 0.15s ease, opacity 0.15s ease, box-shadow 0.15s ease;
@@ -376,6 +376,6 @@
 
   .send-btn:active {
     transform: scale(0.88) !important;
-    box-shadow: 0 1px 4px rgba(220, 38, 38, 0.2);
+    box-shadow: 0 1px 4px color-mix(in srgb, var(--color-primary) 20%, transparent);
   }
 </style>

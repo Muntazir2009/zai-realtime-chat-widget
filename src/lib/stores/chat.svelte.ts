@@ -331,6 +331,43 @@ class ChatStore {
     this.participants = [];
   }
 
+  /** Delete a chat: removes user_chats entry for current user (leaves the chat for them) */
+  async deleteChat(chatId: string): Promise<void> {
+    const user = authStore.user;
+    if (!user) return;
+
+    // If this chat is currently open, close it first
+    if (this.activeChatId === chatId) {
+      await this.closeChat();
+    }
+
+    try {
+      // Remove this user's entry from user_chats
+      const userChatRef = await rtdb.ref(RTDB_PATHS.USER_CHAT_ENTRY(user.id, chatId));
+      await rtdb.remove(userChatRef);
+
+      // Remove from local state
+      const newUserChats = new Map(this.userChats);
+      newUserChats.delete(chatId);
+      this.userChats = newUserChats;
+
+      // Optionally clean up local chat meta cache
+      const newChats = new Map(this.chats);
+      newChats.delete(chatId);
+      this.chats = newChats;
+
+      // Clean up meta listener if it exists
+      const metaUnsub = this.chatMetaUnsubs.get(chatId);
+      if (metaUnsub) {
+        metaUnsub();
+        this.chatMetaUnsubs.delete(chatId);
+      }
+    } catch (err: any) {
+      console.error('[deleteChat] Failed:', err);
+      toastStore.error(`Failed to delete chat: ${err.message?.slice(0, 80) || 'Unknown error'}`);
+    }
+  }
+
   // ============================================================
   // Send message — PRD §IV.1 fan-out write
   // ============================================================

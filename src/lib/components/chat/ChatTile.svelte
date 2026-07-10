@@ -79,8 +79,7 @@
 
   async function handleDelete() {
     showContextMenu = false;
-    chatStore.closeChat();
-    uiStore.setView('chatList');
+    await chatStore.deleteChat(chatId);
   }
 </script>
 
@@ -132,9 +131,9 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="tile-ctx-backdrop" onclick={() => (showContextMenu = false)}>
     <div class="tile-ctx-sheet" onclick={(e) => e.stopPropagation()}>
-      <button class="tile-ctx-item" onclick={() => { handleDelete(); }}>
+      <button class="tile-ctx-item tile-ctx-danger" onclick={() => { handleDelete(); }}>
         <Trash2 size={15} />
-        <span>Close chat</span>
+        <span>Delete chat</span>
       </button>
     </div>
   </div>
@@ -307,6 +306,13 @@
     text-align: left;
   }
   .tile-ctx-item:active { background: var(--input-bg); }
+
+  .tile-ctx-danger {
+    color: var(--color-danger, #ef4444);
+  }
+  .tile-ctx-danger:active {
+    background: color-mix(in srgb, var(--color-danger, #ef4444) 10%, transparent);
+  }
 
   @keyframes ctxFadeIn { from { opacity: 0; } to { opacity: 1; } }
   @keyframes ctxScaleIn {

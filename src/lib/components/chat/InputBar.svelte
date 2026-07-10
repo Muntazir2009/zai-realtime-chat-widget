@@ -285,25 +285,82 @@
     margin-bottom: 8px;
   }
 
-  /* Input row */
+  /* Input row — Liquid Glass */
   .input-row {
     display: flex;
     align-items: flex-end;
     gap: 4px;
     padding: 6px 6px 6px 4px;
     border-radius: 28px;
-    background: var(--bg-surface);
-    border: 1.5px solid var(--border-subtle);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.03);
+    background: rgba(255, 255, 255, 0.52);
+    backdrop-filter: blur(40px) saturate(220%) brightness(1.06);
+    -webkit-backdrop-filter: blur(40px) saturate(220%) brightness(1.06);
+    border: 1.5px solid rgba(255, 255, 255, 0.5);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.6),
+      inset 0 -0.5px 0 rgba(255, 255, 255, 0.25),
+      0 1px 3px rgba(0, 0, 0, 0.04),
+      0 8px 32px rgba(0, 0, 0, 0.06);
     transition: border-color 250ms ease, box-shadow 250ms ease, background-color 250ms ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Liquid glass inner highlight layer */
+  .input-row::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 50%;
+    border-radius: 27px 27px 0 0;
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.5) 0%,
+      rgba(255, 255, 255, 0.12) 50%,
+      transparent 100%
+    );
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Liquid glass specular shine */
+  .input-row::after {
+    content: '';
+    position: absolute;
+    top: 1px;
+    left: 18%;
+    right: 18%;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.75) 30%,
+      rgba(255, 255, 255, 0.95) 50%,
+      rgba(255, 255, 255, 0.75) 70%,
+      transparent 100%
+    );
+    border-radius: 1px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Ensure children are above the pseudo-elements */
+  .input-row > * {
+    position: relative;
+    z-index: 1;
   }
 
   .input-row-focused {
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 12%, transparent),
-                0 1px 4px rgba(0, 0, 0, 0.04),
-                0 4px 16px rgba(0, 0, 0, 0.03);
-    background: var(--bg-surface);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.6),
+      inset 0 -0.5px 0 rgba(255, 255, 255, 0.25),
+      0 0 0 3px color-mix(in srgb, var(--color-primary) 12%, transparent),
+      0 1px 3px rgba(0, 0, 0, 0.04),
+      0 8px 32px rgba(0, 0, 0, 0.06);
+    background: rgba(255, 255, 255, 0.58);
   }
 
   .input-row-active {

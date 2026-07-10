@@ -6,10 +6,13 @@
 
   // Dynamic imports resolved after mount
   let mounted = $state(false);
-  let authStore: any = $state(null);
-  let chatStore: any = $state(null);
-  let uiStore: any = $state(null);
-  let presenceManager: any = $state(null);
+  // Plain variables (not $state) for store singletons — they're already reactive
+  // via Svelte 5 class runes. Wrapping in $state double-proxies and breaks reactivity.
+  let authStore: any = null;
+  let chatStore: any = null;
+  let uiStore: any = null;
+  let presenceManager: any = null;
+  // Component references need $state so the template re-renders when loaded
   let AuthScreen: any = $state(null);
   let ChatList: any = $state(null);
   let Conversation: any = $state(null);
@@ -133,15 +136,17 @@
         </div>
       {:else}
         <!-- Tab views with crossfade transition -->
-        <div class="animate-tab-enter h-full" key={tabKey}>
-          {#if activeTab === 'dms' && ChatList}
-            <ChatList />
-          {:else if activeTab === 'global' && GlobalView}
-            <Global />
-          {:else if activeTab === 'settings' && SettingsView}
-            <SettingsView />
-          {/if}
-        </div>
+        {#key tabKey}
+          <div class="animate-tab-enter h-full">
+            {#if activeTab === 'dms' && ChatList}
+              <ChatList />
+            {:else if activeTab === 'global' && GlobalView}
+              <GlobalView />
+            {:else if activeTab === 'settings' && SettingsView}
+              <SettingsView />
+            {/if}
+          </div>
+        {/key}
       {/if}
     </div>
 
