@@ -550,3 +550,35 @@ Stage Summary:
   2. Test avatar upload end-to-end with real R2 credentials
   3. Add profile view for other users (tap on user in chat header)
   4. Consider adding custom wallpaper per-chat (from previous session request)
+---
+Task ID: 2
+Agent: Main Agent
+Task: Profile customization, settings redesign, smooth animations, UI polish
+
+Work Log:
+- Moved input bar 8px down (margin-bottom 56px → 64px in InputBar.svelte)
+- Completely rewrote SettingsView.svelte (1400→1762 lines) with 4 clean sections:
+  - Profile (avatar upload, inline name edit, bio, emoji status, accent color)
+  - Appearance (theme grid, font size, bubble style, compact mode)
+  - Chats (sound, enter-to-send, typing indicators, read receipts, show online)
+  - Advanced (collapsible by default: connection status, sync info, cache management)
+- Added smooth animations throughout:
+  - MessageBubble: msgBubbleIn/msgBubbleInGrouped entrance animations
+  - ChatTile: tileEnter slide-in animation + staggered delays in ChatList
+  - BottomNavBar: spring-like pill transitions (350ms cubic-bezier bounce)
+  - Conversation: menu slide-in, pinned banner entrance, typing fade-in, edit bar animation
+  - SettingsView: staggered section entrance, smooth advanced collapse
+- Enhanced UI polish:
+  - Avatar: accent color ring shadow, bouncy emoji badge, hover scale
+  - MessageBubble: softer shadows, gradient sent bubbles, refined timestamps, reply border glow
+  - Conversation: 32px glass blur, menu button rotation, improved scroll FAB, floating empty state
+  - ChatList: pill-shaped search bar, refined filter tabs, improved empty state
+  - AuthScreen: dot grid background pattern, floating logo animation, premium submit button with shimmer
+  - app.css: upgraded all animation easing curves to smoother cubic-bezier values
+
+Stage Summary:
+- Settings page is now clean with 4 grouped sections (down from 7+ cluttered sections)
+- Profile customization is fully functional: name, bio, avatar, emoji status, accent color — all real-time synced via Firebase RTDB
+- Every interactive element has smooth, spring-like animations
+- 0 svelte-check errors, 18 pre-existing CSS warnings only
+- All changes pushed to GitHub (commit 32534cb3)
