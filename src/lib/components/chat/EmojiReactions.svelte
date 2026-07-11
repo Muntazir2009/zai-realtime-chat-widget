@@ -7,7 +7,7 @@
 
   let { onReaction }: Props = $props();
 
-  const quickEmojis = ['❤️', '👍', '😂', '😮', '😢', '🙏'];
+  const quickEmojis = ['❤️', '🔥', '😂', '😍', '👍', '😢', '💀', '🥺'];
 
   let expanded = $state(false);
 

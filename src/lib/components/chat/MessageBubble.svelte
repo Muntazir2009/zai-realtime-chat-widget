@@ -100,6 +100,8 @@
     }
   }
 
+  let swipeFlash = $state(false);
+
   function handleTouchEnd() {
     if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
 
@@ -107,11 +109,11 @@
       (Math.abs(currentOffset) >= SWIPE_THRESHOLD * 0.7 && Math.abs(velocityX) > VELOCITY_THRESHOLD);
 
     if (shouldTrigger) {
+      navigator.vibrate?.(30);
+      swipeFlash = true;
       onSwipeReply?.(msg);
+      setTimeout(() => { swipeFlash = false; }, 300);
     }
-    // Enable CSS transition first, then snap back in the next frame
-    // so the browser paints the old offset with the transition enabled,
-    // which allows the spring animation to actually play.
     isSwiping = false;
     swipeTriggered = false;
     requestAnimationFrame(() => {
@@ -181,11 +183,12 @@
     return msg.c.replace(urlMatch()!, '').trim();
   });
 
-  const replyIndicatorOpacity = $derived(Math.min(Math.abs(displayOffset) / SWIPE_THRESHOLD, 1));
+  const replyIndicatorOpacity = $derived(Math.min(Math.abs(displayOffset) / (SWIPE_THRESHOLD * 0.6), 1));
+  const swipeProgress = $derived(Math.min(Math.abs(displayOffset) / SWIPE_THRESHOLD, 1));
 
   // Detect if message is emoji-only for larger display
   const isEmojiOnly = $derived(
-    msg.t === 'text' && /^[\p{Emoji_Presentation}\p{Extended_Pictographic}\u{FE0F}\u{200D}\u{20E3}]+$/u.test(msg.c.trim()) && msg.c.trim().length <= 8
+    msg.t === 'text' && /^[\p{Emoji_Presentation}\p{Extended_Pictographic}\u{FE0F}\u{200D}\u{20E3}\u{200C}]+$/u.test(msg.c.trim()) && msg.c.trim().length <= 12
   );
 
   // --- Reactions ---
@@ -210,19 +213,17 @@
   }
 
   function handleReactionTap(reaction: Reaction) {
-    // If user already reacted, tapping removes it
-    if (chatStore.hasReacted(msg.id, reaction.emoji)) {
-      onReaction?.(msg, reaction.emoji);
-    }
+    // Toggle: if already reacted remove it, otherwise add it
+    onReaction?.(msg, reaction.emoji);
   }
 </script>
 
 <div
-  class="msg-row"
+  class="msg-row {swipeFlash ? 'swipe-flash' : ''}"
   class:msg-own={isOwn}
   class:msg-other={!isOwn}
   class:msg-grouped={isGrouped}
-  style="transform: translateX({displayOffset}px); transition: {isSwiping ? 'none' : 'transform 400ms cubic-bezier(0.34, 1.56, 0.64, 1)'};"
+  style="transform: translateX({displayOffset}px) scale({swipeFlash ? 0.97 : 1}); transition: {isSwiping ? 'transform 80ms linear, scale 80ms linear' : 'transform 500ms cubic-bezier(0.34, 1.56, 0.64, 1), scale 350ms cubic-bezier(0.34, 1.56, 0.64, 1)'};"
   role="article"
   aria-label="Message from {isOwn ? 'you' : senderName || 'unknown'}"
   oncontextmenu={handleContextMenu}
@@ -231,12 +232,17 @@
   ontouchend={handleTouchEnd}
 >
   <!-- Swipe Reply Indicator -->
-  {#if Math.abs(displayOffset) > 12}
+  {#if Math.abs(displayOffset) > 8}
     <div
       class="swipe-indicator"
-      style="opacity: {replyIndicatorOpacity}; transform: translateY(-50%) scale({0.85 + replyIndicatorOpacity * 0.15}); {isOwn ? 'right: 0px;' : 'left: 0px;'}"
+      style="
+        opacity: {replyIndicatorOpacity};
+        transform: translateY(-50%) scale({0.7 + replyIndicatorOpacity * 0.3});
+        {isOwn ? 'right: 8px;' : 'left: 8px;'}
+      "
     >
-      <ReplyIcon size={15} />
+      <ReplyIcon size={14} />
+      <span class="swipe-label">Reply</span>
     </div>
   {/if}
 
@@ -357,7 +363,7 @@
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div class="rxn-picker-backdrop" onclick={(e) => { if ((e.target as HTMLElement).classList.contains('rxn-picker-backdrop')) toggleReactionPicker(e); }}>
       <div class="rxn-picker" class:rxn-picker-own={isOwn}>
-        {#each ['❤️', '👍', '😂', '😮', '😢', '🙏', '🔥', '👎'] as emoji}
+        {#each ['❤️', '🔥', '😂', '😍', '👍', '😮', '😢', '🙏', '💀', '🥺', '🎉', '✨', '😤', '💯', '🫶', '🤝'] as emoji}
           <button
             class="rxn-picker-btn {chatStore.hasReacted(msg.id, emoji) ? 'rxn-picker-btn-active' : ''}"
             onclick={() => handleReactionSelect(emoji)}
@@ -563,8 +569,8 @@
   }
 
   .bbl-emoji-text {
-    font-size: 40px;
-    line-height: 1.2;
+    font-size: 64px;
+    line-height: 1.1;
   }
 
   /* === CONTENT === */
@@ -757,22 +763,41 @@
   .swipe-indicator {
     position: absolute;
     top: 50%;
-    transform: translateY(-50%) scale(0.85);
+    transform: translateY(-50%) scale(0.7);
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 4px;
-    padding: 6px 12px;
+    gap: 5px;
+    padding: 8px 14px;
     border-radius: 9999px;
     background: var(--color-primary);
     color: var(--color-primary-foreground);
     font-size: 12px;
-    font-weight: 500;
+    font-weight: 600;
     pointer-events: none;
     z-index: 5;
-    transition: opacity 180ms cubic-bezier(0.4, 0, 0.2, 1), transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1);
-    box-shadow: 0 4px 16px color-mix(in srgb, var(--color-primary) 35%, transparent), 0 1px 3px rgba(0,0,0,0.08);
-    will-change: opacity, transform;
+    transition: opacity 150ms cubic-bezier(0.4, 0, 0.2, 1),
+                transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1),
+                box-shadow 200ms ease;
+    box-shadow: 0 4px 20px color-mix(in srgb, var(--color-primary) 40%, transparent),
+                0 0 0 0 color-mix(in srgb, var(--color-primary) 0%, transparent);
+    will-change: opacity, transform, box-shadow;
+    letter-spacing: 0.01em;
+  }
+
+  .swipe-label {
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  .swipe-flash {
+    z-index: 2;
+  }
+
+  .msg-row.swipe-flash .msg-bubble {
+    box-shadow: 0 0 0 2px var(--color-primary),
+                0 0 24px color-mix(in srgb, var(--color-primary) 25%, transparent) !important;
   }
 
   /* === REACTIONS BAR === */

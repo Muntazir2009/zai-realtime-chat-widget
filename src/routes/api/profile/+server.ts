@@ -1,10 +1,12 @@
 import { json } from '@sveltejs/kit';
-import { getEnv, rtdbUpdate, rtdbGet } from '$lib/server/firebase-rest';
+import { getEnv, rtdbUpdate, rtdbGet, rtdbSet, rtdbRemove } from '$lib/server/firebase-rest';
 
 const HEX_COLOR_RE = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/;
+const USERNAME_RE = /^[a-zA-Z0-9_]{3,20}$/;
 
 interface ProfileUpdateBody {
   username: string;
+  newUsername?: string;
   displayName?: string;
   bio?: string;
   avatarUrl?: string;
@@ -21,6 +23,31 @@ export async function PUT({ request, platform }: { request: Request; platform: a
 
     if (!body.username) {
       return json({ error: 'Missing username' }, { status: 400 });
+    }
+
+    // Handle username change
+    if (body.newUsername !== undefined) {
+      if (!USERNAME_RE.test(body.newUsername)) {
+        return json({ error: 'Username must be 3-20 characters (letters, numbers, underscores)' }, { status: 400 });
+      }
+      if (body.newUsername === body.username) {
+        return json({ error: 'New username is the same as current' }, { status: 400 });
+      }
+      // Check if new username is taken
+      const existing = await rtdbGet(env, `users/${body.newUsername}`);
+      if (existing) {
+        return json({ error: 'Username already taken' }, { status: 409 });
+      }
+      // Copy user data to new key
+      const currentData = await rtdbGet(env, `users/${body.username}`);
+      if (!currentData) {
+        return json({ error: 'Current user not found' }, { status: 404 });
+      }
+      await rtdbSet(env, `users/${body.newUsername}`, { ...currentData, username: body.newUsername });
+      await rtdbRemove(env, `users/${body.username}`);
+      console.log(`[profile] renamed "${body.username}" → "${body.newUsername}"`);
+      const updated = await rtdbGet(env, `users/${body.newUsername}`);
+      return json({ success: true, profile: updated, newUsername: body.newUsername });
     }
 
     // Build a clean update object with only valid fields

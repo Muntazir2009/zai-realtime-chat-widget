@@ -36,6 +36,27 @@
   let showScrollFab = $state(false);
   let newMsgWhileScrolled = $state(0);
   let prevScrollHeight = 0;
+  let lastSeenMsgCount = $state(0);
+
+  // Watch for incoming messages with easter egg metadata (from other user)
+  $effect(() => {
+    const len = chatStore.messages.length;
+    if (len <= lastSeenMsgCount) {
+      lastSeenMsgCount = len;
+      return;
+    }
+    // Check new messages for egg flag
+    const userId = authStore.user?.id;
+    for (let i = lastSeenMsgCount; i < len; i++) {
+      const m = chatStore.messages[i];
+      if (m?.sid !== userId && m.md?.egg) {
+        // Delay slightly so the message appears first, then the effect plays
+        setTimeout(() => { triggerEasterEgg++; }, 200);
+        break;
+      }
+    }
+    lastSeenMsgCount = len;
+  });
 
   let otherUser = $derived.by(() => {
     const meta = chatStore.activeChatId ? chatStore.chats.get(chatStore.activeChatId) : undefined;
@@ -160,9 +181,10 @@
   function handleSend(content: string) {
     if (!chatStore.activeChatId) return;
     const easter = checkEasterEgg(content);
+    const meta = easter ? { egg: easter } : undefined;
     if (easter === 'heart' || easter === 'kiss') triggerEasterEgg++;
     const replyToId = uiStore.replyTo?.id;
-    chatStore.sendMessage(chatStore.activeChatId, content, replyToId);
+    chatStore.sendMessage(chatStore.activeChatId, content, replyToId, meta);
     uiStore.setReplyTo(null);
   }
 
@@ -240,8 +262,10 @@
 
   function handleStickerSelect(sticker: string) {
     if (!chatStore.activeChatId) return;
-    chatStore.sendMessage(chatStore.activeChatId, sticker);
-    if (['❤️', '💕', '💗', '💋', '😘'].includes(sticker)) triggerEasterEgg++;
+    const isEggSticker = ['❤️', '💕', '💗', '💋', '😘'].includes(sticker);
+    const meta = isEggSticker ? { egg: 'heart' } : undefined;
+    chatStore.sendMessage(chatStore.activeChatId, sticker, undefined, meta);
+    if (isEggSticker) triggerEasterEgg++;
   }
 
   function handleGifSelect(gifUrl: string) {

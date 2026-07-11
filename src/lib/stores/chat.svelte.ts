@@ -427,7 +427,7 @@ class ChatStore {
     return updates;
   }
 
-  async sendMessage(chatId: string, content: string, replyToId?: string): Promise<void> {
+  async sendMessage(chatId: string, content: string, replyToId?: string, metadata?: Record<string, unknown>): Promise<void> {
     const user = authStore.user;
     if (!user) return;
 
@@ -439,7 +439,7 @@ class ChatStore {
 
     const message: Message = {
       id: messageId, c: content, sid: user.id, t: 'text', ts: Date.now(),
-      rk: idempotencyKey, rid: replyToId ?? null, mu: null, mh: null, md: null, edited: false,
+      rk: idempotencyKey, rid: replyToId ?? null, mu: null, mh: null, md: metadata ?? null, edited: false,
     };
 
     const updates = this.buildFanOutUpdates(chatId, messageId, message, content.slice(0, 100));

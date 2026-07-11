@@ -2,9 +2,9 @@
   import {
     LogOut, Check, Moon, Sun, Smartphone, Shield, Palette, Settings,
     Flame, Eye, ALargeSmall, MessageSquare, Minus, Circle, Square,
-    Wifi, WifiOff, Activity, Clock, Trash2, Bell,
-    Volume2, VolumeX, Vibrate, Lock, ChevronRight, ChevronDown,
-    Sparkles, LayoutGrid, Type, Monitor,
+    Wifi, WifiOff, Activity, Clock, Trash2,
+    Lock, ChevronRight, ChevronDown,
+    Sparkles, LayoutGrid, Type,
     Camera, Pencil, X, Smile
   } from 'lucide-svelte';
   import { themeManager } from '$lib/managers/ThemeManager.svelte';
@@ -155,7 +155,9 @@
 
   // ── Profile editing state ──
   let isEditingName = $state(false);
+  let isEditingUsername = $state(false);
   let editNameValue = $state('');
+  let editUsernameValue = $state('');
   let editBioValue = $state('');
   let isUploadingAvatar = $state(false);
   let isSavingProfile = $state(false);
@@ -188,9 +190,12 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: authStore.user.username, ...fields }),
       });
+      const data = (await res.json()) as { error?: string; newUsername?: string };
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error((data as { error?: string }).error || 'Update failed');
+        throw new Error(data.error || 'Update failed');
+      }
+      if (data.newUsername && authStore.user) {
+        authStore.user = { ...authStore.user, username: data.newUsername };
       }
       if (fields.displayName && authStore.user) {
         authStore.user = { ...authStore.user, displayName: fields.displayName as string };
@@ -236,6 +241,22 @@
     if (!editNameValue.trim()) return;
     await updateProfile({ displayName: editNameValue.trim() });
     isEditingName = false;
+  }
+
+  function startEditUsername() {
+    editUsernameValue = authStore.user?.username || '';
+    isEditingUsername = true;
+  }
+
+  function cancelEditUsername() {
+    isEditingUsername = false;
+  }
+
+  async function saveUsername() {
+    const val = editUsernameValue.trim().toLowerCase();
+    if (!val || val === authStore.user?.username) { isEditingUsername = false; return; }
+    await updateProfile({ newUsername: val });
+    isEditingUsername = false;
   }
 
   // Bio auto-save with debounce
@@ -387,7 +408,33 @@
                 </button>
               </div>
             {/if}
-            <p class="username">@{authStore.user?.username || 'unknown'}</p>
+            <p class="username" onclick={startEditUsername} role="button" tabindex="0" aria-label="Edit username">
+              {#if isEditingUsername}
+                <span class="username-edit-inline">
+                  <span style="opacity: 0.5;">@</span><input
+                    type="text"
+                    class="username-input"
+                    value={editUsernameValue}
+                    maxlength={20}
+                    oninput={(e) => editUsernameValue = (e.target as HTMLInputElement).value.toLowerCase().replace(/[^a-z0-9_]/g, '')}
+                    onkeydown={(e) => {
+                      if (e.key === 'Enter') saveUsername();
+                      if (e.key === 'Escape') cancelEditUsername();
+                    }}
+                    autofocus
+                  />
+                  <button class="icon-btn icon-btn-save" onclick={(e) => { e.stopPropagation(); saveUsername(); }} aria-label="Save username">
+                    <Check size={11} />
+                  </button>
+                  <button class="icon-btn icon-btn-cancel" onclick={(e) => { e.stopPropagation(); cancelEditUsername(); }} aria-label="Cancel">
+                    <X size={11} />
+                  </button>
+                </span>
+              {:else}
+                <span>@{authStore.user?.username || 'unknown'}</span>
+                <Pencil size={10} class="username-edit-icon" />
+              {/if}
+            </p>
           </div>
         </div>
 
@@ -557,150 +604,9 @@
     </section>
 
     <!-- ════════════════════════════════
-         CHATS
-         ════════════════════════════════ -->
-    <section class="settings-section" style="--delay: 80ms;">
-      <span class="section-label">Chats</span>
-      <div class="glass card">
-
-        <!-- Notification Sound -->
-        <div class="toggle-row">
-          <div class="toggle-info">
-            <div class="toggle-icon" style="background: color-mix(in srgb, var(--color-primary) 12%, transparent);">
-              {#if notifSound}
-                <Volume2 size={15} style="color: var(--color-primary);" />
-              {:else}
-                <VolumeX size={15} style="color: var(--text-tertiary);" />
-              {/if}
-            </div>
-            <div>
-              <p class="toggle-title">Notification Sound</p>
-              <p class="toggle-desc">Play sound for new messages</p>
-            </div>
-          </div>
-          <button
-            class="toggle-track"
-            class:toggle-on={notifSound}
-            onclick={() => notifSound = !notifSound}
-            role="switch"
-            aria-checked={notifSound}
-            aria-label="Toggle notification sound"
-          >
-            <div class="toggle-thumb"></div>
-          </button>
-        </div>
-
-        <div class="toggle-divider"></div>
-
-        <!-- Enter to Send -->
-        <div class="toggle-row">
-          <div class="toggle-info">
-            <div class="toggle-icon" style="background: var(--input-bg);">
-              <Monitor size={15} style="color: var(--text-secondary);" />
-            </div>
-            <div>
-              <p class="toggle-title">Enter to Send</p>
-              <p class="toggle-desc">Shift+Enter for newline</p>
-            </div>
-          </div>
-          <button
-            class="toggle-track"
-            class:toggle-on={enterSend}
-            onclick={() => enterSend = !enterSend}
-            role="switch"
-            aria-checked={enterSend}
-            aria-label="Toggle enter to send"
-          >
-            <div class="toggle-thumb"></div>
-          </button>
-        </div>
-
-        <div class="toggle-divider"></div>
-
-        <!-- Typing Indicators -->
-        <div class="toggle-row">
-          <div class="toggle-info">
-            <div class="toggle-icon" style="background: color-mix(in srgb, var(--color-warning) 12%, transparent);">
-              <MessageSquare size={15} style="color: var(--color-warning);" />
-            </div>
-            <div>
-              <p class="toggle-title">Typing Indicators</p>
-              <p class="toggle-desc">Show when you're typing</p>
-            </div>
-          </div>
-          <button
-            class="toggle-track"
-            class:toggle-on={prefsStore.sendTypingIndicators}
-            onclick={() => prefsStore.setSendTypingIndicators(!prefsStore.sendTypingIndicators)}
-            role="switch"
-            aria-checked={prefsStore.sendTypingIndicators}
-            aria-label="Toggle typing indicators"
-          >
-            <div class="toggle-thumb"></div>
-          </button>
-        </div>
-
-        <div class="toggle-divider"></div>
-
-        <!-- Read Receipts -->
-        <div class="toggle-row">
-          <div class="toggle-info">
-            <div class="toggle-icon" style="background: color-mix(in srgb, var(--color-accent) 12%, transparent);">
-              <Eye size={15} style="color: var(--color-accent);" />
-            </div>
-            <div>
-              <p class="toggle-title">Read Receipts</p>
-              <p class="toggle-desc">Show when you've read messages</p>
-            </div>
-          </div>
-          <button
-            class="toggle-track"
-            class:toggle-on={prefsStore.sendReadReceipts}
-            onclick={() => prefsStore.setSendReadReceipts(!prefsStore.sendReadReceipts)}
-            role="switch"
-            aria-checked={prefsStore.sendReadReceipts}
-            aria-label="Toggle read receipts"
-          >
-            <div class="toggle-thumb"></div>
-          </button>
-        </div>
-
-        <div class="toggle-divider"></div>
-
-        <!-- Show Online -->
-        <div class="toggle-row toggle-row-last">
-          <div class="toggle-info">
-            <div class="toggle-icon" style="background: color-mix(in srgb, var(--color-primary) 12%, transparent);">
-              <Wifi size={15} style="color: var(--color-primary);" />
-            </div>
-            <div>
-              <p class="toggle-title">Show Online</p>
-              <p class="toggle-desc">Let others see when you're active</p>
-            </div>
-          </div>
-          <button
-            class="toggle-track"
-            class:toggle-on={prefsStore.showOnline}
-            onclick={() => {
-              prefsStore.setShowOnline(!prefsStore.showOnline);
-              if (!prefsStore.showOnline) presenceManager?.goOffline();
-              else if (authStore.user) presenceManager?.goOnline();
-            }}
-            role="switch"
-            aria-checked={prefsStore.showOnline}
-            aria-label="Toggle online status"
-          >
-            <div class="toggle-thumb"></div>
-          </button>
-        </div>
-
-      </div>
-    </section>
-
-    <!-- ════════════════════════════════
          ADVANCED (collapsible)
          ════════════════════════════════ -->
-    <section class="settings-section" style="--delay: 120ms;">
+    <section class="settings-section" style="--delay: 80ms;">
       <button
         class="advanced-toggle"
         onclick={() => showAdvanced = !showAdvanced}
@@ -1078,6 +984,39 @@
     font-size: 13px;
     color: var(--text-tertiary);
     line-height: 1.3;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: color 150ms ease;
+    min-height: 20px;
+  }
+  .username:hover { color: var(--text-secondary); }
+
+  .username-edit-icon {
+    opacity: 0.5;
+    transition: opacity 150ms ease;
+  }
+  .username:hover .username-edit-icon { opacity: 1; }
+
+  .username-edit-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+
+  .username-input {
+    background: var(--input-bg);
+    border: 1.5px solid var(--color-primary);
+    border-radius: 8px;
+    padding: 2px 6px;
+    font-size: 13px;
+    color: var(--text-primary);
+    outline: none;
+    width: 120px;
+    font-family: inherit;
   }
 
   .name-display-row {
@@ -1416,10 +1355,6 @@
     align-items: center;
     justify-content: space-between;
     padding: 10px 0;
-  }
-
-  .toggle-row-last {
-    padding-bottom: 0;
   }
 
   .toggle-divider {
