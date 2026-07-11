@@ -1,8 +1,44 @@
 
-  VITE v6.4.3  ready in 2259 ms
+  VITE v6.4.3  ready in 1434 ms
 
   ➜  Local:   http://localhost:3000/
-  ➜  Network: http://21.0.20.60:3000/
+  ➜  Network: http://21.0.22.83:3000/
 Using secrets defined in .env
-//21.0.20.60:3000/
-Using secrets defined in .env
+11:28:15 AM [vite-plugin-svelte] src/lib/components/chat/SettingsView.svelte:373:18 Avoid using autofocus
+https://svelte.dev/e/a11y_autofocus
+11:28:15 AM [vite-plugin-svelte] src/lib/components/chat/SettingsView.svelte:857:2 Elements with the 'dialog' interactive role must have a tabindex value
+https://svelte.dev/e/a11y_interactive_supports_focus
+11:28:15 AM [vite-plugin-svelte] src/lib/components/chat/SettingsView.svelte:857:2 Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events
+11:28:15 AM [vite-plugin-svelte] src/lib/components/chat/SettingsView.svelte:864:4 Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events
+11:28:15 AM [vite-plugin-svelte] src/lib/components/ui/BottomNavBar.svelte:100:2 Unused CSS selector ".nav-pill-icon"
+https://svelte.dev/e/css_unused_selector
+11:28:15 AM [vite-plugin-svelte] src/lib/components/ui/BottomNavBar.svelte:111:2 Unused CSS selector ".nav-pill-active .nav-pill-icon"
+https://svelte.dev/e/css_unused_selector
+11:28:15 AM [vite-plugin-svelte] src/lib/components/chat/ChatTile.svelte:138:2 Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events
+11:28:15 AM [vite-plugin-svelte] src/lib/components/chat/ChatTile.svelte:139:4 Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events
+11:28:15 AM [vite-plugin-svelte] src/lib/components/chat/ChatTile.svelte:250:2 Unused CSS selector ".tile-preview-icon"
+https://svelte.dev/e/css_unused_selector
+11:28:15 AM [vite-plugin-svelte] src/lib/components/chat/MessageBubble.svelte:297:8 Non-interactive element `<img>` should not be assigned mouse or keyboard event listeners
+https://svelte.dev/e/a11y_no_noninteractive_element_interactions
+11:28:15 AM [vite-plugin-svelte] src/lib/components/chat/MessageBubble.svelte:358:4 Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events
+11:28:15 AM [vite-plugin-svelte] src/lib/components/chat/MessageBubble.svelte:358:4 `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions
+11:28:15 AM [vite-plugin-svelte] src/lib/components/chat/ReplyPreview.svelte:100:2 Unused CSS selector ".reply-type-icon"
+https://svelte.dev/e/css_unused_selector
+11:28:15 AM [vite-plugin-svelte] src/lib/components/chat/WallpaperPicker.svelte:99:0 Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events
+11:28:15 AM [vite-plugin-svelte] src/lib/components/chat/WallpaperPicker.svelte:368:2 Unused CSS selector ".wp-tile-photo .wp-tile-preview"
+https://svelte.dev/e/css_unused_selector
+11:28:15 AM [vite-plugin-svelte] src/lib/components/pickers/GIFPicker.svelte:131:8 Buttons and links should either contain text or have an `aria-label`, `aria-labelledby` or `title` attribute
+https://svelte.dev/e/a11y_consider_explicit_label
+[login] start
+[login] username="z", pwdLen=8
+[login] step 1: fetching user_auth/z
+[getAccessToken] requesting new token for firebase-adminsdk-fbsvc@chat1306-c3c86.iam.gserviceaccount.com
+[getAccessToken] OK, expires in 3599s
+[login] step 1: user "z" not found

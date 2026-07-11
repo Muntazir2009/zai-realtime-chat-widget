@@ -582,3 +582,28 @@ Stage Summary:
 - Every interactive element has smooth, spring-like animations
 - 0 svelte-check errors, 18 pre-existing CSS warnings only
 - All changes pushed to GitHub (commit 32534cb3)
+
+---
+Task ID: 24
+Agent: Main Agent
+Task: Fix upload forever bug — uploads hang indefinitely
+
+Work Log:
+- Investigated upload flow: InputBar/SettingsView/WallpaperPicker → uploadFile() (client) → XHR POST /api/upload/file
+- Discovered /api/upload/file endpoint did NOT EXIST — client was posting to a non-existent route
+- Added uploadToR2() function to src/lib/server/r2.ts for server-side R2 upload using AWS SDK PutObjectCommand
+- Created src/routes/api/upload/file/+server.ts with POST handler that:
+  - Accepts FormData with file + folder
+  - Validates file presence and 20MB size limit
+  - Converts body to Uint8Array (fixes TS error with ArrayBuffer not being assignable to S3 Body type)
+  - Uploads to R2 via uploadToR2()
+  - Returns { publicUrl, key }
+- Fixed TypeScript error: AWS SDK doesn't accept ArrayBuffer directly, added conversion to Uint8Array
+- Verified with curl: POST with real PNG → 200 OK, file accessible at returned R2 URL
+- svelte-check: 0 errors, 18 warnings (all pre-existing)
+
+Stage Summary:
+- Root cause: Missing /api/upload/file server endpoint caused XHR to hang forever (404/no response)
+- Fix: Created the endpoint + R2 direct upload function
+- All upload paths fixed: image messages, voice messages, avatar upload, wallpaper upload
+- Files changed: src/lib/server/r2.ts (added uploadToR2), src/routes/api/upload/file/+server.ts (new)

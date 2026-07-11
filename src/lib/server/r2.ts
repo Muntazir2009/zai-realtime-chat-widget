@@ -38,6 +38,47 @@ function getS3Client(env: EnvVars): S3Client {
   return _s3;
 }
 
+export interface DirectUploadResult {
+  publicUrl: string;
+  key: string;
+}
+
+/**
+ * Upload file bytes directly to R2 (server-side proxy upload).
+ */
+export async function uploadToR2(
+  env: EnvVars,
+  body: ArrayBuffer | Uint8Array | Blob,
+  filename: string,
+  contentType: string,
+  folder: string = 'media',
+): Promise<DirectUploadResult> {
+  const client = getS3Client(env);
+  const bucket = env.R2_BUCKET_NAME || 'chat-media';
+  const publicBase = env.PUBLIC_R2_PUBLIC_URL || '';
+
+  const key = `${folder}/${Date.now()}-${filename}`;
+
+  // Ensure body is Uint8Array (AWS SDK doesn't accept ArrayBuffer directly)
+  const bytes = body instanceof ArrayBuffer
+    ? new Uint8Array(body)
+    : body instanceof Uint8Array
+      ? body
+      : new Uint8Array(await (body as Blob).arrayBuffer());
+
+  const command = new PutObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    ContentType: contentType,
+    Body: bytes,
+  });
+
+  await client.send(command);
+  const publicUrl = `${publicBase}/${key}`;
+
+  return { publicUrl, key };
+}
+
 /**
  * Generate a presigned PUT URL for a client-side direct upload to R2.
  */
