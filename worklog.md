@@ -607,3 +607,22 @@ Stage Summary:
 - Fix: Created the endpoint + R2 direct upload function
 - All upload paths fixed: image messages, voice messages, avatar upload, wallpaper upload
 - Files changed: src/lib/server/r2.ts (added uploadToR2), src/routes/api/upload/file/+server.ts (new)
+
+---
+Task ID: 25
+Agent: Main Agent
+Task: Multiple UI/UX improvements — swipe animation, easter eggs, reactions, stickers, settings cleanup, username edit
+
+Work Log:
+- Swipe-to-reply: Added spring transition (500ms cubic-bezier), scale bounce on trigger, primary-colored flash ring around bubble, haptic vibration, "Reply" text label in indicator pill, earlier fade-in (threshold*0.6)
+- Easter eggs for both users: Added `metadata` param to chatStore.sendMessage(), sender stores `{egg: 'heart'|'kiss'}` in msg.md, Conversation watches incoming messages from other users for md.egg and triggers EasterEggFx with 200ms delay
+- Reaction tap: Changed handleReactionTap to always call onReaction (toggle) instead of only removing when already reacted
+- More reactions: Expanded picker from 8→16 emojis (❤️🔥😂😍👍😮😢🙏💀🥺🎉✨😤💯🫶🤝), quick bar from 6→8 (❤️🔥😂😍👍😢💀🥺)
+- Big stickers: Emoji-only font-size bumped 40px→64px, max char count 8→12 to support compound emojis
+- Removed Chats section from SettingsView (notification sound, enter-to-send, typing indicators, read receipts, show online), cleaned 7 unused imports (Volume2, VolumeX, Bell, BellOff, Vibrate, Monitor, MessageSquare), removed toggle-row-last CSS
+- Username editing: Tap @username to edit inline, input filters to [a-z0-9_], profile API handles atomic rename (validates uniqueness, copies RTDB record, removes old key), authStore.user.username updated client-side
+
+Stage Summary:
+- 6 files changed, 194 insertions, 183 deletions
+- svelte-check: 0 errors
+- Pushed as adc011fb
