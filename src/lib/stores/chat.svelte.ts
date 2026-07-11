@@ -30,6 +30,9 @@ class ChatStore {
   presence: Map<string, PresenceState> = $state(new Map());
   typingUsers: Map<string, Set<string>> = $state(new Map());
 
+  // ---- Read receipts: track other user's lastReadMessageId per chat ----
+  otherUserReadIds: Map<string, string> = $state(new Map()); // chatId → lrid
+
   // ---- User dictionary (PRD §IV.1: strip redundant user data from messages) ----
   userDict: Map<string, User> = $state(new Map());
 
@@ -44,6 +47,7 @@ class ChatStore {
   private presenceStaleTimer: ReturnType<typeof setInterval> | null = null;
   private typingUnsubs: Map<string, () => void> = new Map();
   private typingSafetyTimeouts: Map<string, Map<string, ReturnType<typeof setTimeout>>> = new Map();
+  private otherReadUnsub: (() => void) | null = null;
 
   // ---- Self profile listener ----
   private selfProfileUnsub: (() => void) | null = null;
@@ -275,6 +279,10 @@ class ChatStore {
       if (this.activeChatId) {
         this.attachSingleReactionListener(this.activeChatId, msg.id);
       }
+      // Auto-mark as read when a new message arrives (user has chat open)
+      if (this.activeChatId && msg.sid !== authStore.user?.id) {
+        this.markAsRead(this.activeChatId);
+      }
     });
 
     // Listen for message changes (edits, pin state sync)
@@ -299,7 +307,8 @@ class ChatStore {
     this.markAsRead(chatId);
     await this.attachPresenceListeners(chatId);
     this.startPresenceStaleCheck();
-    this.attachTypingListener(chatId);
+    await this.attachTypingListener(chatId);
+    await this.attachOtherUserReadListener(chatId);
     this.attachPinnedListener(chatId);
     this.attachReactionListeners(chatId);
     const user = authStore.user;
@@ -321,6 +330,7 @@ class ChatStore {
     }
     this.detachPresenceListeners();
     this.detachTypingListener();
+    this.detachOtherUserReadListener();
     this.detachPinnedListener();
     this.detachStarredListener();
     this.detachReactionListeners();
@@ -705,6 +715,47 @@ class ChatStore {
   }
 
   // ============================================================
+  // Read Receipts — listen to OTHER user's user_chats entry
+  // ============================================================
+
+  /** Listen to the other participant's user_chats/{otherUid}/{chatId} for their lrid */
+  private async attachOtherUserReadListener(chatId: string): Promise<void> {
+    this.detachOtherUserReadListener();
+    const meta = this.chats.get(chatId);
+    if (!meta || !authStore.user) return;
+    const myId = authStore.user.id;
+    const otherUid = meta.participantIds.find(id => id !== myId);
+    if (!otherUid) return;
+
+    try {
+      const r = await rtdb.ref(RTDB_PATHS.USER_CHAT_ENTRY(otherUid, chatId));
+      this.otherReadUnsub = await rtdb.onValue(r, (snap) => {
+        const newMap = new Map(this.otherUserReadIds);
+        if (snap.exists()) {
+          const data = snap.val() as UserChat | null;
+          if (data?.lrid) {
+            newMap.set(chatId, data.lrid);
+          } else {
+            newMap.delete(chatId);
+          }
+        } else {
+          newMap.delete(chatId);
+        }
+        this.otherUserReadIds = newMap;
+      });
+    } catch (err) {
+      console.warn('[ChatStore] Failed to attach other user read listener:', err);
+    }
+  }
+
+  private detachOtherUserReadListener(): void {
+    if (this.otherReadUnsub) {
+      this.otherReadUnsub();
+      this.otherReadUnsub = null;
+    }
+  }
+
+  // ============================================================
   // Network lifecycle (PRD §III)
   // ============================================================
 
@@ -714,7 +765,7 @@ class ChatStore {
 
   async reattachListeners(): Promise<void> {
     if (this.activeChatId) {
-      this.attachTypingListener(this.activeChatId);
+      await this.attachTypingListener(this.activeChatId);
     }
   }
 

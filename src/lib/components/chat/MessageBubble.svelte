@@ -145,9 +145,24 @@
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   });
 
-  const deliveryStatus = $derived<'sending' | 'sent' | 'delivered' | 'read'>(
-    msg.rk && !msg.ts ? 'sending' : 'sent'
-  );
+  // Compute delivery/read status for own messages
+  const deliveryStatus = $derived.by(() => {
+    if (msg.rk && !msg.ts) return 'sending' as const;
+    if (!isOwn) return 'sent' as const;
+
+    const chatId = chatStore.activeChatId;
+    if (!chatId) return 'sent' as const;
+
+    const lrid = chatStore.otherUserReadIds.get(chatId);
+    if (!lrid) return 'delivered' as const;
+
+    const msgs = chatStore.messages;
+    const lridIdx = msgs.findIndex(m => m.id === lrid);
+    const thisIdx = msgs.findIndex(m => m.id === msg.id);
+    if (lridIdx !== -1 && thisIdx !== -1 && thisIdx <= lridIdx) return 'read' as const;
+
+    return 'delivered' as const;
+  });
 
   function formatDuration(secs: number): string {
     const m = Math.floor(secs / 60);
