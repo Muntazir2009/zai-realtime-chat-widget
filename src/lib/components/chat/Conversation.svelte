@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ChevronLeft, MoreVertical, Clock, Image as ImageIcon, Pin, X, Trash2, BellOff, Bell } from 'lucide-svelte';
+  import { ChevronLeft, MoreVertical, Clock, Image as ImageIcon, Pin, X, Trash2, BellOff, Bell, Wallpaper } from 'lucide-svelte';
   import MessageBubble from './MessageBubble.svelte';
   import Lightbox from '$lib/components/media/Lightbox.svelte';
   import MediaGallery from '$lib/components/media/MediaGallery.svelte';
@@ -16,10 +16,12 @@
   import type { Message } from '$lib/types/index';
   import { format, isToday, isYesterday, startOfDay } from 'date-fns';
   import EasterEggFx from './EasterEggFx.svelte';
+  import WallpaperPicker from './WallpaperPicker.svelte';
 
   let messagesContainer: HTMLDivElement | undefined = $state();
   let showMenu = $state(false);
   let showMediaGallery = $state(false);
+  let showWallpaperPicker = $state(false);
   let isMuted = $state(false);
   let contextMenuMsg: Message | null = $state(null);
   let showContextMenu = $state(false);
@@ -38,6 +40,19 @@
   let otherUser = $derived.by(() => {
     const meta = chatStore.activeChatId ? chatStore.chats.get(chatStore.activeChatId) : undefined;
     return chatStore.getOtherParticipant(meta);
+  });
+
+  let chatWallpaper = $derived.by(() => {
+    if (!chatStore.activeChatId) return null as string | null;
+    const meta = chatStore.chats.get(chatStore.activeChatId);
+    return meta?.wallpaper ?? null;
+  });
+
+  let wallpaperStyle = $derived.by(() => {
+    const wp = chatWallpaper;
+    if (!wp) return '';
+    if (wp.startsWith('http')) return `background-image: url('${wp}'); background-size: cover; background-position: center;`;
+    return `background: ${wp};`;
   });
 
   let otherPresence = $derived.by(() => {
@@ -271,8 +286,8 @@
   // Media items for gallery (image + GIF messages)
   let mediaItems = $derived.by(() => {
     return chatStore.messages
-      .filter(m => (m.t === 'image' || m.t === 'gif') && m.mu)
-      .map(m => ({ url: m.mu!, type: m.t === 'gif' ? 'image' as const : 'image' as const, id: m.id }));
+      .filter(m => (m.t === 'image' || m.c === 'GIF') && m.mu)
+      .map(m => ({ url: m.mu!, type: 'image' as const, id: m.id }));
   });
 
   function handleClearChat() {
@@ -280,7 +295,7 @@
     showMenu = false;
     // Use a simple confirm dialog via chatStore
     if (confirm('Clear all messages in this chat? This cannot be undone.')) {
-      chatStore.clearChat?.(chatStore.activeChatId);
+      chatStore.messages = [];
     }
   }
 </script>
@@ -358,6 +373,8 @@
   <div
     bind:this={messagesContainer}
     class="msg-scroll"
+    class:msg-scroll-wp={!!chatWallpaper}
+    style={wallpaperStyle}
     onscroll={updateScrollState}
   >
     {#if chatStore.messages.length === 0}
@@ -513,6 +530,13 @@
           <span class="menu-badge">{mediaItems.length}</span>
         {/if}
       </button>
+      <button class="menu-item" onclick={() => { showMenu = false; showWallpaperPicker = true; }}>
+        <Wallpaper size={17} style="color: {chatWallpaper ? 'var(--color-primary)' : 'var(--text-secondary)'};" />
+        <span>Wallpaper</span>
+        {#if chatWallpaper}
+          <span class="menu-badge" style="background: var(--color-primary); color: var(--color-primary-foreground); font-size: 10px; padding: 1px 6px;">Set</span>
+        {/if}
+      </button>
       <button class="menu-item" onclick={() => { showMenu = false; isMuted = !isMuted; }}>
         {#if isMuted}
           <BellOff size={17} style="color: var(--text-secondary);" />
@@ -533,6 +557,15 @@
 <!-- Media Gallery -->
 {#if showMediaGallery}
   <MediaGallery items={mediaItems} onClose={() => (showMediaGallery = false)} />
+{/if}
+
+<!-- Wallpaper Picker -->
+{#if showWallpaperPicker && chatStore.activeChatId}
+  <WallpaperPicker
+    chatId={chatStore.activeChatId}
+    currentWallpaper={chatWallpaper}
+    onClose={() => (showWallpaperPicker = false)}
+  />
 {/if}
 
 <style>
@@ -740,8 +773,14 @@
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
     scroll-behavior: smooth;
+    background-attachment: fixed;
+    transition: background 0.4s ease;
   }
   .msg-scroll::-webkit-scrollbar { width: 0px; }
+
+  .msg-scroll-wp {
+    background-color: transparent !important;
+  }
 
   .scroll-bottom-pad {
     height: 16px;

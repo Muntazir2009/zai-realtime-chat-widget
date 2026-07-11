@@ -987,6 +987,29 @@ class ChatStore {
   }
 
   // ============================================================
+  // Chat Wallpaper (per-chat, synced via RTDB)
+  // ============================================================
+
+  /** Set or clear the wallpaper for a chat. Both participants see it. */
+  async setChatWallpaper(chatId: string, wallpaper: string | null): Promise<void> {
+    try {
+      const meta = this.chats.get(chatId);
+      if (!meta) return;
+      const metaRef = await rtdb.ref(RTDB_PATHS.CHAT_META(chatId));
+      await rtdb.update(metaRef, { wallpaper } as any);
+      // Optimistic local update
+      const newMap = new Map(this.chats);
+      newMap.set(chatId, { ...meta, wallpaper });
+      this.chats = newMap;
+      toastStore.success(wallpaper ? 'Wallpaper set' : 'Wallpaper removed');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[setChatWallpaper]', msg);
+      toastStore.error(`Failed to set wallpaper`);
+    }
+  }
+
+  // ============================================================
   // Reactions
   // ============================================================
 

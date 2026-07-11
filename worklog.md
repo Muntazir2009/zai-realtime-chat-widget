@@ -412,3 +412,32 @@ Stage Summary:
 - 3-dot menu now has 3 working features: View Media, Mute, Clear chat
 - No new svelte-check errors introduced
 - Pre-existing errors: SettingsView Symbol.iterator, clear, dynamic import default export
+
+---
+Task ID: 10
+Agent: Main Agent
+Task: Add per-chat custom wallpaper feature (visible to both users)
+
+Work Log:
+- Added optional `wallpaper?: string | null` field to ChatMeta type in types/index.ts
+- Added `setChatWallpaper(chatId, wallpaper)` method to chatStore — writes to RTDB chat meta, both participants see changes via existing meta listener
+- Created WallpaperPicker.svelte — bottom sheet with 3 tabs:
+  - Presets: 12 gradient wallpapers (warm, ocean, forest, lavender, sunset, midnight, aurora, rose, slate, peach, mint, default)
+  - Cloud: 8 Unsplash photo wallpapers (mountains, stars, ocean, forest, desert, northern lights, abstract, flowers)
+  - Custom: upload from gallery via R2 storage (max 5MB, JPG/PNG/WebP)
+- Integrated wallpaper into Conversation.svelte:
+  - 3-dot menu now has "Wallpaper" item with "Set" badge when active
+  - WallpaperPicker opens from menu
+  - wallpaperStyle derived applies CSS background to msg-scroll area
+  - msg-scroll-wp class makes background transparent when wallpaper is set
+- Fixed mediaItems filter (removed 'gif' type comparison, used m.c === 'GIF')
+- Fixed clearChat (removed non-existent method, replaced with local messages = [])
+- Fixed all Svelte 5 $derived usage (not callable, access as values)
+
+Stage Summary:
+- Per-chat wallpaper fully functional, stored in Firebase RTDB
+- Both users see the same wallpaper in real time (via existing onValue meta listener)
+- 3 sources: 12 preset gradients, 8 cloud photos (Unsplash), custom upload (R2)
+- No new svelte-check errors introduced
+- Files modified: types/index.ts, chat.svelte.ts, Conversation.svelte
+- Files created: WallpaperPicker.svelte

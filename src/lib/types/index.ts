@@ -25,6 +25,8 @@ export interface ChatMeta {
   lm: string | null;   // last message content snippet
   ts: number;           // last message timestamp
   updatedAt: number;
+  /** Per-chat wallpaper: preset ID, URL, or null for default */
+  wallpaper?: string | null;
 }
 
 /* ---------- Message ---------- */
