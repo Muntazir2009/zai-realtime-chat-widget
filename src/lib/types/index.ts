@@ -12,6 +12,10 @@ export interface User {
   status: 'online' | 'offline' | 'away';
   lastSeen: number; // epoch ms
   createdAt: number;
+  // NEW profile customization fields:
+  bio?: string | null;          // Short bio/about me, max 120 chars
+  accentColor?: string | null;  // Hex color for chat bubbles (e.g. "#6366f1")
+  emojiStatus?: string | null;  // Mood emoji (e.g. "🔥", "😊")
 }
 
 /* ---------- Chat ---------- */

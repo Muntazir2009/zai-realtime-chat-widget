@@ -4,12 +4,15 @@
     Flame, Eye, ALargeSmall, MessageSquare, Minus, Circle, Square,
     Wifi, WifiOff, Activity, Clock, Trash2, Bell, BellOff,
     Volume2, VolumeX, Vibrate, Lock, ChevronRight,
-    Sparkles, LayoutGrid, Type, Monitor
+    Sparkles, LayoutGrid, Type, Monitor,
+    Camera, Pencil, X, Smile
   } from 'lucide-svelte';
   import { themeManager } from '$lib/managers/ThemeManager.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
   import { chatStore } from '$lib/stores/chat.svelte';
   import { uiStore } from '$lib/stores/ui.svelte';
+  import { toastStore } from '$lib/stores/toast.svelte';
+  import { uploadFile } from '$lib/firebase/storage';
   import { presenceManager } from '$lib/managers/PresenceManager.svelte';
   import { networkManager } from '$lib/managers/NetworkManager.svelte';
   import { prefsStore, type FontSize, type BubbleStyle } from '$lib/stores/prefs.svelte';
@@ -198,6 +201,154 @@
       }
     );
   }
+
+  // ── Profile Editing ──
+  let isEditingName = $state(false);
+  let editNameValue = $state('');
+  let editBioValue = $state('');
+  let isUploadingAvatar = $state(false);
+  let isSavingProfile = $state(false);
+
+  // Accent color presets
+  const accentColors = [
+    { label: 'Default', value: null },
+    { label: 'Rose', value: '#f43f5e' },
+    { label: 'Orange', value: '#f97316' },
+    { label: 'Amber', value: '#f59e0b' },
+    { label: 'Emerald', value: '#10b981' },
+    { label: 'Teal', value: '#14b8a6' },
+    { label: 'Cyan', value: '#06b6d4' },
+    { label: 'Indigo', value: '#6366f1' },
+    { label: 'Purple', value: '#a855f7' },
+    { label: 'Pink', value: '#ec4899' },
+  ];
+
+  // Emoji status presets
+  const emojiStatuses = [
+    { emoji: null, label: 'None' },
+    { emoji: '😊', label: 'Happy' },
+    { emoji: '🔥', label: 'On Fire' },
+    { emoji: '💡', label: 'Idea' },
+    { emoji: '🎮', label: 'Gaming' },
+    { emoji: '🎵', label: 'Music' },
+    { emoji: '📚', label: 'Reading' },
+    { emoji: '💪', label: 'Working Out' },
+    { emoji: '☕', label: 'Coffee' },
+    { emoji: '🌙', label: 'Night Owl' },
+    { emoji: '✈️', label: 'Traveling' },
+    { emoji: '🎉', label: 'Celebrating' },
+    { emoji: '💻', label: 'Coding' },
+    { emoji: '🎨', label: 'Creative' },
+  ];
+
+  // Get current user profile from userDict (real-time synced)
+  let userProfile = $derived.by(() => {
+    if (!authStore.user) return null;
+    return chatStore.userDict.get(authStore.user.id) ?? authStore.user;
+  });
+
+  // Derived values
+  let currentBio = $derived(userProfile?.bio || '');
+  let currentAccentColor = $derived(userProfile?.accentColor || null);
+  let currentEmojiStatus = $derived(userProfile?.emojiStatus || null);
+  let currentAvatarUrl = $derived(userProfile?.avatarUrl || null);
+
+  // Profile update helper
+  async function updateProfile(fields: Record<string, unknown>) {
+    if (!authStore.user?.username) return;
+    isSavingProfile = true;
+    try {
+      const res = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: authStore.user.username, ...fields }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error((data as { error?: string }).error || 'Update failed');
+      }
+      // Also update local authStore.user
+      if (fields.displayName && authStore.user) {
+        authStore.user = { ...authStore.user, displayName: fields.displayName as string };
+      }
+      toastStore.show('Profile updated', 'success');
+    } catch (err) {
+      toastStore.show(err instanceof Error ? err.message : 'Failed to update', 'error');
+    } finally {
+      isSavingProfile = false;
+    }
+  }
+
+  // Avatar upload handler
+  async function handleAvatarUpload() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/jpeg,image/png,image/webp';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      isUploadingAvatar = true;
+      try {
+        const result = await uploadFile(file, 'avatars', `avatar-${Date.now()}.webp`);
+        await updateProfile({ avatarUrl: result.publicUrl });
+      } catch (err) {
+        toastStore.show('Failed to upload avatar', 'error');
+      } finally {
+        isUploadingAvatar = false;
+      }
+    };
+    input.click();
+  }
+
+  // Name editing handlers
+  function startEditName() {
+    editNameValue = authStore.user?.displayName || '';
+    isEditingName = true;
+  }
+
+  function cancelEditName() {
+    isEditingName = false;
+  }
+
+  async function saveName() {
+    if (!editNameValue.trim()) return;
+    await updateProfile({ displayName: editNameValue.trim() });
+    isEditingName = false;
+  }
+
+  // Bio auto-save with debounce
+  let bioTimer: ReturnType<typeof setTimeout> | null = null;
+
+  async function handleBioBlur() {
+    if (bioTimer) clearTimeout(bioTimer);
+    const newBio = editBioValue.trim().slice(0, 120);
+    if (newBio !== currentBio) {
+      await updateProfile({ bio: newBio });
+    }
+  }
+
+  function handleBioInput(e: Event) {
+    const target = e.target as HTMLTextAreaElement;
+    editBioValue = target.value;
+    // Auto-resize textarea
+    target.style.height = 'auto';
+    target.style.height = target.scrollHeight + 'px';
+    // Debounced save
+    if (bioTimer) clearTimeout(bioTimer);
+    bioTimer = setTimeout(async () => {
+      const newBio = editBioValue.trim().slice(0, 120);
+      if (newBio !== currentBio) {
+        await updateProfile({ bio: newBio });
+      }
+    }, 800);
+  }
+
+  // Sync editBioValue when currentBio changes externally
+  $effect(() => {
+    if (!document.activeElement?.classList.contains('bio-textarea')) {
+      editBioValue = currentBio;
+    }
+  });
 </script>
 
 <div class="flex flex-col h-full" style="background-color: var(--bg-page);">
@@ -217,27 +368,165 @@
   <!-- Settings Content -->
   <div class="flex-1 overflow-y-auto custom-scrollbar px-4 py-4 pb-24 space-y-5">
 
-    <!-- Profile Card -->
+    <!-- Profile Editor -->
     <section class="glass rounded-[var(--radius-lg)] p-4 settings-section-enter">
-      <div class="flex items-center gap-3">
-        <div
-          class="w-14 h-14 rounded-2xl flex items-center justify-center font-bold text-white text-xl flex-shrink-0 shadow-md"
-          style="background: linear-gradient(135deg, var(--color-primary), var(--color-accent));"
+      <!-- Avatar Row -->
+      <div class="flex items-start gap-4">
+        <!-- Tappable Avatar -->
+        <button
+          class="profile-avatar-wrap"
+          onclick={handleAvatarUpload}
+          disabled={isUploadingAvatar}
+          aria-label="Upload avatar"
         >
-          {authStore.user?.displayName?.charAt(0).toUpperCase() || '?'}
-        </div>
-        <div class="min-w-0 flex-1">
-          <p class="font-bold text-base truncate" style="color: var(--text-primary);">
-            {authStore.user?.displayName || 'Unknown'}
-          </p>
+          {#if currentAvatarUrl}
+            <img
+              src={currentAvatarUrl}
+              alt="Avatar"
+              class="profile-avatar-img"
+            />
+          {:else}
+            <div
+              class="w-16 h-16 rounded-2xl flex items-center justify-center font-bold text-white text-2xl flex-shrink-0 shadow-md"
+              style="background: linear-gradient(135deg, var(--color-primary), var(--color-accent));"
+            >
+              {authStore.user?.displayName?.charAt(0).toUpperCase() || '?'}
+            </div>
+          {/if}
+          {#if isUploadingAvatar}
+            <div class="profile-avatar-overlay">
+              <div class="profile-spinner"></div>
+            </div>
+          {:else}
+            <div class="profile-avatar-overlay profile-avatar-overlay-hover">
+              <Camera size={18} color="white" />
+            </div>
+          {/if}
+        </button>
+
+        <!-- Name + Username -->
+        <div class="min-w-0 flex-1 pt-0.5">
+          {#if isEditingName}
+            <div class="flex items-center gap-1.5 mb-0.5">
+              <input
+                type="text"
+                class="profile-name-input"
+                value={editNameValue}
+                maxlength={30}
+                oninput={(e) => editNameValue = (e.target as HTMLInputElement).value}
+                onkeydown={(e) => {
+                  if (e.key === 'Enter') saveName();
+                  if (e.key === 'Escape') cancelEditName();
+                }}
+                autofocus
+              />
+              <button class="profile-icon-btn" style="color: var(--color-primary);" onclick={saveName} aria-label="Save name">
+                <Check size={16} />
+              </button>
+              <button class="profile-icon-btn" style="color: var(--text-tertiary);" onclick={cancelEditName} aria-label="Cancel">
+                <X size={16} />
+              </button>
+            </div>
+          {:else}
+            <div class="flex items-center gap-1.5 mb-0.5">
+              <p class="font-bold text-base truncate" style="color: var(--text-primary);">
+                {authStore.user?.displayName || 'Unknown'}
+              </p>
+              <button class="profile-icon-btn" style="color: var(--text-tertiary);" onclick={startEditName} aria-label="Edit name">
+                <Pencil size={13} />
+              </button>
+            </div>
+          {/if}
           <p class="text-sm" style="color: var(--text-tertiary);">
             @{authStore.user?.username || 'unknown'}
           </p>
+          {#if currentEmojiStatus}
+            <span class="inline-block mt-1 text-sm">{currentEmojiStatus}</span>
+          {/if}
         </div>
-        <div class="flex flex-col items-end gap-1">
-          <span class="text-[10px] font-medium px-2 py-0.5 rounded-full" style="background: color-mix(in srgb, var(--color-primary) 12%, transparent); color: var(--color-primary);">
-            Online
-          </span>
+      </div>
+
+      <!-- Bio -->
+      <div class="mt-3">
+        <textarea
+          class="bio-textarea"
+          placeholder="Write a short bio..."
+          maxlength={120}
+          value={editBioValue}
+          oninput={handleBioInput}
+          onblur={handleBioBlur}
+          rows={1}
+        ></textarea>
+        <p class="text-right text-[10px] mt-0.5" style="color: var(--text-tertiary);">
+          {editBioValue.length}/120
+        </p>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════
+         EMOJI STATUS
+         ════════════════════════════════════════════ -->
+    <section class="settings-section-enter" style="animation-delay: 15ms;">
+      <div class="flex items-center gap-2 mb-3 px-1">
+        <Smile size={14} style="color: var(--text-tertiary);" />
+        <p class="text-xs font-semibold uppercase tracking-wider" style="color: var(--text-tertiary);">Emoji Status</p>
+      </div>
+      <div class="glass rounded-[var(--radius-lg)] p-3">
+        <div class="emoji-scroll">
+          {#each emojiStatuses as item (item.emoji ?? '__none__')}
+            {@const isActive = currentEmojiStatus === item.emoji}
+            <button
+              class="emoji-pill"
+              class:emoji-pill-active={isActive}
+              onclick={() => updateProfile({ emojiStatus: item.emoji })}
+              title={item.label}
+              aria-label={item.label}
+              aria-pressed={isActive}
+            >
+              {#if item.emoji}
+                <span class="text-base">{item.emoji}</span>
+              {:else}
+                <X size={12} style="color: var(--text-tertiary);" />
+              {/if}
+            </button>
+          {/each}
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════
+         ACCENT COLOR
+         ════════════════════════════════════════════ -->
+    <section class="settings-section-enter" style="animation-delay: 22ms;">
+      <div class="flex items-center gap-2 mb-3 px-1">
+        <Palette size={14} style="color: var(--text-tertiary);" />
+        <p class="text-xs font-semibold uppercase tracking-wider" style="color: var(--text-tertiary);">Accent Color</p>
+      </div>
+      <div class="glass rounded-[var(--radius-lg)] p-3">
+        <div class="color-scroll">
+          {#each accentColors as c (c.label)}
+            {@const isActive = currentAccentColor === c.value}
+            <button
+              class="color-circle-wrap"
+              onclick={() => updateProfile({ accentColor: c.value })}
+              title={c.label}
+              aria-label={c.label}
+              aria-pressed={isActive}
+            >
+              <div
+                class="color-circle"
+                class:color-circle-active={isActive}
+                style={c.value
+                  ? `background: ${c.value}; ${isActive ? `box-shadow: 0 0 0 2.5px var(--bg-surface), 0 0 0 4.5px ${c.value};` : ''}`
+                  : `background: linear-gradient(135deg, var(--color-primary), var(--color-accent)); ${isActive ? 'box-shadow: 0 0 0 2.5px var(--bg-surface), 0 0 0 4.5px var(--color-primary);' : ''}`}
+              >
+                {#if isActive}
+                  <Check size={16} color={c.value || 'white'} style="position: relative; z-index: 1;" />
+                {/if}
+              </div>
+              <span class="color-label">{c.label}</span>
+            </button>
+          {/each}
         </div>
       </div>
     </section>
@@ -894,5 +1183,218 @@
   .dialog-confirm-destructive {
     background: var(--color-danger);
     box-shadow: 0 2px 8px color-mix(in srgb, var(--color-danger) 30%, transparent);
+  }
+
+  /* ════════════════════════════════════════════
+     PROFILE EDITOR
+     ════════════════════════════════════════════ */
+  .profile-avatar-wrap {
+    position: relative;
+    width: 64px;
+    height: 64px;
+    border-radius: 16px;
+    overflow: hidden;
+    flex-shrink: 0;
+    cursor: pointer;
+    border: none;
+    background: none;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 200ms ease;
+  }
+
+  .profile-avatar-wrap:active {
+    transform: scale(0.97);
+  }
+
+  .profile-avatar-img {
+    width: 64px;
+    height: 64px;
+    border-radius: 16px;
+    object-fit: cover;
+    display: block;
+  }
+
+  .profile-avatar-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.45);
+    border-radius: 16px;
+    opacity: 0;
+    transition: opacity 200ms ease;
+    pointer-events: none;
+  }
+
+  .profile-avatar-overlay-hover:hover {
+    opacity: 1;
+  }
+
+  /* Always show overlay during upload */
+  .profile-avatar-wrap:disabled .profile-avatar-overlay {
+    opacity: 1;
+    pointer-events: none;
+  }
+
+  .profile-spinner {
+    width: 22px;
+    height: 22px;
+    border: 2.5px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: avatarSpin 700ms linear infinite;
+  }
+
+  @keyframes avatarSpin {
+    to { transform: rotate(360deg); }
+  }
+
+  .profile-icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    border: none;
+    background: var(--input-bg);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 200ms ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .profile-icon-btn:active {
+    transform: scale(0.9);
+  }
+
+  .profile-name-input {
+    flex: 1;
+    min-width: 0;
+    background: var(--input-bg);
+    border: 1.5px solid var(--color-primary);
+    border-radius: 8px;
+    padding: 4px 8px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    outline: none;
+    font-family: inherit;
+  }
+
+  .bio-textarea {
+    width: 100%;
+    min-height: 36px;
+    background: var(--input-bg);
+    border: 1.5px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 8px 10px;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--text-primary);
+    outline: none;
+    resize: none;
+    font-family: inherit;
+    transition: border-color 200ms ease;
+    box-sizing: border-box;
+  }
+
+  .bio-textarea:focus {
+    border-color: var(--color-primary);
+  }
+
+  .bio-textarea::placeholder {
+    color: var(--text-tertiary);
+  }
+
+  /* Emoji scroll row */
+  .emoji-scroll {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .emoji-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  .emoji-pill {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    border: 1.5px solid var(--border-subtle);
+    background: var(--bg-surface);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 200ms ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .emoji-pill:active {
+    transform: scale(0.9);
+  }
+
+  .emoji-pill-active {
+    background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+    border-color: var(--color-primary);
+  }
+
+  /* Color scroll row */
+  .color-scroll {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .color-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  .color-circle-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    cursor: pointer;
+    border: none;
+    background: none;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 200ms ease;
+  }
+
+  .color-circle-wrap:active {
+    transform: scale(0.9);
+  }
+
+  .color-circle {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 200ms ease;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  }
+
+  .color-label {
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
   }
 </style>

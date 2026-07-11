@@ -320,6 +320,8 @@
             username={otherUser?.username ?? '?'}
             size="sm"
             avatarUrl={otherUser?.avatarUrl}
+            accentColor={otherUser?.accentColor}
+            emojiStatus={otherUser?.emojiStatus}
           />
           {#if otherPresence?.status === 'online'}
             <span class="online-dot"></span>
@@ -327,6 +329,9 @@
         </div>
         <div class="header-info">
           <p class="header-name">{otherUser?.displayName ?? 'Unknown'}</p>
+          {#if otherUser?.bio}
+            <p class="header-bio" style="font-size: 11px; color: var(--text-tertiary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; margin: 1px 0 0;">{otherUser.bio}</p>
+          {/if}
           {#if typingNames.length > 0}
             <div class="header-sub header-typing">
               <span class="typing-text">typing</span>
@@ -419,6 +424,8 @@
             onReaction={handleReaction}
             onSwipeReply={handleSwipeReply}
             openReactionPicker={reactionPickerTargetId === msg.id}
+            senderAccentColor={msg.sid === authStore.user?.id ? null : (chatStore.userDict.get(msg.sid)?.accentColor ?? null)}
+            senderEmojiStatus={msg.sid === authStore.user?.id ? null : (chatStore.userDict.get(msg.sid)?.emojiStatus ?? null)}
           />
         {/each}
       {/each}

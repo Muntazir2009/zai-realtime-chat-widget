@@ -99,6 +99,8 @@
       username={otherUser?.username || '?'}
       size="md"
       avatarUrl={otherUser?.avatarUrl}
+      accentColor={otherUser?.accentColor}
+      emojiStatus={otherUser?.emojiStatus}
     />
     {#if isOnline}
       <span class="tile-online-dot"></span>
@@ -117,6 +119,9 @@
         {/if}
         {lastMessagePreview()}
       </p>
+      {#if otherUser?.bio}
+        <p class="tile-bio">{otherUser.bio}</p>
+      {/if}
       {#if userChat.uc > 0}
         <span class="tile-badge">
           {userChat.uc > 99 ? '99+' : userChat.uc}
@@ -243,6 +248,17 @@
   .tile-preview-icon {
     flex-shrink: 0;
     color: var(--text-tertiary);
+  }
+
+  .tile-bio {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin: 2px 0 0;
+    font-style: italic;
+    opacity: 0.8;
   }
 
   .tile-badge {

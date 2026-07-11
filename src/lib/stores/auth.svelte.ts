@@ -208,6 +208,11 @@ class AuthStore {
       localStorage.setItem(STORAGE_TOKEN_KEY, authResp.token);
       localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(user));
     }
+
+    // Start listening for real-time self-profile changes (lazy import to avoid circular deps)
+    import('$lib/stores/chat.svelte.js').then(({ chatStore }) => {
+      chatStore.listenToSelfProfile(user.id);
+    }).catch(() => {});
   }
 
   private clearStorage(): void {

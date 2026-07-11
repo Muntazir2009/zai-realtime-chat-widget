@@ -21,13 +21,15 @@
     onReaction?: (msg: Message, emoji: string) => void;
     onSwipeReply?: (msg: Message) => void;
     openReactionPicker?: boolean;
+    senderAccentColor?: string | null;
+    senderEmojiStatus?: string | null;
   }
 
   let {
     msg, isOwn, showAvatar = false, senderName, isGrouped = false,
     isPinned = false, isStarred = false, replyPreviewMsg,
     onReply, onLongPress, onImageTap, onReaction, onSwipeReply,
-    openReactionPicker = false,
+    openReactionPicker = false, senderAccentColor = null, senderEmojiStatus = null,
   }: Props = $props();
 
   // --- Swipe physics state ---
@@ -226,7 +228,7 @@
   <!-- Avatar — aligned with bubble top -->
   {#if !isOwn && showAvatar}
     <div class="msg-avatar-col">
-      <Avatar username={senderName || '?'} size="sm" />
+      <Avatar username={senderName || '?'} size="sm" accentColor={senderAccentColor} emojiStatus={senderEmojiStatus} />
     </div>
   {:else if !isOwn && !showAvatar}
     <!-- Spacer to keep alignment with avatar rows -->
@@ -238,6 +240,7 @@
     <!-- Bubble -->
     <div
       class="msg-bubble {isOwn ? 'bbl-sent' : 'bbl-recv'} {isGrouped ? 'bbl-grouped' : ''} {isPinned ? 'bbl-pinned' : ''} {isEmojiOnly ? 'bbl-emoji' : ''}"
+      style={!isOwn && senderAccentColor ? `border-left: 3px solid ${senderAccentColor};` : ''}
       onclick={handleDoubleTap}
       role="button"
       tabindex="0"

@@ -45,6 +45,9 @@ class ChatStore {
   private typingUnsubs: Map<string, () => void> = new Map();
   private typingSafetyTimeouts: Map<string, Map<string, ReturnType<typeof setTimeout>>> = new Map();
 
+  // ---- Self profile listener ----
+  private selfProfileUnsub: (() => void) | null = null;
+
   // ---- Pinned messages ----
   pinnedMessages: Map<string, Message> = $state(new Map());
   private pinnedUnsub: (() => void) | null = null;
@@ -732,9 +735,42 @@ class ChatStore {
     this.chatMetaUnsubs.clear();
   }
 
+  // ---- Self profile listener ----
+
+  /** Listen to own profile changes for real-time sync */
+  async listenToSelfProfile(uid: string): Promise<void> {
+    this.detachSelfProfileListener();
+    
+    // Find username from user_index
+    const indexSnap = await rtdb.get(await rtdb.ref(`user_index/${uid}`));
+    if (!indexSnap.exists()) return;
+    const username = indexSnap.val() as string;
+    
+    const profileRef = await rtdb.ref(`users/${username}`);
+    this.selfProfileUnsub = await rtdb.onValue(profileRef, (snap) => {
+      if (snap.exists()) {
+        const user = snap.val() as User;
+        if (user && user.displayName) {
+          const m = new Map(this.userDict);
+          m.set(uid, user);
+          this.userDict = m;
+          cacheUserProfiles([user]);
+        }
+      }
+    });
+  }
+
+  private detachSelfProfileListener(): void {
+    if (this.selfProfileUnsub) {
+      this.selfProfileUnsub();
+      this.selfProfileUnsub = null;
+    }
+  }
+
   detachAllListeners(): void {
     this.detachInboxListener();
     this.closeChat();
+    this.detachSelfProfileListener();
   }
 
   // ============================================================
