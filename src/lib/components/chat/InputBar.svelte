@@ -347,29 +347,28 @@
     }
   }
 
-  /* Input row */
+  /* Input row — floating, blends with wallpaper */
   .input-row {
     display: flex;
     align-items: flex-end;
     gap: 2px;
     padding: 4px 4px 4px 2px;
     border-radius: 28px;
-    background: var(--bg-surface);
-    border: 1.5px solid var(--border-subtle);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.03);
-    transition: border-color 250ms ease, box-shadow 250ms ease, background-color 250ms ease, transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    background: color-mix(in srgb, var(--bg-surface) 60%, transparent);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: none;
+    box-shadow: none;
+    transition: background-color 250ms ease, transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
   .input-row-focused {
-    border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 12%, transparent),
-                0 1px 4px rgba(0, 0, 0, 0.04),
-                0 4px 16px rgba(0, 0, 0, 0.03);
-    background: var(--bg-surface);
+    background: color-mix(in srgb, var(--bg-surface) 75%, transparent);
+    box-shadow: none;
   }
 
   .input-row-active {
-    border-color: color-mix(in srgb, var(--color-primary) 25%, var(--border-subtle));
+    background: color-mix(in srgb, var(--bg-surface) 68%, transparent);
   }
 
   .input-row-picker-open {

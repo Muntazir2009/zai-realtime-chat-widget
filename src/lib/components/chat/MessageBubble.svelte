@@ -6,6 +6,23 @@
   import { Reply as ReplyIcon } from 'lucide-svelte';
   import { chatStore } from '$lib/stores/chat.svelte';
 
+  // Svelte action: non-passive touchmove so preventDefault works for swipe
+  function swipeTouchAction(node: HTMLDivElement) {
+    function onTouchStart(e: TouchEvent) { handleTouchStart(e); }
+    function onTouchMove(e: TouchEvent) { handleTouchMove(e); }
+    function onTouchEnd(e: TouchEvent) { handleTouchEnd(); }
+    node.addEventListener('touchstart', onTouchStart, { passive: true });
+    node.addEventListener('touchmove', onTouchMove, { passive: false });
+    node.addEventListener('touchend', onTouchEnd, { passive: true });
+    return {
+      destroy() {
+        node.removeEventListener('touchstart', onTouchStart);
+        node.removeEventListener('touchmove', onTouchMove);
+        node.removeEventListener('touchend', onTouchEnd);
+      }
+    };
+  }
+
   interface Props {
     msg: Message;
     isOwn: boolean;
@@ -255,9 +272,7 @@
   role="article"
   aria-label="Message from {isOwn ? 'you' : senderName || 'unknown'}"
   oncontextmenu={handleContextMenu}
-  ontouchstart={handleTouchStart}
-  ontouchmove={handleTouchMove}
-  ontouchend={handleTouchEnd}
+  use:swipeTouchAction
 >
   <!-- Swipe Reply Indicator -->
   {#if showSwipeIndicator}

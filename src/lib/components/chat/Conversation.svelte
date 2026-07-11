@@ -469,9 +469,6 @@
 
   <!-- Floating Input Area -->
   <div class="floating-input-area">
-    <!-- Gradient fade for readability -->
-    <div class="input-fade"></div>
-
     <!-- Typing indicator -->
     {#if typingNames.length > 0}
       <div class="typing-area">
@@ -826,7 +823,6 @@
     padding: 4px 0 0;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
-    scroll-behavior: smooth;
     background-attachment: fixed;
     transition: background 0.4s ease;
   }
@@ -989,17 +985,11 @@
     right: 0;
     z-index: 30;
     pointer-events: none;
-    padding-bottom: 64px; /* space for bottom nav bar */
+    padding-bottom: 74px; /* space for bottom nav bar + 10px offset */
   }
 
   .floating-input-area > * {
     pointer-events: auto;
-  }
-
-  .input-fade {
-    height: 32px;
-    background: linear-gradient(to bottom, transparent, var(--bg-page));
-    pointer-events: none;
   }
 
   /* === TYPING AREA === */
