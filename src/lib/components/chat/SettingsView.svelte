@@ -99,10 +99,7 @@
     { emoji: '🎨', label: 'Creative' },
   ];
 
-  // ── Notification preferences (localStorage) ──
-  let notifSound = $state(true);
-  let notifVibrate = $state(true);
-  let notifPreview = $state(true);
+  // ── Enter-to-send preference (localStorage) ──
   let enterSend = $state(true);
 
   function loadNotifPrefs() {
@@ -110,18 +107,13 @@
       const raw = localStorage.getItem('chat-notif-prefs');
       if (raw) {
         const p = JSON.parse(raw);
-        notifSound = p.sound ?? true;
-        notifVibrate = p.vibrate ?? true;
-        notifPreview = p.preview ?? true;
         enterSend = p.enterSend ?? true;
       }
     } catch {}
   }
 
   function saveNotifPrefs() {
-    localStorage.setItem('chat-notif-prefs', JSON.stringify({
-      sound: notifSound, vibrate: notifVibrate, preview: notifPreview, enterSend,
-    }));
+    localStorage.setItem('chat-notif-prefs', JSON.stringify({ enterSend }));
   }
 
   $effect(() => { saveNotifPrefs(); });

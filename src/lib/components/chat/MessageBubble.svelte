@@ -39,16 +39,31 @@
   let lastTouchX = 0;
   let lastTouchTime = 0;
   let velocityX = 0;
-  let isSwiping = $state(false);
-  let swipeTriggered = $state(false);
-  let displayOffset = $state(0);
+  let isSwiping = false; // plain var, not reactive
+  let swipeTriggered = false; // plain var
   let longPressTimer: ReturnType<typeof setTimeout> | null = null;
   let lastTapTime = 0;
   let touchStartTime = 0;
+  let rowEl: HTMLDivElement | undefined;
+  let swipeFlash = $state(false);
+  let showSwipeIndicator = $state(false); // only toggles at threshold, not every frame
 
   const SWIPE_THRESHOLD = 70;
   const ELASTIC_FACTOR = 0.25;
   const VELOCITY_THRESHOLD = 0.3;
+
+  function applySwipeTransform(offset: number, scale: number = 1) {
+    if (!rowEl) return;
+    rowEl.style.transition = 'none';
+    rowEl.style.transform = `translateX(${offset}px) scale(${scale})`;
+  }
+
+  function resetSwipeTransform() {
+    if (!rowEl) return;
+    rowEl.style.transition = 'transform 500ms cubic-bezier(0.34, 1.56, 0.64, 1), scale 350ms cubic-bezier(0.34, 1.56, 0.64, 1)';
+    rowEl.style.transform = 'translateX(0) scale(1)';
+    setTimeout(() => { if (rowEl) rowEl.style.transition = ''; }, 550);
+  }
 
   function handleTouchStart(e: TouchEvent) {
     touchStartX = e.touches[0].clientX;
@@ -59,6 +74,7 @@
     velocityX = 0;
     isSwiping = false;
     swipeTriggered = false;
+    showSwipeIndicator = false;
 
     longPressTimer = setTimeout(() => {
       if (!isSwiping) {
@@ -81,6 +97,7 @@
     const dy = Math.abs(cy - touchStartY);
 
     if (rawDx > 10 && dy < rawDx * 0.6) {
+      e.preventDefault();
       isSwiping = true;
       if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
 
@@ -92,15 +109,23 @@
         effectiveDx = rawDx * (0.6 + 0.4 * (rawDx / SWIPE_THRESHOLD));
       }
       currentOffset = effectiveDx * (isOwn ? -1 : 1);
-      displayOffset = currentOffset;
+
+      // Direct DOM manipulation for 60fps
+      const scale = swipeFlash ? 0.97 : 1;
+      applySwipeTransform(currentOffset, scale);
+
+      // Only update reactive state when crossing threshold (minimal re-renders)
+      if (rawDx >= SWIPE_THRESHOLD * 0.4 && !showSwipeIndicator) {
+        showSwipeIndicator = true;
+      } else if (rawDx < SWIPE_THRESHOLD * 0.3 && showSwipeIndicator) {
+        showSwipeIndicator = false;
+      }
 
       if (rawDx >= SWIPE_THRESHOLD && !swipeTriggered) swipeTriggered = true;
     } else if (dy > 10 && rawDx < 15) {
       if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
     }
   }
-
-  let swipeFlash = $state(false);
 
   function handleTouchEnd() {
     if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
@@ -111,14 +136,20 @@
     if (shouldTrigger) {
       navigator.vibrate?.(30);
       swipeFlash = true;
+      applySwipeTransform(currentOffset, 0.97);
       onSwipeReply?.(msg);
-      setTimeout(() => { swipeFlash = false; }, 300);
+      setTimeout(() => {
+        swipeFlash = false;
+        resetSwipeTransform();
+        showSwipeIndicator = false;
+      }, 300);
+    } else {
+      resetSwipeTransform();
+      showSwipeIndicator = false;
     }
     isSwiping = false;
     swipeTriggered = false;
-    requestAnimationFrame(() => {
-      displayOffset = 0;
-    });
+    currentOffset = 0;
   }
 
   function handleContextMenu(e: MouseEvent) {
@@ -183,9 +214,6 @@
     return msg.c.replace(urlMatch()!, '').trim();
   });
 
-  const replyIndicatorOpacity = $derived(Math.min(Math.abs(displayOffset) / (SWIPE_THRESHOLD * 0.6), 1));
-  const swipeProgress = $derived(Math.min(Math.abs(displayOffset) / SWIPE_THRESHOLD, 1));
-
   // Detect if message is emoji-only for larger display
   const isEmojiOnly = $derived(
     msg.t === 'text' && /^[\p{Emoji_Presentation}\p{Extended_Pictographic}\u{FE0F}\u{200D}\u{20E3}\u{200C}]+$/u.test(msg.c.trim()) && msg.c.trim().length <= 12
@@ -223,7 +251,7 @@
   class:msg-own={isOwn}
   class:msg-other={!isOwn}
   class:msg-grouped={isGrouped}
-  style="transform: translateX({displayOffset}px) scale({swipeFlash ? 0.97 : 1}); transition: {isSwiping ? 'transform 80ms linear, scale 80ms linear' : 'transform 500ms cubic-bezier(0.34, 1.56, 0.64, 1), scale 350ms cubic-bezier(0.34, 1.56, 0.64, 1)'};"
+  bind:this={rowEl}
   role="article"
   aria-label="Message from {isOwn ? 'you' : senderName || 'unknown'}"
   oncontextmenu={handleContextMenu}
@@ -232,12 +260,10 @@
   ontouchend={handleTouchEnd}
 >
   <!-- Swipe Reply Indicator -->
-  {#if Math.abs(displayOffset) > 8}
+  {#if showSwipeIndicator}
     <div
       class="swipe-indicator"
       style="
-        opacity: {replyIndicatorOpacity};
-        transform: translateY(-50%) scale({0.7 + replyIndicatorOpacity * 0.3});
         {isOwn ? 'right: 8px;' : 'left: 8px;'}
       "
     >
@@ -490,7 +516,7 @@
   .bbl-sent {
     background: linear-gradient(135deg, color-mix(in srgb, var(--color-sent) 100%, white), color-mix(in srgb, var(--color-sent) 92%, white));
     color: var(--color-sent-foreground, #ffffff);
-    border-radius: 20px 20px 6px 20px;
+    border-radius: var(--bubble-radius, 20px) var(--bubble-radius, 20px) 6px var(--bubble-radius, 20px);
     box-shadow:
       0 1px 2px rgba(0, 0, 0, 0.06),
       0 4px 12px -2px color-mix(in srgb, var(--color-sent) 20%, transparent),
@@ -498,7 +524,7 @@
   }
 
   .bbl-sent.bbl-grouped {
-    border-radius: 14px 14px 4px 14px;
+    border-radius: calc(var(--bubble-radius, 20px) - 6px) calc(var(--bubble-radius, 20px) - 6px) 4px calc(var(--bubble-radius, 20px) - 6px);
     box-shadow:
       0 1px 2px rgba(0, 0, 0, 0.04),
       0 2px 6px -1px color-mix(in srgb, var(--color-sent) 14%, transparent);
@@ -521,7 +547,7 @@
   .bbl-recv {
     background: var(--color-received);
     color: var(--color-received-foreground, #1a1a2e);
-    border-radius: 20px 20px 20px 6px;
+    border-radius: var(--bubble-radius, 20px) var(--bubble-radius, 20px) var(--bubble-radius, 20px) 6px;
     box-shadow:
       0 1px 2px rgba(0, 0, 0, 0.03),
       0 2px 8px -1px rgba(0, 0, 0, 0.05);
@@ -529,7 +555,7 @@
   }
 
   .bbl-recv.bbl-grouped {
-    border-radius: 14px 14px 14px 4px;
+    border-radius: calc(var(--bubble-radius, 20px) - 6px) calc(var(--bubble-radius, 20px) - 6px) calc(var(--bubble-radius, 20px) - 6px) 4px;
     box-shadow:
       0 1px 2px rgba(0, 0, 0, 0.02),
       0 1px 4px -1px rgba(0, 0, 0, 0.04);
@@ -575,7 +601,7 @@
 
   /* === CONTENT === */
   .bbl-text {
-    font-size: 15px;
+    font-size: var(--msg-font-size, 15px);
     line-height: 1.42;
     word-break: break-word;
     white-space: pre-wrap;
@@ -739,15 +765,16 @@
   }
 
   .bbl-time {
-    font-size: 10px;
-    opacity: 0.45;
+    font-size: 11px;
+    opacity: 0.5;
     line-height: 1;
     font-variant-numeric: tabular-nums;
-    letter-spacing: 0.01em;
-    margin-right: 1px;
+    letter-spacing: 0.02em;
+    margin-right: 2px;
+    font-weight: 500;
   }
   .bbl-sent .bbl-time {
-    color: rgba(255, 255, 255, 0.65);
+    color: rgba(255, 255, 255, 0.7);
   }
 
   .bbl-edited {
@@ -763,7 +790,7 @@
   .swipe-indicator {
     position: absolute;
     top: 50%;
-    transform: translateY(-50%) scale(0.7);
+    transform: translateY(-50%) scale(1);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -776,13 +803,16 @@
     font-weight: 600;
     pointer-events: none;
     z-index: 5;
-    transition: opacity 150ms cubic-bezier(0.4, 0, 0.2, 1),
-                transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1),
-                box-shadow 200ms ease;
     box-shadow: 0 4px 20px color-mix(in srgb, var(--color-primary) 40%, transparent),
                 0 0 0 0 color-mix(in srgb, var(--color-primary) 0%, transparent);
     will-change: opacity, transform, box-shadow;
     letter-spacing: 0.01em;
+    animation: swipeIndicatorIn 200ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+
+  @keyframes swipeIndicatorIn {
+    from { opacity: 0; transform: translateY(-50%) scale(0.7); }
+    to { opacity: 1; transform: translateY(-50%) scale(1); }
   }
 
   .swipe-label {

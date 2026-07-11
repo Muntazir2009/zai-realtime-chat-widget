@@ -23,7 +23,7 @@
   }
 </script>
 
-<div class="reply-bar" style="background: var(--glass-bg); backdrop-filter: blur(16px) saturate(180%); -webkit-backdrop-filter: blur(16px) saturate(180%);">
+<div class="reply-bar">
   <div class="reply-accent"></div>
   <div class="reply-content">
     <div class="reply-line"></div>
@@ -49,9 +49,9 @@
     align-items: center;
     gap: 0;
     padding: 8px 4px 8px 0;
-    border-top: 0.5px solid var(--border-subtle);
     flex-shrink: 0;
     animation: replyIn 200ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    background: transparent;
   }
 
   .reply-accent {

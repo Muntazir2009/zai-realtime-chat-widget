@@ -326,7 +326,7 @@
 
 <svelte:window ontouchstart={handleGlobalTouchStart} onkeydown={handleKeyDown} />
 
-<div class="conv-shell" style="background: var(--bg-page);">
+<div class="conv-shell" style="background: var(--bg-page); {wallpaperStyle}">
   {#if triggerEasterEgg > 0}
     <EasterEggFx trigger={triggerEasterEgg} />
   {/if}
@@ -402,8 +402,6 @@
   <div
     bind:this={messagesContainer}
     class="msg-scroll"
-    class:msg-scroll-wp={!!chatWallpaper}
-    style={wallpaperStyle}
     onscroll={updateScrollState}
   >
     {#if chatStore.messages.length === 0}
@@ -469,60 +467,66 @@
     </button>
   {/if}
 
-  <!-- Typing indicator -->
-  {#if typingNames.length > 0}
-    <div class="typing-area">
-      <TypingIndicator usernames={typingNames} />
-    </div>
-  {/if}
+  <!-- Floating Input Area -->
+  <div class="floating-input-area">
+    <!-- Gradient fade for readability -->
+    <div class="input-fade"></div>
 
-  <!-- Edit Bar -->
-  {#if editingMsg}
-    <div class="edit-bar">
-      <div class="edit-header">
-        <div class="edit-badge">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
-          <span>Edit message</span>
+    <!-- Typing indicator -->
+    {#if typingNames.length > 0}
+      <div class="typing-area">
+        <TypingIndicator usernames={typingNames} />
+      </div>
+    {/if}
+
+    <!-- Edit Bar -->
+    {#if editingMsg}
+      <div class="edit-bar">
+        <div class="edit-header">
+          <div class="edit-badge">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+            <span>Edit message</span>
+          </div>
+        </div>
+        <div class="edit-body">
+          <textarea
+            bind:value={editText}
+            rows={2}
+            class="edit-input"
+            style="color: var(--text-primary); -webkit-user-select: text; user-select: text;"
+            placeholder="Edit your message..."
+          ></textarea>
+          <div class="edit-actions">
+            <button class="edit-cancel" onclick={cancelEdit}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+              <span>Cancel</span>
+            </button>
+            <button class="edit-save" onclick={saveEdit}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+              <span>Save</span>
+            </button>
+          </div>
         </div>
       </div>
-      <div class="edit-body">
-        <textarea
-          bind:value={editText}
-          rows={2}
-          class="edit-input"
-          style="color: var(--text-primary); -webkit-user-select: text; user-select: text;"
-          placeholder="Edit your message..."
-        ></textarea>
-        <div class="edit-actions">
-          <button class="edit-cancel" onclick={cancelEdit}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-            <span>Cancel</span>
-          </button>
-          <button class="edit-save" onclick={saveEdit}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-            <span>Save</span>
-          </button>
-        </div>
-      </div>
-    </div>
-  {/if}
+    {/if}
 
-  <!-- Reply Preview -->
-  {#if uiStore.replyTo}
-    <ReplyPreview
-      message={uiStore.replyTo}
-      senderName={chatStore.userDict.get(uiStore.replyTo.sid)?.displayName ?? 'Unknown'}
-      onCancel={() => uiStore.setReplyTo(null)}
+    <!-- Reply Preview -->
+    {#if uiStore.replyTo}
+      <ReplyPreview
+        message={uiStore.replyTo}
+        senderName={chatStore.userDict.get(uiStore.replyTo.sid)?.displayName ?? 'Unknown'}
+        onCancel={() => uiStore.setReplyTo(null)}
+      />
+    {/if}
+
+    <!-- Input Bar -->
+    <InputBar
+      onSend={handleSend}
+      onImageSend={handleImageSend}
+      onStickerSelect={handleStickerSelect}
+      onGifSelect={handleGifSelect}
     />
-  {/if}
-
-  <!-- Input Bar -->
-  <InputBar
-    onSend={handleSend}
-    onImageSend={handleImageSend}
-    onStickerSelect={handleStickerSelect}
-    onGifSelect={handleGifSelect}
-  />
+  </div>
 
   <!-- Lightbox -->
   {#if showLightbox && lightboxImages.length > 0}
@@ -608,6 +612,7 @@
     position: relative;
     -webkit-user-select: none;
     user-select: none;
+    overflow: hidden;
   }
 
   /* === PREMIUM HEADER === */
@@ -832,7 +837,7 @@
   }
 
   .scroll-bottom-pad {
-    height: 16px;
+    height: 200px;
     flex-shrink: 0;
   }
 
@@ -860,7 +865,7 @@
   /* === SCROLL FAB === */
   .scroll-fab {
     position: absolute;
-    bottom: 160px;
+    bottom: 200px;
     right: 12px;
     border-radius: 50%;
     border: none;
@@ -974,6 +979,27 @@
     line-height: 1.5;
     color: var(--text-tertiary);
     margin: 0;
+  }
+
+  /* === FLOATING INPUT AREA === */
+  .floating-input-area {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 30;
+    pointer-events: none;
+    padding-bottom: 64px; /* space for bottom nav bar */
+  }
+
+  .floating-input-area > * {
+    pointer-events: auto;
+  }
+
+  .input-fade {
+    height: 32px;
+    background: linear-gradient(to bottom, transparent, var(--bg-page));
+    pointer-events: none;
   }
 
   /* === TYPING AREA === */
