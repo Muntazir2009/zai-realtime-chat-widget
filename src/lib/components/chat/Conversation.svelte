@@ -984,12 +984,8 @@
     left: 0;
     right: 0;
     z-index: 30;
-    pointer-events: none;
-    padding-bottom: 74px; /* space for bottom nav bar + 10px offset */
-  }
-
-  .floating-input-area > * {
-    pointer-events: auto;
+    padding-bottom: 64px; /* space for bottom nav bar */
+    padding-top: 10px; /* push input bar down 10px */
   }
 
   /* === TYPING AREA === */
