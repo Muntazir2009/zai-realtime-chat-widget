@@ -1,6 +1,8 @@
 
-  VITE v6.4.3  ready in 1655 ms
+  VITE v6.4.3  ready in 2259 ms
 
-  ➜  Local:   http://127.0.0.1:3000/
+  ➜  Local:   http://localhost:3000/
+  ➜  Network: http://21.0.20.60:3000/
 Using secrets defined in .env
+//21.0.20.60:3000/
 Using secrets defined in .env

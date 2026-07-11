@@ -219,7 +219,7 @@
   {#if Math.abs(displayOffset) > 12}
     <div
       class="swipe-indicator"
-      style="opacity: {replyIndicatorOpacity}; {isOwn ? 'right: 0px;' : 'left: 0px;'}"
+      style="opacity: {replyIndicatorOpacity}; transform: translateY(-50%) scale({0.85 + replyIndicatorOpacity * 0.15}); {isOwn ? 'right: 0px;' : 'left: 0px;'}"
     >
       <ReplyIcon size={15} />
     </div>
@@ -366,6 +366,11 @@
     will-change: transform;
     padding: 8px 0;
     align-items: flex-end;
+    animation: msgBubbleIn 250ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .msg-row.msg-grouped {
+    animation: msgBubbleInGrouped 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 
   .msg-own {
@@ -421,7 +426,7 @@
     position: relative;
     overflow: hidden;
     transition: transform 120ms cubic-bezier(0.34, 1.56, 0.64, 1),
-                box-shadow 200ms ease,
+                box-shadow 250ms ease,
                 opacity 150ms ease;
     max-width: 100%;
     min-width: fit-content;
@@ -432,21 +437,50 @@
     transform: scale(0.985);
   }
 
+  /* Subtle hover lift on desktop */
+  @media (hover: hover) {
+    .msg-bubble {
+      cursor: default;
+    }
+    .bbl-sent:hover {
+      box-shadow:
+        0 2px 4px rgba(0, 0, 0, 0.06),
+        0 6px 16px -2px color-mix(in srgb, var(--color-sent) 25%, transparent),
+        0 2px 4px rgba(0, 0, 0, 0.03);
+    }
+    .bbl-recv:hover {
+      box-shadow:
+        0 2px 4px rgba(0, 0, 0, 0.04),
+        0 4px 12px -1px rgba(0, 0, 0, 0.07);
+    }
+    .bbl-sent.bbl-grouped:hover {
+      box-shadow:
+        0 2px 4px rgba(0, 0, 0, 0.04),
+        0 4px 10px -1px color-mix(in srgb, var(--color-sent) 18%, transparent);
+    }
+    .bbl-recv.bbl-grouped:hover {
+      box-shadow:
+        0 1px 3px rgba(0, 0, 0, 0.03),
+        0 3px 8px -1px rgba(0, 0, 0, 0.06);
+    }
+  }
+
   /* Sent bubble — clean primary with subtle gradient shimmer */
   .bbl-sent {
-    background: var(--color-sent);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--color-sent) 100%, white), color-mix(in srgb, var(--color-sent) 92%, white));
     color: var(--color-sent-foreground, #ffffff);
     border-radius: 20px 20px 6px 20px;
     box-shadow:
-      0 1px 3px rgba(0, 0, 0, 0.08),
-      0 4px 16px color-mix(in srgb, var(--color-sent) 25%, transparent);
+      0 1px 2px rgba(0, 0, 0, 0.06),
+      0 4px 12px -2px color-mix(in srgb, var(--color-sent) 20%, transparent),
+      0 1px 3px rgba(0, 0, 0, 0.04);
   }
 
   .bbl-sent.bbl-grouped {
     border-radius: 14px 14px 4px 14px;
     box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.06),
-      0 2px 8px color-mix(in srgb, var(--color-sent) 18%, transparent);
+      0 1px 2px rgba(0, 0, 0, 0.04),
+      0 2px 6px -1px color-mix(in srgb, var(--color-sent) 14%, transparent);
   }
 
   /* Subtle light shimmer on sent bubble */
@@ -468,16 +502,16 @@
     color: var(--color-received-foreground, #1a1a2e);
     border-radius: 20px 20px 20px 6px;
     box-shadow:
-      0 1px 3px rgba(0, 0, 0, 0.04),
-      0 2px 8px rgba(0, 0, 0, 0.06);
+      0 1px 2px rgba(0, 0, 0, 0.03),
+      0 2px 8px -1px rgba(0, 0, 0, 0.05);
     border: 1px solid var(--border-subtle);
   }
 
   .bbl-recv.bbl-grouped {
     border-radius: 14px 14px 14px 4px;
     box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.04),
-      0 2px 8px rgba(0, 0, 0, 0.06);
+      0 1px 2px rgba(0, 0, 0, 0.02),
+      0 1px 4px -1px rgba(0, 0, 0, 0.04);
   }
 
   /* Subtle top highlight on received bubble */
@@ -537,11 +571,12 @@
 
   /* === IMAGE === */
   .bbl-img-wrap {
-    border-radius: 10px;
+    border-radius: 12px;
     overflow: hidden;
     position: relative;
     z-index: 1;
     line-height: 0;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
   }
 
   .bbl-img {
@@ -550,9 +585,14 @@
     max-height: 300px;
     min-height: 100px;
     object-fit: cover;
-    border-radius: 10px;
+    border-radius: 12px;
     cursor: pointer;
-    transition: transform 200ms ease, filter 200ms ease;
+    transition: transform 200ms ease, filter 200ms ease, box-shadow 200ms ease;
+  }
+  @media (hover: hover) {
+    .bbl-img:hover {
+      box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    }
   }
   .bbl-img:active {
     transform: scale(0.97);
@@ -590,11 +630,12 @@
   }
 
   .rply-accent {
-    width: 2.5px;
-    border-radius: 2px;
+    width: 3px;
+    border-radius: 3px;
     background: var(--color-primary);
     flex-shrink: 0;
     align-self: stretch;
+    box-shadow: 0 0 6px color-mix(in srgb, var(--color-primary) 30%, transparent);
   }
 
   .rply-body { min-width: 0; flex: 1; }
@@ -678,12 +719,14 @@
 
   .bbl-time {
     font-size: 10px;
-    opacity: 0.5;
+    opacity: 0.45;
     line-height: 1;
     font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+    margin-right: 1px;
   }
   .bbl-sent .bbl-time {
-    color: rgba(255, 255, 255, 0.75);
+    color: rgba(255, 255, 255, 0.65);
   }
 
   .bbl-edited {
@@ -699,7 +742,7 @@
   .swipe-indicator {
     position: absolute;
     top: 50%;
-    transform: translateY(-50%);
+    transform: translateY(-50%) scale(0.85);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -712,8 +755,9 @@
     font-weight: 500;
     pointer-events: none;
     z-index: 5;
-    transition: opacity 120ms ease;
-    box-shadow: 0 4px 16px color-mix(in srgb, var(--color-primary) 35%, transparent);
+    transition: opacity 180ms cubic-bezier(0.4, 0, 0.2, 1), transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    box-shadow: 0 4px 16px color-mix(in srgb, var(--color-primary) 35%, transparent), 0 1px 3px rgba(0,0,0,0.08);
+    will-change: opacity, transform;
   }
 
   /* === REACTIONS BAR === */
@@ -834,5 +878,15 @@
   @keyframes rxnPickerIn {
     from { opacity: 0; transform: translateY(4px) scale(0.95); }
     to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  @keyframes msgBubbleIn {
+    from { opacity: 0.6; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes msgBubbleInGrouped {
+    from { opacity: 0.7; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 </style>

@@ -250,11 +250,11 @@ select {
   40% { transform: scale(1); opacity: 1; }
 }
 
-.animate-fade-in      { animation: fadeIn 200ms cubic-bezier(0.4, 0, 0.2, 1) both; }
-.animate-slide-down    { animation: slideDown 250ms cubic-bezier(0.4, 0, 0.2, 1) both; }
-.animate-slide-up      { animation: slideUp 250ms cubic-bezier(0.4, 0, 0.2, 1) both; }
-.animate-exit-slide-up { animation: exitSlideUp 200ms cubic-bezier(0.4, 0, 0.2, 1) both; }
-.animate-scale-in      { animation: scaleIn 200ms cubic-bezier(0.4, 0, 0.2, 1) both; }
+.animate-fade-in      { animation: fadeIn 200ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-slide-down    { animation: slideDown 250ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-slide-up      { animation: slideUp 250ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-exit-slide-up { animation: exitSlideUp 200ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-scale-in      { animation: scaleIn 200ms cubic-bezier(0.22, 1, 0.36, 1) both; }
 
 /* ============================================================
    Scrollbar
@@ -320,7 +320,7 @@ select {
 }
 
 .animate-view-enter {
-  animation: viewFadeSlideIn 280ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: viewFadeSlideIn 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* Tab content crossfade */
@@ -330,7 +330,7 @@ select {
 }
 
 .animate-tab-enter {
-  animation: tabCrossfade 220ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation: tabCrossfade 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* Nav pill sliding indicator */
@@ -362,7 +362,7 @@ select {
 }
 
 .animate-message-in {
-  animation: messageIn 200ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: messageIn 250ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* Shimmer loading effect */
@@ -400,7 +400,7 @@ select {
 }
 
 .animate-slide-in-right {
-  animation: slideInRight 250ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation: slideInRight 250ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* Press effect */
@@ -1551,7 +1551,7 @@ input, textarea, [contenteditable="true"] {
   }
 }
 .animate-list-fade-in {
-  animation: listFadeIn 180ms ease-out both;
+  animation: listFadeIn 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
   will-change: transform, opacity;
 }
 
@@ -1570,7 +1570,7 @@ input, textarea, [contenteditable="true"] {
 /* Staggered children animation helper — apply to parent with
    individual children using nth-child delays or inline style */
 .animate-stagger > * {
-  animation: listFadeIn 250ms ease-out both;
+  animation: listFadeIn 250ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .animate-stagger > *:nth-child(1)  { animation-delay: 0ms; }
 .animate-stagger > *:nth-child(2)  { animation-delay: 30ms; }

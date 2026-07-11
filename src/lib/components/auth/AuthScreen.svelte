@@ -238,7 +238,6 @@
           type="submit"
           class="submit-btn"
           class:loading={isLoading}
-          style="background: var(--color-primary); color: var(--color-primary-foreground);"
           disabled={isLoading}
         >
           {#if isLoading}
@@ -358,7 +357,6 @@
           type="submit"
           class="submit-btn"
           class:loading={isLoading}
-          style="background: var(--color-primary); color: var(--color-primary-foreground);"
           disabled={isLoading}
         >
           {#if isLoading}
@@ -386,6 +384,19 @@
     position: relative;
     overflow: hidden;
     background-color: var(--bg-page);
+  }
+
+  /* Subtle dot pattern overlay */
+  .auth-page::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(color-mix(in srgb, var(--text-tertiary) 6%, transparent) 1px, transparent 1px);
+    background-size: 24px 24px;
+    pointer-events: none;
+    z-index: 0;
+    mask-image: radial-gradient(ellipse 60% 50% at 50% 50%, black 20%, transparent 100%);
+    -webkit-mask-image: radial-gradient(ellipse 60% 50% at 50% 50%, black 20%, transparent 100%);
   }
 
   /* --- Animated gradient orbs --- */
@@ -443,13 +454,18 @@
     margin-bottom: 12px;
     background: linear-gradient(135deg, #059669, #10b981, #34d399, #059669);
     background-size: 300% 300%;
-    animation: gradientShift 4s ease-in-out infinite;
-    box-shadow: 0 4px 20px rgba(5, 150, 105, 0.3);
+    animation: gradientShift 4s ease-in-out infinite, logoFloat 5s ease-in-out infinite;
+    box-shadow: 0 6px 24px rgba(5, 150, 105, 0.3), 0 2px 6px rgba(5, 150, 105, 0.15);
   }
 
   @keyframes gradientShift {
     0%, 100% { background-position: 0% 50%; }
     50% { background-position: 100% 50%; }
+  }
+
+  @keyframes logoFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
   }
 
   /* --- Pill Tabs --- */
@@ -489,11 +505,12 @@
   .field-group {
     position: relative;
     border-radius: var(--radius-md);
-    transition: box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1);
+    transition: box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1), transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .field-group:focus-within {
-    box-shadow: 0 0 0 2px var(--color-primary), 0 0 0 4px color-mix(in srgb, var(--color-primary) 15%, transparent);
+    box-shadow: 0 0 0 2px var(--color-primary), 0 0 0 5px color-mix(in srgb, var(--color-primary) 12%, transparent);
+    transform: translateY(-1px);
   }
 
   :global(.field-icon) {
@@ -504,11 +521,12 @@
     color: var(--text-tertiary);
     pointer-events: none;
     z-index: 1;
-    transition: color 200ms cubic-bezier(0.4, 0, 0.2, 1);
+    transition: color 300ms cubic-bezier(0.4, 0, 0.2, 1), transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .field-group:focus-within :global(.field-icon) {
     color: var(--color-primary);
+    transform: translateY(-50%) scale(1.05);
   }
 
   /* --- Password toggle --- */
@@ -661,7 +679,7 @@
   /* --- Submit button --- */
   .submit-btn {
     width: 100%;
-    min-height: 44px;
+    min-height: 48px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -671,19 +689,44 @@
     font-size: 1rem;
     border: none;
     cursor: pointer;
-    transition: opacity 200ms ease, transform 100ms ease;
+    background: linear-gradient(135deg, var(--color-primary), color-mix(in srgb, var(--color-primary) 85%, black));
+    color: var(--color-primary-foreground);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--color-primary) 25%, transparent),
+                0 1px 2px rgba(0,0,0,0.06),
+                inset 0 1px 0 rgba(255,255,255,0.12);
+    transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1),
+                box-shadow 250ms ease,
+                filter 200ms ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .submit-btn::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(255,255,255,0.1) 0%, transparent 50%);
+    pointer-events: none;
+    border-radius: inherit;
   }
 
   .submit-btn:active:not(:disabled) {
-    transform: scale(0.98);
+    transform: scale(0.97) translateY(1px);
+    box-shadow: 0 1px 3px color-mix(in srgb, var(--color-primary) 20%, transparent),
+                0 0px 1px rgba(0,0,0,0.04),
+                inset 0 1px 0 rgba(255,255,255,0.08);
   }
 
   .submit-btn.loading {
     opacity: 0.6;
     cursor: not-allowed;
+    filter: saturate(0.5);
   }
 
   .submit-btn:not(.loading):hover {
-    opacity: 0.9;
+    filter: brightness(1.05);
+    box-shadow: 0 4px 16px color-mix(in srgb, var(--color-primary) 30%, transparent),
+                0 1px 3px rgba(0,0,0,0.06),
+                inset 0 1px 0 rgba(255,255,255,0.15);
   }
 </style>

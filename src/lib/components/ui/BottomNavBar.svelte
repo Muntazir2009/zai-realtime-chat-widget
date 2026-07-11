@@ -82,7 +82,7 @@
     font-size: 13px;
     font-weight: 600;
     letter-spacing: 0.01em;
-    transition: all 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: all 350ms cubic-bezier(0.34, 1.56, 0.64, 1);
     -webkit-tap-highlight-color: transparent;
     position: relative;
     user-select: none;
@@ -98,7 +98,7 @@
   }
 
   .nav-pill-icon {
-    transition: transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: transform 350ms cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
   .nav-pill-active {
@@ -114,11 +114,11 @@
 
   @keyframes navPillBounce {
     0% {
-      transform: scale(0.9);
-      opacity: 0.7;
+      transform: scale(0.88);
+      opacity: 0.6;
     }
     50% {
-      transform: scale(1.05);
+      transform: scale(1.06);
     }
     100% {
       transform: scale(1);

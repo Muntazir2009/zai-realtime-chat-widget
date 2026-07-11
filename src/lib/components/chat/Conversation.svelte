@@ -354,7 +354,7 @@
       </button>
 
       <div class="header-actions">
-        <button class="h-btn h-btn-sm menu-trigger-btn" onclick={() => (showMenu = !showMenu)} aria-label="More options">
+        <button class="h-btn h-btn-sm menu-trigger-btn" class:menu-open={showMenu} onclick={() => (showMenu = !showMenu)} aria-label="More options">
           <MoreVertical size={18} />
         </button>
       </div>
@@ -589,12 +589,13 @@
   /* === PREMIUM HEADER === */
   .header-glass {
     background: var(--glass-bg);
-    backdrop-filter: blur(24px) saturate(200%);
-    -webkit-backdrop-filter: blur(24px) saturate(200%);
-    box-shadow: 0 0.5px 0 var(--border-subtle), 0 4px 24px rgba(0,0,0,0.03), 0 1px 0 color-mix(in srgb, var(--color-primary) 6%, transparent);
+    backdrop-filter: blur(32px) saturate(220%);
+    -webkit-backdrop-filter: blur(32px) saturate(220%);
+    box-shadow: 0 0.5px 0 var(--border-subtle), 0 4px 24px rgba(0,0,0,0.04), 0 1px 0 color-mix(in srgb, var(--color-primary) 8%, transparent);
     z-index: 50;
     position: relative;
     flex-shrink: 0;
+    border-bottom: 0.5px solid color-mix(in srgb, var(--glass-border) 80%, transparent);
   }
 
   .header-inner {
@@ -672,7 +673,7 @@
 
   @keyframes dotPulse {
     0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
-    50% { box-shadow: 0 0 0 4px rgba(34, 197, 94, 0); }
+    50% { box-shadow: 0 0 0 5px rgba(34, 197, 94, 0); }
   }
 
   .header-info { min-width: 0; flex: 1; }
@@ -706,6 +707,12 @@
   .header-typing {
     color: var(--color-primary) !important;
     font-weight: 500;
+    animation: typingFadeIn 300ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+
+  @keyframes typingFadeIn {
+    from { opacity: 0; transform: translateY(3px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 
   .typing-text { font-size: 12px; }
@@ -732,6 +739,17 @@
     30% { transform: translateY(-4px); opacity: 1; }
   }
 
+  /* Menu button rotation */
+  .menu-trigger-btn {
+    transition: transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1), background 150ms ease;
+  }
+  .menu-open {
+    transform: rotate(90deg);
+  }
+  .menu-open:active {
+    transform: rotate(90deg) scale(0.88);
+  }
+
   /* === PINNED BANNER === */
   .pin-banner {
     padding: 4px 10px;
@@ -739,7 +757,7 @@
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
     border-bottom: 0.5px solid var(--border-subtle);
-    animation: slideDown 250ms ease both;
+    animation: pinBannerIn 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
     flex-shrink: 0;
   }
 
@@ -826,8 +844,8 @@
     z-index: 20;
     padding: 0;
     background: var(--glass-bg);
-    backdrop-filter: blur(16px) saturate(180%);
-    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(200%);
+    -webkit-backdrop-filter: blur(20px) saturate(200%);
     border: var(--glass-border);
     box-shadow: 0 4px 20px rgba(0,0,0,0.1), 0 2px 8px color-mix(in srgb, var(--color-primary) 15%, transparent);
     color: var(--color-primary);
@@ -838,14 +856,14 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    animation: fabIn 250ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
-    transition: transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 200ms ease;
+    animation: fabIn 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    transition: transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 200ms ease, opacity 200ms ease;
     -webkit-tap-highlight-color: transparent;
   }
-  .scroll-fab:active { transform: scale(0.9); }
+  .scroll-fab:active { transform: scale(0.88); }
 
   @keyframes fabIn {
-    from { opacity: 0; transform: scale(0.6) translateY(10px); }
+    from { opacity: 0; transform: scale(0.5) translateY(16px); }
     to { opacity: 1; transform: scale(1) translateY(0); }
   }
 
@@ -882,24 +900,26 @@
     justify-content: center;
     height: 100%;
     padding: 32px 24px;
-    animation: fadeIn 400ms ease both;
+    animation: fadeIn 500ms ease both;
   }
 
   .empty-avatar-wrap {
-    width: 72px;
-    height: 72px;
-    border-radius: 20px;
+    width: 80px;
+    height: 80px;
+    border-radius: 24px;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: 16px;
-    background: linear-gradient(135deg, rgba(5,150,105,0.08), rgba(16,185,129,0.04));
-    animation: gentleFloat 4s ease-in-out infinite;
+    margin-bottom: 20px;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 10%, transparent), color-mix(in srgb, var(--color-primary) 4%, transparent));
+    box-shadow: 0 4px 20px color-mix(in srgb, var(--color-primary) 8%, transparent);
+    animation: emptyFloat 5s ease-in-out infinite;
   }
 
-  @keyframes gentleFloat {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-6px); }
+  @keyframes emptyFloat {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    25% { transform: translateY(-8px) rotate(1deg); }
+    75% { transform: translateY(-4px) rotate(-0.5deg); }
   }
 
   .empty-avatar-fallback {
@@ -916,10 +936,11 @@
   }
 
   .empty-title {
-    font-size: 16px;
+    font-size: 17px;
     font-weight: 600;
     color: var(--text-primary);
     margin: 0 0 6px 0;
+    letter-spacing: -0.01em;
   }
 
   .empty-desc {
@@ -934,7 +955,7 @@
   /* === TYPING AREA === */
   .typing-area {
     padding: 0 12px 2px;
-    animation: fadeIn 200ms ease both;
+    animation: typingFadeIn 250ms cubic-bezier(0.22, 1, 0.36, 1) both;
     flex-shrink: 0;
   }
 
@@ -942,7 +963,7 @@
   .edit-bar {
     flex-shrink: 0;
     padding: 0 10px 6px;
-    animation: editSlideIn 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    animation: editSlideIn 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 
   @keyframes editSlideIn {
@@ -1062,7 +1083,7 @@
     position: fixed;
     inset: 0;
     z-index: 60;
-    animation: fadeIn 150ms ease both;
+    animation: fadeIn 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 
   .menu-sheet {
@@ -1078,7 +1099,7 @@
     border: 1px solid var(--border-subtle);
     box-shadow: 0 8px 32px rgba(0,0,0,0.12), 0 0 1px rgba(0,0,0,0.06);
     z-index: 61;
-    animation: scaleIn 200ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    animation: menuSlideIn 250ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 
   .menu-item {
@@ -1123,6 +1144,21 @@
   }
   @keyframes slideDown {
     from { opacity: 0; transform: translateY(-100%); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes menuSlideIn {
+    from { opacity: 0; transform: translateY(-8px) scale(0.96); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  @keyframes pinBannerIn {
+    from { opacity: 0; transform: translateY(-100%); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes typingFadeIn {
+    from { opacity: 0; transform: translateY(4px); }
     to { opacity: 1; transform: translateY(0); }
   }
 </style>

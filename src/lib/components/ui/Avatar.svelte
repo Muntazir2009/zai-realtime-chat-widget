@@ -55,8 +55,9 @@
 </script>
 
 <div
-  class="relative inline-flex items-center justify-center rounded-full overflow-hidden flex-shrink-0 select-none"
-  style="width: {sizeMap}px; height: {sizeMap}px; background: {gradientBg};"
+  class="avatar-root relative inline-flex items-center justify-center rounded-full overflow-hidden flex-shrink-0 select-none"
+  class:avatar-has-accent={!!accentColor}
+  style="width: {sizeMap}px; height: {sizeMap}px; background: {gradientBg};{accentColor ? ` box-shadow: 0 0 0 2px ${accentColor}33, 0 2px 8px ${accentColor}20;` : ''}"
   role="img"
   aria-label={username}
 >
@@ -101,6 +102,20 @@
 </div>
 
 <style>
+  /* Hover scale for desktop */
+  @media (hover: hover) {
+    .avatar-root {
+      transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 200ms ease;
+      cursor: pointer;
+    }
+    .avatar-root:hover {
+      transform: scale(1.08);
+    }
+    .avatar-has-accent:hover {
+      box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--color-primary) 35%, transparent), 0 4px 14px color-mix(in srgb, var(--color-primary) 20%, transparent) !important;
+    }
+  }
+
   .emoji-badge {
     position: absolute;
     display: flex;
@@ -113,11 +128,13 @@
     line-height: 1;
     z-index: 2;
     pointer-events: none;
-    animation: emojiPop 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    animation: emojiPop 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
   }
 
   @keyframes emojiPop {
-    from { transform: scale(0); }
-    to { transform: scale(1); }
+    0% { transform: scale(0) rotate(-20deg); opacity: 0; }
+    60% { transform: scale(1.15) rotate(4deg); opacity: 1; }
+    100% { transform: scale(1) rotate(0deg); opacity: 1; }
   }
 </style>

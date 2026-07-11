@@ -12,9 +12,10 @@
     otherUser: User | null;
     isActive: boolean;
     onclick?: (chatId: string) => void;
+    style?: string;
   }
 
-  let { chatId, chatMeta, userChat, otherUser, isActive = false, onclick }: Props = $props();
+  let { chatId, chatMeta, userChat, otherUser, isActive = false, onclick, style = '' }: Props = $props();
 
   // Long press context menu
   let showContextMenu = $state(false);
@@ -86,7 +87,7 @@
 <button
   class="tile"
   class:tile-active={isActive}
-  style="min-height: 72px;"
+  style="min-height: 72px; {style}"
   onclick={handleTap}
   oncontextmenu={handleContextMenu}
   ontouchstart={handleTouchStart}
@@ -157,6 +158,7 @@
     text-align: left;
     position: relative;
     transition: background 150ms ease;
+    animation: tileEnter 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 
   .tile::after {
@@ -334,5 +336,10 @@
   @keyframes ctxScaleIn {
     from { opacity: 0; transform: scale(0.92) translateY(8px); }
     to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  @keyframes tileEnter {
+    from { opacity: 0; transform: translateX(-8px); }
+    to { opacity: 1; transform: translateX(0); }
   }
 </style>

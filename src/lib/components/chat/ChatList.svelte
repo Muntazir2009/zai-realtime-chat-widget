@@ -224,7 +224,7 @@
         {/if}
       </div>
     {:else}
-      {#each filteredInbox as { chatId, userChat, meta } (chatId)}
+      {#each filteredInbox as { chatId, userChat, meta }, index (chatId)}
         <ChatTile
           {chatId}
           chatMeta={meta}
@@ -232,7 +232,7 @@
           otherUser={meta ? (chatStore.getOtherParticipant(meta) ?? null) : null}
           isActive={chatStore.activeChatId === chatId}
           onclick={handleChatClick}
-          
+          style="animation-delay: {index * 30}ms"
         />
       {/each}
     {/if}
@@ -352,19 +352,23 @@
     align-items: center;
     justify-content: center;
     border-radius: var(--radius-md, 12px);
-    color: var(--text-secondary);
+    color: var(--color-primary);
     border: none;
-    background: transparent;
+    background: color-mix(in srgb, var(--color-primary) 10%, transparent);
     cursor: pointer;
-    transition: transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1), background 150ms ease, color 200ms ease;
+    transition: transform 350ms cubic-bezier(0.34, 1.56, 0.64, 1), background 200ms ease, color 200ms ease, box-shadow 200ms ease;
     -webkit-tap-highlight-color: transparent;
   }
-  .cl-new-btn:active { transform: scale(0.88); background: var(--input-bg); }
+  .cl-new-btn:hover {
+    background: color-mix(in srgb, var(--color-primary) 16%, transparent);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--color-primary) 15%, transparent);
+  }
+  .cl-new-btn:active { transform: scale(0.85) rotate(90deg); background: color-mix(in srgb, var(--color-primary) 22%, transparent); }
 
   /* === SEARCH BAR === */
   .cl-search-bar {
     padding: 0 12px 8px;
-    animation: searchSlideIn 200ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    animation: searchSlideIn 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 
   .cl-search-inner {
@@ -373,15 +377,19 @@
     gap: 8px;
     padding: 0 12px;
     height: 38px;
-    border-radius: var(--radius-md, 12px);
+    border-radius: var(--radius-pill, 99px);
     background: var(--input-bg);
-    border: 1px solid var(--border-subtle);
-    transition: border-color 200ms ease;
+    border: 1.5px solid var(--border-subtle);
+    transition: border-color 300ms cubic-bezier(0.4, 0, 0.2, 1),
+                box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1),
+                background 300ms ease;
   }
 
   .cl-search-inner:focus-within {
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 20%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 15%, transparent),
+                0 1px 3px rgba(0,0,0,0.04);
+    background: var(--bg-surface);
   }
 
   .cl-search-input {
@@ -394,9 +402,14 @@
     font-size: 14px;
     font-family: var(--font-sans, inherit);
     line-height: 1;
+    transition: opacity 200ms ease;
   }
   .cl-search-input::placeholder {
     color: var(--text-tertiary);
+    transition: opacity 200ms ease;
+  }
+  .cl-search-inner:focus-within .cl-search-input::placeholder {
+    opacity: 0.5;
   }
 
   .cl-search-clear {
@@ -434,14 +447,19 @@
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
-    transition: background 200ms ease, color 200ms ease, transform 150ms ease;
+    transition: background 250ms cubic-bezier(0.4, 0, 0.2, 1),
+                color 250ms cubic-bezier(0.4, 0, 0.2, 1),
+                transform 150ms ease,
+                box-shadow 250ms ease;
     -webkit-tap-highlight-color: transparent;
+    position: relative;
   }
   .cl-filter-btn:active { transform: scale(0.95); }
 
   .cl-filter-active {
     background: var(--input-bg);
     color: var(--text-primary);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
   }
 
   .cl-filter-count {
@@ -581,28 +599,30 @@
     align-items: center;
     justify-content: center;
     padding: 60px 24px 24px;
-    animation: fadeIn 400ms ease both;
+    animation: fadeIn 500ms ease both;
   }
 
   .cl-empty-icon {
-    width: 80px;
-    height: 80px;
-    border-radius: 24px;
+    width: 88px;
+    height: 88px;
+    border-radius: 28px;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: 16px;
-    background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 10%, transparent), color-mix(in srgb, var(--color-primary) 4%, transparent));
+    margin-bottom: 20px;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 12%, transparent), color-mix(in srgb, var(--color-primary) 5%, transparent));
     color: var(--color-primary);
-    opacity: 0.6;
-    animation: gentleFloat 4s ease-in-out infinite;
+    opacity: 0.45;
+    animation: gentleFloat 5s ease-in-out infinite;
+    box-shadow: 0 8px 32px color-mix(in srgb, var(--color-primary) 6%, transparent);
   }
 
   .cl-empty-title {
-    font-size: 16px;
+    font-size: 17px;
     font-weight: 600;
     color: var(--text-primary);
     margin: 0 0 6px 0;
+    letter-spacing: -0.01em;
   }
 
   .cl-empty-desc {
@@ -635,10 +655,10 @@
   }
   @keyframes gentleFloat {
     0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-6px); }
+    50% { transform: translateY(-8px); }
   }
   @keyframes searchSlideIn {
-    from { opacity: 0; transform: translateY(-4px); }
-    to { opacity: 1; transform: translateY(0); }
+    from { opacity: 0; transform: translateY(-6px) scaleY(0.9); }
+    to { opacity: 1; transform: translateY(0) scaleY(1); }
   }
 </style>
