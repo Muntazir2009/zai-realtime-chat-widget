@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
+
   interface Props {
     onGifSelect: (gifUrl: string) => void;
   }
@@ -53,9 +55,9 @@
     }
   }
 
-  // Initial load
+  // Initial load — use untrack so state changes from fetchGifs don't re-trigger
   $effect(() => {
-    fetchGifs('trending');
+    untrack(() => fetchGifs('trending'));
   });
 
   function handleSearch(value: string) {

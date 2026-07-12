@@ -201,20 +201,13 @@
       </div>
     {/if}
 
-    <!-- Picker panels -->
-    {#if activePicker}
-      <div class="picker-panel">
-        {#if activePicker === 'gif'}
-          <div class="picker-animate-in">
-            <GIFPicker onGifSelect={handleGif} />
-          </div>
-        {:else}
-          <div class="picker-animate-in">
-            <StickerPicker onStickerSelect={handleSticker} />
-          </div>
-        {/if}
+    <!-- Picker panels (always mounted to preserve scroll/search state) -->
+    <div class="picker-panel" class:picker-panel-hidden={!activePicker}>
+      <div class="picker-animate-in">
+        <GIFPicker onGifSelect={handleGif} class:picker-pane-hidden={activePicker !== 'gif'} />
+        <StickerPicker onStickerSelect={handleSticker} class:picker-pane-hidden={activePicker !== 'sticker'} />
       </div>
-    {/if}
+    </div>
 
     <!-- Hidden file input -->
     <input
@@ -343,6 +336,14 @@
     margin-bottom: 8px;
     border-radius: var(--radius-lg);
     overflow: hidden;
+  }
+
+  .picker-panel-hidden {
+    display: none;
+  }
+
+  .picker-pane-hidden {
+    display: none;
   }
 
   .picker-animate-in {
