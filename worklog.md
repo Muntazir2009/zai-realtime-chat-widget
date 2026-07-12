@@ -671,3 +671,37 @@ Work Log:
 Stage Summary:
 - Typing indicator now has 3 layers of reliability: oninput, $effect fallback, _typingTick reactivity
 - Files changed: `InputBar.svelte`, `chat.svelte.ts`, `PresenceManager.svelte.ts`, `Conversation.svelte`, `WallpaperPicker.svelte`
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Fix swipe glitches, reply overflow, avatars, settings, dark mode, GIF picker, remove status
+
+Work Log:
+- Analyzed all affected files: MessageBubble.svelte, Conversation.svelte, SettingsView.svelte, GIFPicker.svelte, app.css, profile API
+- Fixed profile API to accept null values for accentColor, emojiStatus, and bio (was returning 400)
+- Added senderAvatarUrl prop to MessageBubble, passed from Conversation.svelte using chatStore.userDict
+- Improved swipe-to-reply physics: lower threshold (60px), ease-in curve (quadratic), smoother spring-back with cubic-bezier(0.25,1,0.5,1), opacity fade at extremes
+- Added bubbleTouchAction Svelte action to clear bubbleSpring animation that was blocking inline transforms
+- Changed bubbleSpring fill-mode from 'both' to 'forwards' to prevent transform override
+- Fixed reply bubble overflow: added max-width:100% and overflow:hidden on rply-bar and rply-body
+- Added white-space:nowrap + ellipsis on rply-who to prevent sender name overflow
+- Increased reply preview text truncation from 60 to 80 chars
+- Fixed reply sender name resolution (was showing replier name instead of original author)
+- Removed emoji Status section from Settings (per user request)
+- Cleaned up unused emojiStatus data, imports, and CSS from SettingsView
+- Redesigned GIFPicker with futuristic glass-morphism UI (animated gradient border, glowing chips, staggered animations, neon badges, shimmer overlay)
+- Greatly improved dark mode: warmer GitHub-inspired tones for .dark, improved all 3 dark themes
+- Added ~220 lines of component-specific dark overrides for headers, typing bubbles, chat tiles, settings, input bar, date chips, nav pills
+- Fixed sent bubble foreground from dark green (#022c22) to white (#ffffff) for proper contrast
+- Build verified: zero errors, zero warnings
+
+Stage Summary:
+- Swipe-to-reply now has smooth physics with proper animation clearing
+- Reply bubbles truncate properly and don't overflow screen
+- Profile avatars now display for message senders
+- Bio, accent color, message size, and bubble type settings all work
+- Emoji Status (mood) feature removed from settings
+- GIF picker has futuristic glass-morphism design
+- Dark mode has significantly improved text visibility and contrast across all themes
+- All changes pushed to git (commit 133783a7)
