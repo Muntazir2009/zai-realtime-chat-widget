@@ -29,7 +29,7 @@
     lg: 14,
   }[size]);
 
-  const initial = $derived(username.charAt(0).toUpperCase());
+  const initial = $derived((username || '?').charAt(0).toUpperCase());
 
   function darkenColor(hex: string, amount: number): string {
     const num = parseInt(hex.replace('#', ''), 16);
