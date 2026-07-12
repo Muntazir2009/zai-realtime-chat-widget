@@ -441,7 +441,7 @@
           {#if replyPreviewMsg}
             {@const replySender = chatStore.userDict.get(replyPreviewMsg.sid)}
             <p class="rply-who">{replyPreviewMsg.sid === (msg.sid) ? (isOwn ? 'You' : (senderName || 'Unknown')) : (replySender?.displayName || (replyPreviewMsg.sid === authStore.user?.id ? 'You' : 'Unknown'))}</p>
-            <p class="rply-text">{replyPreviewMsg.t === 'image' ? '📷 Photo' : replyPreviewMsg.t === 'voice' ? '🎙 Voice' : replyPreviewMsg.c.slice(0, 80)}</p>
+            <p class="rply-text">{replyPreviewMsg.t === 'image' ? '📷 Photo' : replyPreviewMsg.t === 'voice' ? '🎙 Voice' : (replyPreviewMsg.c.replace(/\n/g, ' ').slice(0, 120))}</p>
           {:else}
             <p class="rply-text rply-fallback">↩ Reply</p>
           {/if}
@@ -841,9 +841,11 @@
 
   .rply-text {
     font-size: 12px;
-    white-space: nowrap;
     overflow: hidden;
-    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    word-break: break-word;
     opacity: 0.75;
     margin: 0;
     max-width: 100%;
