@@ -7,7 +7,15 @@
   import { chatStore } from '$lib/stores/chat.svelte';
 
   // Svelte action: non-passive touchmove so preventDefault works for swipe
+  // Also clears the entrance animation after it plays so inline transforms
+  // (used for swipe physics) are not overridden by the animation's transform.
   function swipeTouchAction(node: HTMLDivElement) {
+    // Clear animation once it finishes so inline transform works for swipe
+    function onAnimationEnd() {
+      node.style.animation = 'none';
+    }
+    node.addEventListener('animationend', onAnimationEnd);
+
     function onTouchStart(e: TouchEvent) { handleTouchStart(e); }
     function onTouchMove(e: TouchEvent) { handleTouchMove(e); }
     function onTouchEnd(e: TouchEvent) { handleTouchEnd(); }
@@ -16,6 +24,7 @@
     node.addEventListener('touchend', onTouchEnd, { passive: true });
     return {
       destroy() {
+        node.removeEventListener('animationend', onAnimationEnd);
         node.removeEventListener('touchstart', onTouchStart);
         node.removeEventListener('touchmove', onTouchMove);
         node.removeEventListener('touchend', onTouchEnd);
@@ -92,6 +101,9 @@
     isSwiping = false;
     swipeTriggered = false;
     showSwipeIndicator = false;
+
+    // Ensure entrance animation doesn't block inline transform for swipe
+    if (rowEl) rowEl.style.animation = 'none';
 
     longPressTimer = setTimeout(() => {
       if (!isSwiping) {

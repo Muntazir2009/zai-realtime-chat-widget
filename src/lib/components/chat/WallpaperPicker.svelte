@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { X, Upload, Image as ImageIcon, Sparkles, Check } from 'lucide-svelte';
+  import { X, Upload, Image as ImageIcon, Sparkles, Check, Trash2 } from 'lucide-svelte';
   import { uploadFile } from '$lib/firebase/storage';
   import { chatStore } from '$lib/stores/chat.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
@@ -15,6 +15,43 @@
   let isUploading = $state(false);
   let uploadProgress = $state(0);
   let activeTab = $state<'presets' | 'custom' | 'cloud'>('presets');
+
+  // ── Uploaded wallpapers (localStorage) ──
+  const STORAGE_KEY = 'chat-uploaded-wallpapers';
+  const MAX_UPLOADED = 20;
+
+  let uploadedWallpapers = $state<string[]>([]);
+
+  function loadUploadedWallpapers() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) uploadedWallpapers = JSON.parse(raw) as string[];
+    } catch { /* ignore */ }
+  }
+
+  function saveUploadedWallpapers(list: string[]) {
+    uploadedWallpapers = list;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    } catch { /* ignore */ }
+  }
+
+  function addToUploaded(url: string) {
+    const list = [url, ...uploadedWallpapers.filter(u => u !== url)].slice(0, MAX_UPLOADED);
+    saveUploadedWallpapers(list);
+  }
+
+  function removeFromUploaded(url: string) {
+    saveUploadedWallpapers(uploadedWallpapers.filter(u => u !== url));
+    // If the removed wallpaper was active, clear it
+    if (currentWallpaper === url) {
+      chatStore.setChatWallpaper(chatId, null);
+    }
+    toastStore.info('Wallpaper removed from gallery');
+  }
+
+  // Load on mount
+  loadUploadedWallpapers();
 
   const presetWallpapers = [
     { id: 'none', label: 'Default', preview: 'var(--bg-page)', css: '' },
@@ -63,6 +100,11 @@
     onClose();
   }
 
+  async function selectUploaded(url: string) {
+    await chatStore.setChatWallpaper(chatId, url);
+    onClose();
+  }
+
   async function handleFileSelect(e: Event) {
     const input = e.target as HTMLInputElement;
     const file = input.files?.[0];
@@ -82,6 +124,9 @@
     uploadProgress = 0;
     try {
       const result = await uploadFile(file, 'wallpapers', `wp-${Date.now()}.jpg`, (pct) => { uploadProgress = pct; });
+      // Save to uploaded gallery
+      addToUploaded(result.publicUrl);
+      // Set as current wallpaper
       await chatStore.setChatWallpaper(chatId, result.publicUrl);
       onClose();
     } catch (err) {
@@ -118,7 +163,7 @@
       </button>
       <button class="wp-tab" class:wp-tab-active={activeTab === 'custom'} onclick={() => (activeTab = 'custom')}>
         <Upload size={14} />
-        <span>Custom</span>
+        <span>My Uploads</span>
       </button>
     </div>
 
@@ -170,6 +215,7 @@
         </div>
       {:else}
         <div class="wp-custom-area">
+          <!-- Upload button -->
           <input
             bind:this={fileInputEl}
             type="file"
@@ -181,10 +227,52 @@
             <div class="wp-upload-icon">
               <Upload size={24} />
             </div>
-            <p class="wp-upload-title">Choose from Gallery</p>
-            <p class="wp-upload-desc">Select a photo to use as wallpaper</p>
+            <p class="wp-upload-title">Upload New Wallpaper</p>
+            <p class="wp-upload-desc">Choose a photo from your gallery</p>
             <p class="wp-upload-hint">Max 5 MB · JPG, PNG, WebP</p>
           </button>
+
+          <!-- Uploaded wallpapers gallery -->
+          {#if uploadedWallpapers.length > 0}
+            <div class="wp-gallery-header">
+              <span class="wp-gallery-title">Your Wallpapers</span>
+              <span class="wp-gallery-count">{uploadedWallpapers.length}/{MAX_UPLOADED}</span>
+            </div>
+            <div class="wp-grid wp-grid-cloud">
+              {#each uploadedWallpapers as url (url)}
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <div
+                  class="wp-tile wp-tile-photo"
+                  class:wp-tile-active={currentWallpaper === url}
+                  onclick={() => selectUploaded(url)}
+                  role="button"
+                  tabindex={0}
+                  aria-label="Select uploaded wallpaper"
+                  onkeydown={(e) => { if (e.key === 'Enter') selectUploaded(url); }}
+                >
+                  <img src={url} alt="Uploaded wallpaper" class="wp-cloud-img" loading="lazy" />
+                  {#if currentWallpaper === url}
+                    <span class="wp-tile-check"><Check size={14} /></span>
+                  {/if}
+                  <button
+                    class="wp-delete-btn"
+                    onclick={(e) => { e.stopPropagation(); removeFromUploaded(url); }}
+                    aria-label="Delete wallpaper"
+                  >
+                    <Trash2 size={11} />
+                  </button>
+                </div>
+              {/each}
+            </div>
+          {:else}
+            <div class="wp-empty-gallery">
+              <ImageIcon size={28} style="color: var(--text-tertiary); opacity: 0.5;" />
+              <p class="wp-empty-text">No uploaded wallpapers yet</p>
+              <p class="wp-empty-hint">Upload your first wallpaper above</p>
+            </div>
+          {/if}
+
+          <!-- Remove current wallpaper button -->
           {#if currentWallpaper && currentWallpaper.startsWith('http')}
             <button class="wp-remove-btn" onclick={() => { chatStore.setChatWallpaper(chatId, null); onClose(); }}>
               Remove current wallpaper
@@ -401,6 +489,7 @@
     justify-content: center;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
     animation: checkPop 250ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    z-index: 2;
   }
 
   @keyframes checkPop {
@@ -408,19 +497,104 @@
     to { transform: scale(1); }
   }
 
+  /* Delete button on uploaded wallpaper tiles */
+  .wp-delete-btn {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0;
+    transform: scale(0.8);
+    transition: opacity 180ms ease, transform 180ms ease;
+    z-index: 3;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .wp-tile:hover .wp-delete-btn,
+  .wp-tile:active .wp-delete-btn {
+    opacity: 1;
+    transform: scale(1);
+  }
+  /* Always show delete on touch devices */
+  @media (hover: none) {
+    .wp-delete-btn {
+      opacity: 0.7;
+      transform: scale(1);
+    }
+  }
+  .wp-delete-btn:active {
+    transform: scale(0.85);
+    background: rgba(220, 38, 38, 0.8);
+  }
+
+  /* Gallery header */
+  .wp-gallery-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    margin-top: 4px;
+    margin-bottom: 8px;
+  }
+
+  .wp-gallery-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .wp-gallery-count {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Empty gallery state */
+  .wp-empty-gallery {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 16px 0 8px;
+  }
+
+  .wp-empty-text {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+
+  .wp-empty-hint {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    margin: 0;
+  }
+
   /* Custom upload area */
   .wp-custom-area {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 16px;
+    gap: 14px;
     padding: 20px 0;
   }
 
   .wp-upload-btn {
     width: 100%;
     max-width: 280px;
-    padding: 28px 20px;
+    padding: 24px 20px;
     border-radius: 18px;
     border: 2px dashed var(--border-subtle);
     background: var(--input-bg);
@@ -429,7 +603,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     transition: border-color 200ms ease, background 200ms ease, transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
     -webkit-tap-highlight-color: transparent;
   }
@@ -437,25 +611,25 @@
   .wp-upload-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
   .wp-upload-icon {
-    width: 52px;
-    height: 52px;
+    width: 48px;
+    height: 48px;
     border-radius: 50%;
     background: color-mix(in srgb, var(--color-primary) 12%, transparent);
     color: var(--color-primary);
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
   }
 
   .wp-upload-title {
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 600;
     margin: 0;
   }
 
   .wp-upload-desc {
-    font-size: 13px;
+    font-size: 12px;
     color: var(--text-secondary);
     margin: 0;
   }

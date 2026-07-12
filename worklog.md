@@ -626,3 +626,27 @@ Stage Summary:
 - 6 files changed, 194 insertions, 183 deletions
 - svelte-check: 0 errors
 - Pushed as adc011fb
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: Fix swipe-to-reply physics, wallpaper upload 404, profile customization, add wallpaper gallery
+
+Work Log:
+- **Swipe-to-reply fix**: Root cause identified — `msgBubbleIn` CSS animation uses `transform: translateY()` with `fill-mode: both`, which permanently overrides inline `transform` set by JavaScript during swipe. Fix: Added `animationend` event listener in `swipeTouchAction` Svelte action that clears `node.style.animation = 'none'` after entrance animation completes. Also added safety fallback in `handleTouchStart` to clear animation immediately on first touch.
+- **Wallpaper upload 404 fix**: The `/api/upload/file/+server.ts` route was intact. The 404 was caused by the dev server not running with `--host` flag, preventing Caddy proxy (port 81) from reaching Vite (port 3000). Fixed `dev.sh` to include `--host` flag.
+- **Profile customization**: Verified `/api/profile/+server.ts` route exists and is correct. The `getEnv()` function returns hardcoded credentials, so it works regardless of `platform`. Profile customization was broken because the server wasn't reachable (same root cause as wallpaper upload 404).
+- **Wallpaper gallery**: Rewrote `WallpaperPicker.svelte` Custom tab to show uploaded wallpapers gallery. Uploaded wallpaper URLs are stored in localStorage under `chat-uploaded-wallpapers` key (max 20). Features: upload new wallpaper, select from gallery, delete from gallery, empty state, active wallpaper indicator, count badge.
+- Fixed nested `<button>` error in uploaded wallpaper tiles (changed outer `<button>` to `<div role="button">`).
+
+Stage Summary:
+- Swipe-to-reply now has proper physics — messages visually translate when dragged
+- Wallpaper upload works when server is running with `--host`
+- Profile customization (name, username, bio, avatar, accent color, emoji status) works when server is running
+- Custom tab renamed to "My Uploads" with full wallpaper gallery
+- Files changed: `MessageBubble.svelte`, `WallpaperPicker.svelte`, `dev.sh`
+- API routes preserved: `/api/upload/file`, `/api/profile`
+
+Unresolved issues/risks:
+- Caddy needs restart to pick up new Caddyfile (currently using stale config at `/app/Caddyfile` which doesn't exist)
+- Dev server must always be started with `--host` flag for external access via Caddy

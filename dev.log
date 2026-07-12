@@ -1,6 +1,70 @@
 
-  VITE v6.4.3  ready in 1755 ms
+  VITE v6.4.3  ready in 2254 ms
 
   ➜  Local:   http://localhost:3000/
   ➜  Network: http://21.0.14.73:3000/
 Using secrets defined in .env
+7:04:06 AM [vite-plugin-svelte] src/lib/components/chat/Conversation.svelte:831:2 Unused CSS selector ".msg-scroll-wp"
+https://svelte.dev/e/css_unused_selector
+7:04:06 AM [vite-plugin-svelte] src/lib/components/chat/SettingsView.svelte:386:18 Avoid using autofocus
+https://svelte.dev/e/a11y_autofocus
+7:04:06 AM [vite-plugin-svelte] src/lib/components/chat/SettingsView.svelte:403:12 Non-interactive element `<p>` cannot have interactive role 'button'
+https://svelte.dev/e/a11y_no_noninteractive_element_to_interactive_role
+7:04:06 AM [vite-plugin-svelte] src/lib/components/chat/SettingsView.svelte:403:12 Visible, non-interactive element `<p>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events
+7:04:06 AM [vite-plugin-svelte] src/lib/components/chat/SettingsView.svelte:416:20 Avoid using autofocus
+https://svelte.dev/e/a11y_autofocus
+7:04:06 AM [vite-plugin-svelte] src/lib/components/chat/SettingsView.svelte:755:2 Elements with the 'dialog' interactive role must have a tabindex value
+https://svelte.dev/e/a11y_interactive_supports_focus
+7:04:06 AM [vite-plugin-svelte] src/lib/components/chat/SettingsView.svelte:755:2 Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events
+7:04:06 AM [vite-plugin-svelte] src/lib/components/chat/SettingsView.svelte:762:4 Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events
+7:04:06 AM [vite-plugin-svelte] src/lib/components/chat/SettingsView.svelte:988:2 Unused CSS selector ".username-edit-icon"
+https://svelte.dev/e/css_unused_selector
+7:04:06 AM [vite-plugin-svelte] src/lib/components/chat/SettingsView.svelte:992:2 Unused CSS selector ".username:hover .username-edit-icon"
+https://svelte.dev/e/css_unused_selector
+7:04:06 AM [vite-plugin-svelte] src/lib/components/ui/BottomNavBar.svelte:100:2 Unused CSS selector ".nav-pill-icon"
+https://svelte.dev/e/css_unused_selector
+7:04:06 AM [vite-plugin-svelte] src/lib/components/ui/BottomNavBar.svelte:111:2 Unused CSS selector ".nav-pill-active .nav-pill-icon"
+https://svelte.dev/e/css_unused_selector
+7:04:06 AM [vite-plugin-svelte] src/lib/components/chat/ChatTile.svelte:138:2 Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events
+7:04:06 AM [vite-plugin-svelte] src/lib/components/chat/ChatTile.svelte:139:4 Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events
+7:04:06 AM [vite-plugin-svelte] src/lib/components/chat/ChatTile.svelte:250:2 Unused CSS selector ".tile-preview-icon"
+https://svelte.dev/e/css_unused_selector
+7:04:07 AM [vite-plugin-svelte] src/lib/components/chat/MessageBubble.svelte:356:8 Non-interactive element `<img>` should not be assigned mouse or keyboard event listeners
+https://svelte.dev/e/a11y_no_noninteractive_element_interactions
+7:04:07 AM [vite-plugin-svelte] src/lib/components/chat/MessageBubble.svelte:417:4 Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events
+7:04:07 AM [vite-plugin-svelte] src/lib/components/chat/MessageBubble.svelte:417:4 `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions
+7:04:07 AM [vite-plugin-svelte] src/lib/components/chat/ReplyPreview.svelte:100:2 Unused CSS selector ".reply-type-icon"
+https://svelte.dev/e/css_unused_selector
+7:04:07 AM [vite] (client) Pre-transform error: src/lib/components/chat/WallpaperPicker.svelte:253:18 `<button>` cannot be a child of `<button>`. The browser will 'repair' the HTML (by moving, removing, or inserting elements) which breaks Svelte's assumptions about the structure of your components.
+https://svelte.dev/e/node_invalid_placement
+  Plugin: vite-plugin-svelte
+  File: src/lib/components/chat/WallpaperPicker.svelte:253:18
+   251 |                      <span class="wp-tile-check"><Check size={14} /></span>
+   252 |                    {/if}
+   253 |                    <button
+                                   ^
+   254 |                      class="wp-delete-btn"
+   255 |                      onclick={(e) => { e.stopPropagation(); removeFromUploaded(url); }}
+7:04:07 AM [vite-plugin-svelte] src/lib/components/pickers/GIFPicker.svelte:131:8 Buttons and links should either contain text or have an `aria-label`, `aria-labelledby` or `title` attribute
+https://svelte.dev/e/a11y_consider_explicit_label
+7:04:07 AM [vite] Internal server error: src/lib/components/chat/WallpaperPicker.svelte:253:18 `<button>` cannot be a child of `<button>`. The browser will 'repair' the HTML (by moving, removing, or inserting elements) which breaks Svelte's assumptions about the structure of your components.
+https://svelte.dev/e/node_invalid_placement
+  Plugin: vite-plugin-svelte
+  File: src/lib/components/chat/WallpaperPicker.svelte:253:18
+   251 |                      <span class="wp-tile-check"><Check size={14} /></span>
+   252 |                    {/if}
+   253 |                    <button
+                                   ^
+   254 |                      class="wp-delete-btn"
+   255 |                      onclick={(e) => { e.stopPropagation(); removeFromUploaded(url); }}
+7:04:59 AM [vite-plugin-svelte] src/lib/components/chat/WallpaperPicker.svelte:144:0 Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events
+7:04:59 AM [vite-plugin-svelte] src/lib/components/chat/WallpaperPicker.svelte:456:2 Unused CSS selector ".wp-tile-photo .wp-tile-preview"
+https://svelte.dev/e/css_unused_selector
