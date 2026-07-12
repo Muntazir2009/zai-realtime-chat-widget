@@ -63,8 +63,8 @@ export async function PUT({ request, platform }: { request: Request; platform: a
     }
 
     if (body.bio !== undefined) {
-      if (typeof body.bio !== 'string' || body.bio.length > 120) {
-        return json({ error: 'bio must be a string of at most 120 characters' }, { status: 400 });
+      if (body.bio !== null && (typeof body.bio !== 'string' || body.bio.length > 120)) {
+        return json({ error: 'bio must be a string of at most 120 characters or null' }, { status: 400 });
       }
       updates.bio = body.bio;
       hasUpdates = true;
@@ -79,16 +79,16 @@ export async function PUT({ request, platform }: { request: Request; platform: a
     }
 
     if (body.accentColor !== undefined) {
-      if (typeof body.accentColor !== 'string' || !HEX_COLOR_RE.test(body.accentColor)) {
-        return json({ error: 'accentColor must be a valid hex color (e.g. #FF5733 or #F53)' }, { status: 400 });
+      if (body.accentColor !== null && (typeof body.accentColor !== 'string' || !HEX_COLOR_RE.test(body.accentColor))) {
+        return json({ error: 'accentColor must be a valid hex color (e.g. #FF5733 or #F53) or null' }, { status: 400 });
       }
       updates.accentColor = body.accentColor;
       hasUpdates = true;
     }
 
     if (body.emojiStatus !== undefined) {
-      if (typeof body.emojiStatus !== 'string' || body.emojiStatus.length > 10) {
-        return json({ error: 'emojiStatus must be a string of at most 10 characters' }, { status: 400 });
+      if (body.emojiStatus !== null && (typeof body.emojiStatus !== 'string' || body.emojiStatus.length > 10)) {
+        return json({ error: 'emojiStatus must be a string of at most 10 characters or null' }, { status: 400 });
       }
       updates.emojiStatus = body.emojiStatus;
       hasUpdates = true;

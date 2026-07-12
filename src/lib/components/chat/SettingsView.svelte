@@ -5,7 +5,7 @@
     Wifi, WifiOff, Activity, Clock, Trash2,
     Lock, ChevronRight, ChevronDown,
     Sparkles, LayoutGrid, Type,
-    Camera, Pencil, X, Smile
+    Camera, Pencil, X
   } from 'lucide-svelte';
   import { themeManager } from '$lib/managers/ThemeManager.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
@@ -81,24 +81,6 @@
     { label: 'Pink', value: '#ec4899' },
   ];
 
-  // ── Emoji status presets ──
-  const emojiStatuses = [
-    { emoji: null, label: 'None' },
-    { emoji: '😊', label: 'Happy' },
-    { emoji: '🔥', label: 'On Fire' },
-    { emoji: '💡', label: 'Idea' },
-    { emoji: '🎮', label: 'Gaming' },
-    { emoji: '🎵', label: 'Music' },
-    { emoji: '📚', label: 'Reading' },
-    { emoji: '💪', label: 'Working Out' },
-    { emoji: '☕', label: 'Coffee' },
-    { emoji: '🌙', label: 'Night Owl' },
-    { emoji: '✈️', label: 'Traveling' },
-    { emoji: '🎉', label: 'Celebrating' },
-    { emoji: '💻', label: 'Coding' },
-    { emoji: '🎨', label: 'Creative' },
-  ];
-
   // ── Enter-to-send preference (localStorage) ──
   let enterSend = $state(true);
 
@@ -162,7 +144,6 @@
 
   let currentBio = $derived(userProfile?.bio || '');
   let currentAccentColor = $derived(userProfile?.accentColor || null);
-  let currentEmojiStatus = $derived(userProfile?.emojiStatus || null);
   let currentAvatarUrl = $derived(userProfile?.avatarUrl || null);
 
   // Sync editBioValue when currentBio changes externally
@@ -444,30 +425,6 @@
           <p class="bio-counter" class:bio-counter-warn={editBioValue.length > 108}>
             {editBioValue.length}/120
           </p>
-        </div>
-
-        <!-- Emoji Status -->
-        <div class="horiz-section">
-          <span class="horiz-label"><Smile size={12} /> Status</span>
-          <div class="emoji-scroll">
-            {#each emojiStatuses as item (item.emoji ?? '__none__')}
-              {@const isActive = currentEmojiStatus === item.emoji}
-              <button
-                class="emoji-pill"
-                class:emoji-pill-active={isActive}
-                onclick={() => updateProfile({ emojiStatus: item.emoji })}
-                title={item.label}
-                aria-label={item.label}
-                aria-pressed={isActive}
-              >
-                {#if item.emoji}
-                  <span class="emoji-char">{item.emoji}</span>
-                {:else}
-                  <X size={11} style="color: var(--text-tertiary);" />
-                {/if}
-              </button>
-            {/each}
-          </div>
         </div>
 
         <!-- Accent Color -->
@@ -1124,49 +1081,6 @@
     letter-spacing: 0.05em;
     color: var(--text-tertiary);
     margin-bottom: 8px;
-  }
-
-  .emoji-scroll {
-    display: flex;
-    gap: 6px;
-    overflow-x: auto;
-    padding-bottom: 2px;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-  }
-
-  .emoji-scroll::-webkit-scrollbar {
-    display: none;
-  }
-
-  .emoji-pill {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 38px;
-    height: 38px;
-    border-radius: 12px;
-    border: 1.5px solid var(--border-subtle);
-    background: var(--bg-surface);
-    cursor: pointer;
-    flex-shrink: 0;
-    transition: all 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  .emoji-pill:active {
-    transform: scale(0.88);
-  }
-
-  .emoji-pill-active {
-    background: color-mix(in srgb, var(--color-primary) 12%, transparent);
-    border-color: var(--color-primary);
-    transform: scale(1.05);
-  }
-
-  .emoji-char {
-    font-size: 16px;
-    line-height: 1;
   }
 
   .color-scroll {

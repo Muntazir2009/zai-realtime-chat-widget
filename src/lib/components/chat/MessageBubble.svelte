@@ -5,6 +5,7 @@
   import AudioPlayer from '$lib/components/media/AudioPlayer.svelte';
   import { Reply as ReplyIcon } from 'lucide-svelte';
   import { chatStore } from '$lib/stores/chat.svelte';
+  import { authStore } from '$lib/stores/auth.svelte';
 
   // Svelte action: non-passive touchmove so preventDefault works for swipe
   // Also clears the entrance animation after it plays so inline transforms
@@ -32,6 +33,24 @@
     };
   }
 
+  // Also clear bubble's own animation (bubbleSpring) on swipe touch
+  function bubbleTouchAction(node: HTMLDivElement) {
+    function onBubbleAnimEnd() {
+      node.style.animation = 'none';
+    }
+    node.addEventListener('animationend', onBubbleAnimEnd);
+    function onTouchStart() {
+      node.style.animation = 'none';
+    }
+    node.addEventListener('touchstart', onTouchStart, { passive: true });
+    return {
+      destroy() {
+        node.removeEventListener('animationend', onBubbleAnimEnd);
+        node.removeEventListener('touchstart', onTouchStart);
+      }
+    };
+  }
+
   interface Props {
     msg: Message;
     isOwn: boolean;
@@ -49,13 +68,14 @@
     openReactionPicker?: boolean;
     senderAccentColor?: string | null;
     senderEmojiStatus?: string | null;
+    senderAvatarUrl?: string | null;
   }
 
   let {
     msg, isOwn, showAvatar = false, senderName, isGrouped = false,
     isPinned = false, isStarred = false, replyPreviewMsg,
     onReply, onLongPress, onImageTap, onReaction, onSwipeReply,
-    openReactionPicker = false, senderAccentColor = null, senderEmojiStatus = null,
+    openReactionPicker = false, senderAccentColor = null, senderEmojiStatus = null, senderAvatarUrl = null,
   }: Props = $props();
 
   // --- Swipe physics state ---
@@ -74,21 +94,25 @@
   let swipeFlash = $state(false);
   let showSwipeIndicator = $state(false); // only toggles at threshold, not every frame
 
-  const SWIPE_THRESHOLD = 70;
-  const ELASTIC_FACTOR = 0.25;
-  const VELOCITY_THRESHOLD = 0.3;
+  const SWIPE_THRESHOLD = 60;
+  const ELASTIC_FACTOR = 0.2;
+  const VELOCITY_THRESHOLD = 0.25;
 
   function applySwipeTransform(offset: number, scale: number = 1) {
     if (!rowEl) return;
     rowEl.style.transition = 'none';
     rowEl.style.transform = `translateX(${offset}px) scale(${scale})`;
+    // Subtle opacity fade at extreme offsets
+    const progress = Math.min(Math.abs(offset) / 120, 1);
+    rowEl.style.opacity = String(1 - progress * 0.15);
   }
 
   function resetSwipeTransform() {
     if (!rowEl) return;
-    rowEl.style.transition = 'transform 500ms cubic-bezier(0.34, 1.56, 0.64, 1), scale 350ms cubic-bezier(0.34, 1.56, 0.64, 1)';
+    rowEl.style.transition = 'transform 400ms cubic-bezier(0.25, 1, 0.5, 1), opacity 300ms ease, scale 350ms cubic-bezier(0.34, 1.56, 0.64, 1)';
     rowEl.style.transform = 'translateX(0) scale(1)';
-    setTimeout(() => { if (rowEl) rowEl.style.transition = ''; }, 550);
+    rowEl.style.opacity = '1';
+    setTimeout(() => { if (rowEl) rowEl.style.transition = ''; }, 450);
   }
 
   function handleTouchStart(e: TouchEvent) {
@@ -125,7 +149,7 @@
     const rawDx = isOwn ? touchStartX - cx : cx - touchStartX;
     const dy = Math.abs(cy - touchStartY);
 
-    if (rawDx > 10 && dy < rawDx * 0.6) {
+    if (rawDx > 8 && dy < rawDx * 0.7) {
       e.preventDefault();
       isSwiping = true;
       if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
@@ -135,7 +159,9 @@
         const beyond = rawDx - SWIPE_THRESHOLD;
         effectiveDx = SWIPE_THRESHOLD + beyond * ELASTIC_FACTOR;
       } else {
-        effectiveDx = rawDx * (0.6 + 0.4 * (rawDx / SWIPE_THRESHOLD));
+        // Smooth ease-in curve: starts slow, accelerates
+        const t = rawDx / SWIPE_THRESHOLD;
+        effectiveDx = rawDx * (0.4 + 0.6 * t * t);
       }
       currentOffset = effectiveDx * (isOwn ? -1 : 1);
 
@@ -144,9 +170,9 @@
       applySwipeTransform(currentOffset, scale);
 
       // Only update reactive state when crossing threshold (minimal re-renders)
-      if (rawDx >= SWIPE_THRESHOLD * 0.4 && !showSwipeIndicator) {
+      if (rawDx >= SWIPE_THRESHOLD * 0.35 && !showSwipeIndicator) {
         showSwipeIndicator = true;
-      } else if (rawDx < SWIPE_THRESHOLD * 0.3 && showSwipeIndicator) {
+      } else if (rawDx < SWIPE_THRESHOLD * 0.2 && showSwipeIndicator) {
         showSwipeIndicator = false;
       }
 
@@ -302,7 +328,7 @@
   <!-- Avatar — aligned with bubble top -->
   {#if !isOwn && showAvatar}
     <div class="msg-avatar-col">
-      <Avatar username={senderName || '?'} size="sm" accentColor={senderAccentColor} emojiStatus={senderEmojiStatus} />
+      <Avatar username={senderName || '?'} size="sm" avatarUrl={senderAvatarUrl} accentColor={senderAccentColor} emojiStatus={senderEmojiStatus} />
     </div>
   {:else if !isOwn && !showAvatar}
     <!-- Spacer to keep alignment with avatar rows -->
@@ -319,6 +345,7 @@
       role="button"
       tabindex="0"
       onkeydown={handleBubbleKeydown}
+      use:bubbleTouchAction
     >
     <!-- Reply Preview -->
     {#if msg.rid}
@@ -326,8 +353,9 @@
         <div class="rply-accent"></div>
         <div class="rply-body">
           {#if replyPreviewMsg}
-            <p class="rply-who">{isOwn ? 'You' : (senderName || 'Unknown')}</p>
-            <p class="rply-text">{replyPreviewMsg.t === 'image' ? '📷 Photo' : replyPreviewMsg.t === 'voice' ? '🎙 Voice' : replyPreviewMsg.c.slice(0, 60)}</p>
+            {@const replySender = chatStore.userDict.get(replyPreviewMsg.sid)}
+            <p class="rply-who">{replyPreviewMsg.sid === (msg.sid) ? (isOwn ? 'You' : (senderName || 'Unknown')) : (replySender?.displayName || (replyPreviewMsg.sid === authStore.user?.id ? 'You' : 'Unknown'))}</p>
+            <p class="rply-text">{replyPreviewMsg.t === 'image' ? '📷 Photo' : replyPreviewMsg.t === 'voice' ? '🎙 Voice' : replyPreviewMsg.c.slice(0, 80)}</p>
           {:else}
             <p class="rply-text rply-fallback">↩ Reply</p>
           {/if}
@@ -504,7 +532,7 @@
                 opacity 150ms ease;
     max-width: 100%;
     min-width: fit-content;
-    animation: bubbleSpring 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    animation: bubbleSpring 350ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
   }
 
   .msg-bubble:active {
@@ -693,6 +721,7 @@
     overflow: hidden;
     position: relative;
     z-index: 1;
+    max-width: 100%;
   }
 
   .bbl-sent .rply-bar {
@@ -712,13 +741,16 @@
     box-shadow: 0 0 6px color-mix(in srgb, var(--color-primary) 30%, transparent);
   }
 
-  .rply-body { min-width: 0; flex: 1; }
+  .rply-body { min-width: 0; flex: 1; overflow: hidden; }
 
   .rply-who {
     font-size: 11px;
     font-weight: 600;
     margin-bottom: 1px;
     color: var(--color-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .rply-text {
@@ -728,6 +760,7 @@
     text-overflow: ellipsis;
     opacity: 0.75;
     margin: 0;
+    max-width: 100%;
   }
 
   .rply-fallback {

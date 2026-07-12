@@ -89,25 +89,25 @@
    §VI.3 — Glass Materials (Dark)
    ============================================================ */
 .dark {
-  --glass-bg: rgba(0, 0, 0, 0.60);
+  --glass-bg: rgba(13, 17, 23, 0.65);
   --glass-blur: blur(16px) saturate(180%);
-  --glass-border: 1px solid rgba(255, 255, 255, 0.08);
+  --glass-border: 1px solid rgba(240, 246, 252, 0.08);
   --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.32);
 
-  --bg-page: #0a0a0a;
-  --bg-surface: #141414;
-  --bg-elevated: #1c1c1e;
-  --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
-  --text-tertiary: #64748b;
-  --border-subtle: rgba(255, 255, 255, 0.06);
-  --input-bg: #1c1c1e;
-  --overlay-bg: rgba(0, 0, 0, 0.6);
+  --bg-page: #0d1117;
+  --bg-surface: #161b22;
+  --bg-elevated: #1c2128;
+  --text-primary: #e6edf3;
+  --text-secondary: #8b949e;
+  --text-tertiary: #6e7681;
+  --border-subtle: rgba(240, 246, 252, 0.08);
+  --input-bg: #1c2128;
+  --overlay-bg: rgba(0, 0, 0, 0.65);
 
   --color-sent: #10b981;
-  --color-sent-foreground: #022c22;
-  --color-received: #1c1c1e;
-  --color-received-foreground: #f1f5f9;
+  --color-sent-foreground: #ffffff;
+  --color-received: #1c2128;
+  --color-received-foreground: #e6edf3;
 
   color-scheme: dark;
 }
@@ -118,17 +118,17 @@
 .crimson-dark {
   --glass-bg: rgba(15, 15, 19, 0.88);
   --glass-blur: blur(20px) saturate(200%);
-  --glass-border: 1px solid rgba(255, 255, 255, 0.06);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.07);
   --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 
   --bg-page: #0f0f13;
-  --bg-surface: #16161e;
-  --bg-elevated: #1e1e28;
-  --text-primary: #f1f1f4;
-  --text-secondary: #9d9daa;
-  --text-tertiary: #5c5c6e;
-  --border-subtle: rgba(255, 255, 255, 0.06);
-  --input-bg: #1e1e28;
+  --bg-surface: #1a1a24;
+  --bg-elevated: #22222e;
+  --text-primary: #eaeaf0;
+  --text-secondary: #9595a5;
+  --text-tertiary: #5e5e72;
+  --border-subtle: rgba(255, 255, 255, 0.07);
+  --input-bg: #22222e;
   --overlay-bg: rgba(0, 0, 0, 0.7);
 
   --color-primary: #dc2626;
@@ -136,8 +136,8 @@
   --color-accent: #ef4444;
   --color-sent: #dc2626;
   --color-sent-foreground: #ffffff;
-  --color-received: #1e1e28;
-  --color-received-foreground: #e4e4ea;
+  --color-received: #22222e;
+  --color-received-foreground: #eaeaf0;
   --color-danger: #ef4444;
   --color-warning: #f59e0b;
 
@@ -151,14 +151,237 @@
   --glass-bg: rgba(0, 0, 0, 0.75);
   --bg-page: #000000;
   --bg-surface: #000000;
-  --bg-elevated: #0a0a0a;
-  --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --text-tertiary: #475569;
-  --border-subtle: rgba(255, 255, 255, 0.04);
-  --input-bg: #0a0a0a;
+  --bg-elevated: #0d0d0d;
+  --text-primary: #f0f6fc;
+  --text-secondary: #8b949e;
+  --text-tertiary: #6e7681;
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --input-bg: #0d0d0d;
 
   color-scheme: dark;
+}
+
+/* ============================================================
+   Dark Mode Component Overrides — Text Visibility & Contrast
+   Ensures all interactive and informational elements remain
+   readable across .dark, .amoled, and .crimson-dark themes.
+   ============================================================ */
+
+/* --- Glass Header: ensure title/subtitle text is visible --- */
+.dark .glass-header,
+.amoled .glass-header,
+.crimson-dark .glass-header {
+  color: var(--text-primary);
+}
+
+.dark .glass-header h1,
+.dark .glass-header h2,
+.dark .glass-header h3,
+.dark .glass-header span,
+.dark .glass-header p,
+.amoled .glass-header h1,
+.amoled .glass-header h2,
+.amoled .glass-header h3,
+.amoled .glass-header span,
+.amoled .glass-header p,
+.crimson-dark .glass-header h1,
+.crimson-dark .glass-header h2,
+.crimson-dark .glass-header h3,
+.crimson-dark .glass-header span,
+.crimson-dark .glass-header p {
+  color: var(--text-primary);
+}
+
+.dark .glass-header .text-secondary,
+.dark .glass-header .subtitle,
+.amoled .glass-header .text-secondary,
+.amoled .glass-header .subtitle,
+.crimson-dark .glass-header .text-secondary,
+.crimson-dark .glass-header .subtitle {
+  color: var(--text-secondary);
+}
+
+/* --- Header Glass: nav icons and titles --- */
+.dark .header-glass,
+.amoled .header-glass,
+.crimson-dark .header-glass {
+  color: var(--text-primary);
+}
+
+.dark .header-glass button,
+.dark .header-glass a,
+.amoled .header-glass button,
+.amoled .header-glass a,
+.crimson-dark .header-glass button,
+.crimson-dark .header-glass a {
+  color: var(--text-primary);
+}
+
+.dark .header-glass .icon,
+.amoled .header-glass .icon,
+.crimson-dark .header-glass .icon {
+  color: var(--text-secondary);
+}
+
+/* --- Typing Bubble: dots visible on dark backgrounds --- */
+.dark .typing-bubble span,
+.amoled .typing-bubble span,
+.crimson-dark .typing-bubble span {
+  background: var(--text-secondary);
+}
+
+/* --- Chat Tile: names, previews, timestamps --- */
+.dark .chat-tile,
+.amoled .chat-tile,
+.crimson-dark .chat-tile {
+  color: var(--text-primary);
+}
+
+.dark .chat-tile .chat-name,
+.amoled .chat-tile .chat-name,
+.crimson-dark .chat-tile .chat-name {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.dark .chat-tile .chat-preview,
+.dark .chat-tile .chat-last-message,
+.amoled .chat-tile .chat-preview,
+.amoled .chat-tile .chat-last-message,
+.crimson-dark .chat-tile .chat-preview,
+.crimson-dark .chat-tile .chat-last-message {
+  color: var(--text-secondary);
+}
+
+.dark .chat-tile .chat-time,
+.dark .chat-tile .chat-timestamp,
+.dark .chat-tile .chat-meta,
+.amoled .chat-tile .chat-time,
+.amoled .chat-tile .chat-timestamp,
+.amoled .chat-tile .chat-meta,
+.crimson-dark .chat-tile .chat-time,
+.crimson-dark .chat-tile .chat-timestamp,
+.crimson-dark .chat-tile .chat-meta {
+  color: var(--text-tertiary);
+}
+
+.dark .chat-tile .chat-badge,
+.amoled .chat-tile .chat-badge,
+.crimson-dark .chat-tile .chat-badge {
+  color: #ffffff;
+}
+
+/* --- Settings Page: section labels, toggle text, info text --- */
+.dark [class*="settings"] h1,
+.dark [class*="settings"] h2,
+.dark [class*="settings"] h3,
+.dark [class*="settings"] .section-title,
+.dark [class*="settings"] .section-label,
+.dark [class*="settings"] .label,
+.amoled [class*="settings"] h1,
+.amoled [class*="settings"] h2,
+.amoled [class*="settings"] h3,
+.amoled [class*="settings"] .section-title,
+.amoled [class*="settings"] .section-label,
+.amoled [class*="settings"] .label,
+.crimson-dark [class*="settings"] h1,
+.crimson-dark [class*="settings"] h2,
+.crimson-dark [class*="settings"] h3,
+.crimson-dark [class*="settings"] .section-title,
+.crimson-dark [class*="settings"] .section-label,
+.crimson-dark [class*="settings"] .label {
+  color: var(--text-primary);
+}
+
+.dark [class*="settings"] .description,
+.dark [class*="settings"] .info-text,
+.dark [class*="settings"] .helper-text,
+.dark [class*="settings"] .subtitle,
+.amoled [class*="settings"] .description,
+.amoled [class*="settings"] .info-text,
+.amoled [class*="settings"] .helper-text,
+.amoled [class*="settings"] .subtitle,
+.crimson-dark [class*="settings"] .description,
+.crimson-dark [class*="settings"] .info-text,
+.crimson-dark [class*="settings"] .helper-text,
+.crimson-dark [class*="settings"] .subtitle {
+  color: var(--text-secondary);
+}
+
+.dark [class*="settings"] .toggle-label,
+.dark [class*="settings"] .toggle-text,
+.amoled [class*="settings"] .toggle-label,
+.amoled [class*="settings"] .toggle-text,
+.crimson-dark [class*="settings"] .toggle-label,
+.crimson-dark [class*="settings"] .toggle-text {
+  color: var(--text-primary);
+}
+
+/* --- Input Bar: placeholder & text visibility --- */
+.dark .input-bar-glass input,
+.dark .input-bar-glass textarea,
+.dark .input-bar-glass [contenteditable],
+.amoled .input-bar-glass input,
+.amoled .input-bar-glass textarea,
+.amoled .input-bar-glass [contenteditable],
+.crimson-dark .input-bar-glass input,
+.crimson-dark .input-bar-glass textarea,
+.crimson-dark .input-bar-glass [contenteditable] {
+  color: var(--text-primary);
+}
+
+.dark .input-bar-glass input::placeholder,
+.dark .input-bar-glass textarea::placeholder,
+.amoled .input-bar-glass input::placeholder,
+.amoled .input-bar-glass textarea::placeholder,
+.crimson-dark .input-bar-glass input::placeholder,
+.crimson-dark .input-bar-glass textarea::placeholder {
+  color: var(--text-tertiary);
+}
+
+.dark .input-bar-glass button,
+.dark .input-bar-glass a,
+.amoled .input-bar-glass button,
+.amoled .input-bar-glass a,
+.crimson-dark .input-bar-glass button,
+.crimson-dark .input-bar-glass a {
+  color: var(--text-secondary);
+}
+
+/* --- Date Chips: readable text on dark --- */
+.dark .date-chip,
+.amoled .date-chip {
+  color: var(--text-secondary);
+}
+
+/* --- Bubble meta text (timestamps, read receipts) --- */
+.dark .bubble-sent .bubble-time,
+.dark .bubble-received .bubble-time,
+.amoled .bubble-sent .bubble-time,
+.amoled .bubble-received .bubble-time,
+.crimson-dark .bubble-sent .bubble-time,
+.crimson-dark .bubble-received .bubble-time {
+  color: var(--text-tertiary);
+  opacity: 1;
+}
+
+/* --- Nav pills in dark mode --- */
+.dark .nav-pill-active,
+.crimson-dark .nav-pill-active {
+  color: #ffffff;
+}
+
+.dark .nav-pill,
+.amoled .nav-pill,
+.crimson-dark .nav-pill {
+  color: var(--text-secondary);
+}
+
+/* --- Online status dot: visible ring on dark --- */
+.dark .online-dot,
+.amoled .online-dot,
+.crimson-dark .online-dot {
+  border-color: var(--bg-surface);
 }
 
 /* ============================================================
@@ -1170,11 +1393,12 @@ input, textarea, [contenteditable="true"] {
 }
 
 .dark .input-bar-glass {
-  background: rgba(20, 20, 20, 0.85);
+  background: rgba(22, 27, 34, 0.9);
+  border: 1px solid rgba(240, 246, 252, 0.08);
   box-shadow:
-    0 -2px 12px rgba(0, 0, 0, 0.2),
-    0 -1px 4px rgba(0, 0, 0, 0.15),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    0 -2px 12px rgba(0, 0, 0, 0.25),
+    0 -1px 4px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(240, 246, 252, 0.06);
 }
 
 .dark .input-bar-glass:focus-within {
@@ -1187,16 +1411,16 @@ input, textarea, [contenteditable="true"] {
 }
 
 .dark .header-glass {
-  background: rgba(10, 10, 10, 0.88);
-  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.2), 0 4px 16px rgba(0, 0, 0, 0.15);
+  background: rgba(13, 17, 23, 0.92);
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.25), 0 4px 16px rgba(0, 0, 0, 0.2);
 }
 
 .dark .chat-tile:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(240, 246, 252, 0.05);
 }
 
 .dark .chat-tile.active {
-  background: rgba(16, 185, 129, 0.1);
+  background: rgba(16, 185, 129, 0.12);
 }
 
 /* --- 15. AMOLED Refinements --- */
@@ -1212,8 +1436,8 @@ input, textarea, [contenteditable="true"] {
 }
 
 .amoled .glass-input-premium {
-  background: #0a0a0a;
-  border: 1px solid rgba(255, 255, 255, 0.03);
+  background: #0d0d0d;
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .amoled .glass-input-premium:focus {
@@ -1248,8 +1472,9 @@ input, textarea, [contenteditable="true"] {
 }
 
 .amoled .bubble-received {
-  background: #0a0a0a;
-  border: 1px solid rgba(255, 255, 255, 0.03);
+  background: #0d0d0d;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: #f0f6fc;
 }
 
 .amoled .input-bar-glass {
@@ -1285,8 +1510,8 @@ input, textarea, [contenteditable="true"] {
 }
 
 .amoled .typing-bubble {
-  background: rgba(10, 10, 10, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.03);
+  background: rgba(13, 13, 13, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 /* --- Crimson Dark Refinements --- */
@@ -1301,26 +1526,26 @@ input, textarea, [contenteditable="true"] {
 }
 
 .crimson-dark .bubble-received {
-  background: #1e1e28;
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  color: #e4e4ea;
+  background: #22222e;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  color: #eaeaf0;
 }
 
 .crimson-dark .glass-liquid {
-  background: linear-gradient(135deg, rgba(22, 22, 30, 0.85) 0%, rgba(15, 15, 19, 0.7) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  background: linear-gradient(135deg, rgba(26, 26, 36, 0.88) 0%, rgba(15, 15, 19, 0.72) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .crimson-dark .glass-header {
-  background: rgba(15, 15, 19, 0.92);
-  box-shadow: 0 0.5px 0 rgba(255, 255, 255, 0.04), 0 4px 24px rgba(0, 0, 0, 0.3);
+  background: rgba(15, 15, 19, 0.94);
+  box-shadow: 0 0.5px 0 rgba(255, 255, 255, 0.06), 0 4px 24px rgba(0, 0, 0, 0.3);
 }
 
 .crimson-dark .input-bar-glass {
-  background: rgba(22, 22, 30, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 -1px 12px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  background: rgba(26, 26, 36, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: 0 -1px 12px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .crimson-dark .input-bar-glass:focus-within {
@@ -1335,19 +1560,20 @@ input, textarea, [contenteditable="true"] {
 }
 
 .crimson-dark .typing-bubble {
-  background: rgba(22, 22, 30, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: rgba(26, 26, 36, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 .crimson-dark .date-chip {
-  background: rgba(30, 30, 40, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: rgba(34, 34, 46, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.07);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  color: #9595a5;
 }
 
 .crimson-dark .header-glass {
-  background: rgba(15, 15, 19, 0.94);
-  box-shadow: 0 0.5px 0 rgba(255, 255, 255, 0.04), 0 4px 24px rgba(0, 0, 0, 0.3);
+  background: rgba(15, 15, 19, 0.95);
+  box-shadow: 0 0.5px 0 rgba(255, 255, 255, 0.07), 0 4px 24px rgba(0, 0, 0, 0.3);
 }
 
 .crimson-dark .elevation-1 { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2); }

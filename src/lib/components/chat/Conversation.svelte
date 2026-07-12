@@ -451,6 +451,7 @@
             openReactionPicker={reactionPickerTargetId === msg.id}
             senderAccentColor={msg.sid === authStore.user?.id ? null : (chatStore.userDict.get(msg.sid)?.accentColor ?? null)}
             senderEmojiStatus={msg.sid === authStore.user?.id ? null : (chatStore.userDict.get(msg.sid)?.emojiStatus ?? null)}
+            senderAvatarUrl={chatStore.userDict.get(msg.sid)?.avatarUrl ?? null}
           />
         {/each}
       {/each}
