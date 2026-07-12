@@ -400,16 +400,15 @@ class ChatStore {
 
     const updates: Record<string, unknown> = {};
     updates[RTDB_PATHS.CHAT_MESSAGES(chatId) + '/' + messageId] = message;
-    updates[RTDB_PATHS.CHAT_META(chatId)] = {
-      id: chatId,
-      type: 'direct',
-      participantIds: meta?.participantIds ?? [user.id],
-      lm: lastMessageSnippet,
-      ts: message.ts,
-      updatedAt: message.ts,
-      wallpaper: meta?.wallpaper ?? null,
-      uploadedWallpapers: meta?.uploadedWallpapers ?? [],
-    };
+    // Use dot-notation to only update the fields that change — this preserves
+    // wallpaper, uploadedWallpapers, and any other meta fields untouched.
+    const metaPath = RTDB_PATHS.CHAT_META(chatId);
+    updates[metaPath + '/id'] = chatId;
+    updates[metaPath + '/type'] = 'direct';
+    updates[metaPath + '/participantIds'] = meta?.participantIds ?? [user.id];
+    updates[metaPath + '/lm'] = lastMessageSnippet;
+    updates[metaPath + '/ts'] = message.ts;
+    updates[metaPath + '/updatedAt'] = message.ts;
     const senderUC = this.userChats.get(chatId);
     updates[RTDB_PATHS.USER_CHAT_ENTRY(user.id, chatId)] = {
       chatId,
