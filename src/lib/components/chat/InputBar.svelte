@@ -173,7 +173,7 @@
 {#if isRecording}
   <VoiceRecorder onSend={sendVoice} onCancel={cancelRecording} />
 {:else}
-  <div class="input-shell safe-bottom" style="padding: 0 8px 2px;">
+  <div class="input-shell safe-bottom" style="padding: 0 24px 2px;">
 
     <!-- Upload progress -->
     {#if isUploading}
@@ -347,28 +347,27 @@
     }
   }
 
-  /* Input row — floating, blends with wallpaper */
+  /* Input row — compact floating pill */
   .input-row {
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     gap: 2px;
-    padding: 4px 4px 4px 2px;
+    padding: 6px 6px 6px 4px;
     border-radius: 28px;
-    background: color-mix(in srgb, var(--bg-surface) 60%, transparent);
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    background: var(--bg-surface);
     border: none;
     box-shadow: none;
-    transition: background-color 250ms ease, transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: background-color 200ms ease;
+    max-width: 600px;
+    margin: 0 auto;
   }
 
   .input-row-focused {
-    background: color-mix(in srgb, var(--bg-surface) 75%, transparent);
-    box-shadow: none;
+    background: var(--bg-surface);
   }
 
   .input-row-active {
-    background: color-mix(in srgb, var(--bg-surface) 68%, transparent);
+    background: var(--bg-elevated, var(--bg-surface));
   }
 
   .input-row-picker-open {

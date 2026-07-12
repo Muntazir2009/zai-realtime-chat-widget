@@ -984,8 +984,8 @@
     left: 0;
     right: 0;
     z-index: 30;
-    padding-bottom: 64px; /* space for bottom nav bar */
-    padding-top: 10px; /* push input bar down 10px */
+    padding-bottom: 52px; /* space for bottom nav bar */
+    padding-top: 0;
   }
 
   /* === TYPING AREA === */
