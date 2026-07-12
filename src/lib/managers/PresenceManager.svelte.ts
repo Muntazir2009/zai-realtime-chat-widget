@@ -168,7 +168,7 @@ class PresenceManager {
     const existingTimer = this.typingTimers.get(chatId);
     if (existingTimer) clearTimeout(existingTimer);
 
-    const timer = setTimeout(() => this.stopTyping(chatId), TYPING_DEBOUNCE_MS);
+    const timer = setTimeout(() => this.stopTyping(chatId), TYPING_DEBOUNCE_MS + 1000);
     this.typingTimers.set(chatId, timer);
   }
 
@@ -270,13 +270,16 @@ class PresenceManager {
   }
 
   private async writeTyping(chatId: string, uid: string, typing: boolean): Promise<void> {
-    rtdb.set(await rtdb.ref(RTDB_PATHS.TYPING(chatId, uid)), { typing, ts: Date.now() })
-      .catch(() => {});
-
-    if (!typing) {
-      setTimeout(async () => {
-        rtdb.remove(await rtdb.ref(RTDB_PATHS.TYPING(chatId, uid))).catch(() => {});
-      }, 3000);
+    try {
+      const ref = await rtdb.ref(RTDB_PATHS.TYPING(chatId, uid));
+      if (typing) {
+        await rtdb.set(ref, { typing: true, ts: Date.now() });
+      } else {
+        // Remove the typing node immediately when stopping
+        await rtdb.remove(ref).catch(() => {});
+      }
+    } catch (err) {
+      // Silently fail — typing is non-critical
     }
   }
 }

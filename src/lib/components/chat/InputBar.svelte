@@ -41,16 +41,9 @@
     }
   });
 
-  // ── Stop typing when cleared ──
-  $effect(() => {
-    if (message.trim().length === 0 && typingTimer) {
-      clearTimeout(typingTimer);
-      typingTimer = null;
-      if (chatStore.activeChatId) presenceManager.stopTyping(chatStore.activeChatId);
-    }
-  });
+  // ── Typing presence — dual trigger: oninput + $effect fallback ──
+  let lastEmittedTyping = 0;
 
-  // ── Typing presence ──
   function emitTyping() {
     if (!chatStore.activeChatId) return;
     if (!prefsStore.sendTypingIndicators) return;
@@ -58,8 +51,30 @@
     if (typingTimer) clearTimeout(typingTimer);
     typingTimer = setTimeout(() => {
       if (chatStore.activeChatId) presenceManager.stopTyping(chatStore.activeChatId);
-    }, 2000);
+    }, 3000);
+    lastEmittedTyping = Date.now();
   }
+
+  // Fallback: also emit typing when message content changes (covers edge cases
+  // where oninput might not fire, e.g. IME composition on mobile)
+  $effect(() => {
+    // Read message to track it as a dependency
+    const text = message;
+    if (text.trim().length > 0 && chatStore.activeChatId && prefsStore.sendTypingIndicators) {
+      const now = Date.now();
+      // Don't double-emit within 1.5s (oninput already handles it)
+      if (now - lastEmittedTyping > 1500) {
+        presenceManager.setTyping(chatStore.activeChatId);
+        lastEmittedTyping = now;
+      }
+    } else if (text.trim().length === 0) {
+      if (typingTimer) {
+        clearTimeout(typingTimer);
+        typingTimer = null;
+        if (chatStore.activeChatId) presenceManager.stopTyping(chatStore.activeChatId);
+      }
+    }
+  });
 
   function clearTyping() {
     if (typingTimer) clearTimeout(typingTimer);

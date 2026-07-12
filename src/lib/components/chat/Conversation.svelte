@@ -84,6 +84,9 @@
   let typingNames = $derived.by(() => {
     if (!chatStore.activeChatId || !authStore.user) return [];
     const chatId = chatStore.activeChatId;
+    // Access _typingTick to ensure reactivity triggers on every typing change
+    const _tick = (chatStore as any)._typingTick;
+    void _tick;
     const uids = chatStore.typingUsers.get(chatId);
     if (!uids) return [];
     // Only show OTHER users typing, not yourself

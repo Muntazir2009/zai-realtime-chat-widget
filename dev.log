@@ -68,3 +68,9 @@ https://svelte.dev/e/node_invalid_placement
 https://svelte.dev/e/a11y_click_events_have_key_events
 7:04:59 AM [vite-plugin-svelte] src/lib/components/chat/WallpaperPicker.svelte:456:2 Unused CSS selector ".wp-tile-photo .wp-tile-preview"
 https://svelte.dev/e/css_unused_selector
+7:20:13 AM [vite-plugin-svelte] src/lib/components/chat/Conversation.svelte:834:2 Unused CSS selector ".msg-scroll-wp"
+https://svelte.dev/e/css_unused_selector
+7:20:13 AM [vite-plugin-svelte] src/lib/components/chat/WallpaperPicker.svelte:144:0 Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events
+7:20:13 AM [vite-plugin-svelte] src/lib/components/chat/WallpaperPicker.svelte:456:2 Unused CSS selector ".wp-tile-photo .wp-tile-preview"
+https://svelte.dev/e/css_unused_selector

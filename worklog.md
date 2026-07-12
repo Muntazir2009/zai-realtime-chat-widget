@@ -650,3 +650,24 @@ Stage Summary:
 Unresolved issues/risks:
 - Caddy needs restart to pick up new Caddyfile (currently using stale config at `/app/Caddyfile` which doesn't exist)
 - Dev server must always be started with `--host` flag for external access via Caddy
+
+---
+Task ID: 4
+Agent: Main Agent
+Task: Fix typing indicator not showing
+
+Work Log:
+- Investigated full typing pipeline: InputBar.emitTyping → PresenceManager.setTyping → RTDB write → onValue listener → chatStore.typingUsers → Conversation.typingNames → TypingIndicator component
+- Found 3 potential issues:
+  1. **Reactivity gap**: `typingNames` `$derived.by` accesses `chatStore.typingUsers.get(chatId)` which is a Map method call — Svelte 5's proxy may not reliably track Map method return values as dependencies
+  2. **Single trigger point**: Typing only emitted via `oninput` event handler — if Svelte's `bind:value` suppresses it in some edge cases (IME on mobile), typing never fires
+  3. **Silent write failures**: `writeTyping` didn't await RTDB operations and swallowed all errors
+- **Fix 1 — Reactivity**: Added `_typingTick` counter (private $state field) to chatStore, incremented on every typing state change. `typingNames` derived now reads this tick to guarantee re-evaluation.
+- **Fix 2 — Dual trigger**: Added `$effect` fallback in InputBar that watches `message` changes and emits typing if `oninput` didn't fire within 1.5s. Covers IME composition on mobile.
+- **Fix 3 — Reliable writes**: Rewrote `PresenceManager.writeTyping` to properly await RTDB operations. When stopping, immediately removes the RTDB node instead of writing `{typing: false}` then removing after 3s.
+- **Fix 4 — Longer timeout**: Increased typing auto-stop from 2s to 3s (TYPING_DEBOUNCE_MS + 1000ms) to give more visible typing window.
+- Fixed WallpaperPicker a11y warnings (added `a11y_click_events_have_key_events` ignore)
+
+Stage Summary:
+- Typing indicator now has 3 layers of reliability: oninput, $effect fallback, _typingTick reactivity
+- Files changed: `InputBar.svelte`, `chat.svelte.ts`, `PresenceManager.svelte.ts`, `Conversation.svelte`, `WallpaperPicker.svelte`

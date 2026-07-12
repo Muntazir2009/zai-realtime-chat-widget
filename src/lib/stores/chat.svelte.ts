@@ -29,6 +29,8 @@ class ChatStore {
   // ---- Presence & typing ----
   presence: Map<string, PresenceState> = $state(new Map());
   typingUsers: Map<string, Set<string>> = $state(new Map());
+  // Reactive tick to force UI updates for typing indicator
+  private _typingTick: number = $state(0);
 
   // ---- Read receipts: track other user's lastReadMessageId per chat ----
   otherUserReadIds: Map<string, string> = $state(new Map()); // chatId → lrid
@@ -680,6 +682,7 @@ class ChatStore {
                 const m = new Map(this.typingUsers);
                 m.set(chatId, updated);
                 this.typingUsers = m;
+                this._typingTick++;
               }
               const timeouts = this.typingSafetyTimeouts.get(chatId);
               if (timeouts) timeouts.delete(uid);
@@ -689,6 +692,7 @@ class ChatStore {
         }
         newMap.set(chatId, set);
         this.typingUsers = newMap;
+        this._typingTick++; // Force reactive update for typing indicator UI
       });
       this.typingUnsubs.set(uid, unsub);
     }
