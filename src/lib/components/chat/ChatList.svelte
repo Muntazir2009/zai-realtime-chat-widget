@@ -216,10 +216,10 @@
                 onkeydown={(e) => e.key === 'Enter' && startNewChat(user.id)}
               >
                 <div class="newchat-avatar">
-                  {user.username.charAt(0).toUpperCase()}
+                  {(user.username || '?').charAt(0).toUpperCase()}
                 </div>
                 <div class="newchat-info">
-                  <p class="newchat-name">{user.displayName}</p>
+                  <p class="newchat-name">{user.displayName || 'Unknown'}</p>
                   <p class="newchat-handle">@{user.username}</p>
                 </div>
               </button>
