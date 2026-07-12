@@ -347,27 +347,39 @@
     }
   }
 
-  /* Input row — compact floating pill */
+  /* Input row — compact floating pill with 3D frosted glass corners */
   .input-row {
     display: flex;
     align-items: center;
     gap: 2px;
     padding: 6px 6px 6px 4px;
     border-radius: 28px;
-    background: var(--bg-surface);
-    border: none;
-    box-shadow: none;
-    transition: background-color 200ms ease;
+    background: color-mix(in srgb, var(--bg-surface) 72%, transparent);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border: 0.5px solid color-mix(in srgb, var(--border-subtle) 50%, transparent);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, white 12%, transparent),
+      inset 0 -0.5px 0 color-mix(in srgb, black 8%, transparent),
+      0 1px 3px color-mix(in srgb, black 6%, transparent),
+      0 4px 12px color-mix(in srgb, black 4%, transparent);
+    transition: background-color 200ms ease, box-shadow 250ms ease, border-color 250ms ease;
     max-width: 600px;
     margin: 0 auto;
   }
 
   .input-row-focused {
-    background: var(--bg-surface);
+    background: color-mix(in srgb, var(--bg-surface) 82%, transparent);
+    border-color: color-mix(in srgb, var(--color-primary) 20%, transparent);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, white 15%, transparent),
+      inset 0 -0.5px 0 color-mix(in srgb, black 8%, transparent),
+      0 0 0 2px color-mix(in srgb, var(--color-primary) 8%, transparent),
+      0 2px 8px color-mix(in srgb, black 6%, transparent);
   }
 
   .input-row-active {
-    background: var(--bg-elevated, var(--bg-surface));
+    background: color-mix(in srgb, var(--bg-elevated, var(--bg-surface)) 78%, transparent);
   }
 
   .input-row-picker-open {
