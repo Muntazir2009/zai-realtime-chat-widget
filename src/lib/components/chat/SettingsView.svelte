@@ -430,7 +430,7 @@
         <!-- Accent Color -->
         <div class="horiz-section">
           <span class="horiz-label"><Palette size={12} /> Accent</span>
-          <div class="color-scroll">
+          <div class="color-grid">
             {#each accentColors as c (c.label)}
               {@const isActive = currentAccentColor === c.value}
               <button
@@ -1083,17 +1083,10 @@
     margin-bottom: 8px;
   }
 
-  .color-scroll {
+  .color-grid {
     display: flex;
-    gap: 14px;
-    overflow-x: auto;
-    padding-bottom: 2px;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-  }
-
-  .color-scroll::-webkit-scrollbar {
-    display: none;
+    flex-wrap: wrap;
+    gap: 12px 14px;
   }
 
   .color-circle-wrap {
@@ -1105,8 +1098,9 @@
     cursor: pointer;
     border: none;
     background: none;
-    padding: 0;
+    padding: 4px;
     -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
     transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 

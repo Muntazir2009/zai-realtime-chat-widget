@@ -705,3 +705,32 @@ Stage Summary:
 - GIF picker has futuristic glass-morphism design
 - Dark mode has significantly improved text visibility and contrast across all themes
 - All changes pushed to git (commit 133783a7)
+
+---
+Task ID: 2-a
+Agent: Main Agent
+Task: Fix swipe-to-reply physics sticking and accent color not clickable
+
+Work Log:
+- Analyzed MessageBubble.svelte swipe-to-reply implementation
+- Identified root cause: `swipeTriggered` was a one-way boolean flag set to `true` when user crossed threshold during touchmove, but NEVER reset back to `false` if user pulled back below threshold. In `handleTouchEnd`, `shouldTrigger = swipeTriggered || ...` was always `true` once threshold was crossed, regardless of release position.
+- Removed `swipeTriggered` flag entirely
+- Rewrote `handleTouchEnd` to use final `currentOffset` position at release time instead of historical flag
+- Trigger conditions: (1) pulled past 80% of threshold at release, OR (2) past 40% with velocity > 0.4
+- Added `isSpringingBack` guard to prevent new touch events during spring-back animation
+- Improved spring-back animation: 500ms with overshoot cubic-bezier for natural feel
+- Changed from separate scale/transform transitions to unified spring transition
+
+- Analyzed SettingsView.svelte accent color section
+- Identified root cause: `.color-scroll` container used `overflow-x: auto` creating a horizontal scroll area that intercepts touch events on mobile (browser must distinguish scroll vs tap)
+- Changed container from `color-scroll` (overflow-x: auto) to `color-grid` (flex-wrap: wrap) — no scrolling needed, all colors visible in a wrapped grid
+- Added `touch-action: manipulation` to `.color-circle-wrap` to prevent 300ms click delay on mobile
+- Added `padding: 4px` to buttons for larger tap target
+- Cleaned up unused `.color-scroll` CSS
+
+Stage Summary:
+- Swipe-to-reply no longer sticks: if user pulls past threshold then pulls back and releases, it correctly springs back without triggering reply
+- Spring-back animation is smoother with overshoot cubic-bezier
+- New touches are ignored during spring-back animation (prevents stuck state)
+- Accent color buttons now use flex-wrap layout instead of horizontal scroll, fixing click/tap interception on mobile
+- Added touch-action: manipulation for instant tap response

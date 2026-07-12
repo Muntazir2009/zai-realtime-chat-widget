@@ -86,17 +86,16 @@
   let lastTouchTime = 0;
   let velocityX = 0;
   let isSwiping = false; // plain var, not reactive
-  let swipeTriggered = false; // plain var
   let longPressTimer: ReturnType<typeof setTimeout> | null = null;
   let lastTapTime = 0;
   let touchStartTime = 0;
   let rowEl: HTMLDivElement | undefined;
   let swipeFlash = $state(false);
   let showSwipeIndicator = $state(false); // only toggles at threshold, not every frame
+  let isSpringingBack = false;
 
   const SWIPE_THRESHOLD = 60;
   const ELASTIC_FACTOR = 0.2;
-  const VELOCITY_THRESHOLD = 0.25;
 
   function applySwipeTransform(offset: number, scale: number = 1) {
     if (!rowEl) return;
@@ -109,13 +108,21 @@
 
   function resetSwipeTransform() {
     if (!rowEl) return;
-    rowEl.style.transition = 'transform 400ms cubic-bezier(0.25, 1, 0.5, 1), opacity 300ms ease, scale 350ms cubic-bezier(0.34, 1.56, 0.64, 1)';
+    isSpringingBack = true;
+    // Spring-like overshoot: overshoots slightly past 0 then settles
+    rowEl.style.transition = 'transform 500ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 350ms ease';
     rowEl.style.transform = 'translateX(0) scale(1)';
     rowEl.style.opacity = '1';
-    setTimeout(() => { if (rowEl) rowEl.style.transition = ''; }, 450);
+    setTimeout(() => {
+      if (rowEl) rowEl.style.transition = '';
+      isSpringingBack = false;
+    }, 550);
   }
 
   function handleTouchStart(e: TouchEvent) {
+    // Ignore if already springing back from a previous swipe
+    if (isSpringingBack) return;
+
     touchStartX = e.touches[0].clientX;
     touchStartY = e.touches[0].clientY;
     lastTouchX = touchStartX;
@@ -123,7 +130,7 @@
     lastTouchTime = Date.now();
     velocityX = 0;
     isSwiping = false;
-    swipeTriggered = false;
+    currentOffset = 0;
     showSwipeIndicator = false;
 
     // Ensure entrance animation doesn't block inline transform for swipe
@@ -138,6 +145,8 @@
   }
 
   function handleTouchMove(e: TouchEvent) {
+    if (isSpringingBack) return;
+
     const cx = e.touches[0].clientX;
     const cy = e.touches[0].clientY;
     const now = Date.now();
@@ -156,27 +165,25 @@
 
       let effectiveDx: number;
       if (rawDx > SWIPE_THRESHOLD) {
+        // Elastic zone: rubber-band resistance
         const beyond = rawDx - SWIPE_THRESHOLD;
         effectiveDx = SWIPE_THRESHOLD + beyond * ELASTIC_FACTOR;
       } else {
-        // Smooth ease-in curve: starts slow, accelerates
+        // Ease-in curve: starts slow, accelerates toward threshold
         const t = rawDx / SWIPE_THRESHOLD;
         effectiveDx = rawDx * (0.4 + 0.6 * t * t);
       }
       currentOffset = effectiveDx * (isOwn ? -1 : 1);
 
       // Direct DOM manipulation for 60fps
-      const scale = swipeFlash ? 0.97 : 1;
-      applySwipeTransform(currentOffset, scale);
+      applySwipeTransform(currentOffset, 1);
 
-      // Only update reactive state when crossing threshold (minimal re-renders)
+      // Show/hide indicator based on live position (not a flag)
       if (rawDx >= SWIPE_THRESHOLD * 0.35 && !showSwipeIndicator) {
         showSwipeIndicator = true;
       } else if (rawDx < SWIPE_THRESHOLD * 0.2 && showSwipeIndicator) {
         showSwipeIndicator = false;
       }
-
-      if (rawDx >= SWIPE_THRESHOLD && !swipeTriggered) swipeTriggered = true;
     } else if (dy > 10 && rawDx < 15) {
       if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
     }
@@ -184,9 +191,17 @@
 
   function handleTouchEnd() {
     if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    if (isSpringingBack) return;
 
-    const shouldTrigger = swipeTriggered ||
-      (Math.abs(currentOffset) >= SWIPE_THRESHOLD * 0.7 && Math.abs(velocityX) > VELOCITY_THRESHOLD);
+    // Decision is based purely on WHERE the finger is at release + velocity
+    const absOffset = Math.abs(currentOffset);
+    const absVelocity = Math.abs(velocityX);
+
+    // Trigger reply if:
+    // 1. Pulled past 80% of threshold (forgiving), OR
+    // 2. Near threshold (40%+) with a fast fling
+    const shouldTrigger = absOffset >= SWIPE_THRESHOLD * 0.8 ||
+      (absOffset >= SWIPE_THRESHOLD * 0.4 && absVelocity > 0.4);
 
     if (shouldTrigger) {
       navigator.vibrate?.(30);
@@ -197,14 +212,15 @@
         swipeFlash = false;
         resetSwipeTransform();
         showSwipeIndicator = false;
-      }, 300);
+      }, 250);
     } else {
+      // Spring back smoothly — the key fix: always springs back if not triggered
       resetSwipeTransform();
       showSwipeIndicator = false;
     }
     isSwiping = false;
-    swipeTriggered = false;
     currentOffset = 0;
+    velocityX = 0;
   }
 
   function handleContextMenu(e: MouseEvent) {
