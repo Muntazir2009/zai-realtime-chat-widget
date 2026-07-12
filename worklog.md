@@ -734,3 +734,24 @@ Stage Summary:
 - New touches are ignored during spring-back animation (prevents stuck state)
 - Accent color buttons now use flex-wrap layout instead of horizontal scroll, fixing click/tap interception on mobile
 - Added touch-action: manipulation for instant tap response
+
+---
+Task ID: 2-b
+Agent: Main Agent
+Task: Fix user search in new chat sheet
+
+Work Log:
+- Analyzed ChatList.svelte "Start a conversation" sheet
+- Found that the new chat sheet loads all users from RTDB but had NO search input — just a flat list of all users
+- Added `newChatSearch` state variable for the search query
+- Created `filteredAvailableUsers` derived that filters by displayName and username (case-insensitive substring match)
+- Added a pill-shaped search input with Search icon, matching the existing chat search bar style
+- Added clear button (X) when search has text
+- Wrapped user list in scrollable container (max-height: 280px)
+- Empty state now shows contextual message: "No users match your search" vs "No users found"
+- Search resets when opening/closing the new chat sheet
+
+Stage Summary:
+- New chat sheet now has a functional search input that filters users by name or username in real-time
+- Scrollable user list with hidden scrollbar for clean appearance
+- Search input has focus ring animation matching the app's design language

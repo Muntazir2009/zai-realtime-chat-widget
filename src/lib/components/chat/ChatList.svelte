@@ -10,6 +10,7 @@
   let availableUsers: Array<{ id: string; username: string; displayName: string }> = $state([]);
   let isLoadingUsers = $state(false);
   let searchQuery = $state('');
+  let newChatSearch = $state('');
   let filterMode = $state<'all' | 'unread'>('all');
   let showSearch = $state(false);
 
@@ -47,9 +48,21 @@
     }
   }
 
+  let filteredAvailableUsers = $derived.by(() => {
+    if (!newChatSearch.trim()) return availableUsers;
+    const q = newChatSearch.toLowerCase().trim();
+    return availableUsers.filter(u =>
+      u.displayName.toLowerCase().includes(q) ||
+      u.username.toLowerCase().includes(q)
+    );
+  });
+
   function handleShowNewChat() {
     showNewChat = !showNewChat;
-    if (showNewChat) loadAvailableUsers();
+    if (showNewChat) {
+      newChatSearch = '';
+      loadAvailableUsers();
+    }
   }
 
   let totalUnread = $derived(
@@ -167,32 +180,52 @@
             <X size={15} />
           </button>
         </div>
-        {#if isLoadingUsers}
-          <div class="newchat-loading">
-            <Loader2 size={18} class="animate-spin" style="color: var(--text-tertiary);" />
-            <span style="color: var(--text-tertiary);">Loading...</span>
+        <!-- Search input for filtering users -->
+        <div class="newchat-search-wrap">
+          <div class="newchat-search-inner">
+            <Search size={14} style="color: var(--text-tertiary); flex-shrink: 0;" />
+            <input
+              type="text"
+              class="newchat-search-input"
+              placeholder="Search by name or username..."
+              bind:value={newChatSearch}
+              autocomplete="off"
+            />
+            {#if newChatSearch}
+              <button class="newchat-search-clear" onclick={() => (newChatSearch = '')} aria-label="Clear search">
+                <X size={12} />
+              </button>
+            {/if}
           </div>
-        {:else if availableUsers.length === 0}
-          <div class="newchat-empty">
-            <span style="color: var(--text-tertiary);">No users found</span>
-          </div>
-        {:else}
-          {#each availableUsers as user (user.id)}
-            <button
-              class="newchat-user"
-              onclick={() => startNewChat(user.id)}
-              onkeydown={(e) => e.key === 'Enter' && startNewChat(user.id)}
-            >
-              <div class="newchat-avatar">
-                {user.username.charAt(0).toUpperCase()}
-              </div>
-              <div class="newchat-info">
-                <p class="newchat-name">{user.displayName}</p>
-                <p class="newchat-handle">@{user.username}</p>
-              </div>
-            </button>
-          {/each}
-        {/if}
+        </div>
+        <div class="newchat-list">
+          {#if isLoadingUsers}
+            <div class="newchat-loading">
+              <Loader2 size={18} class="animate-spin" style="color: var(--text-tertiary);" />
+              <span style="color: var(--text-tertiary);">Loading...</span>
+            </div>
+          {:else if filteredAvailableUsers.length === 0}
+            <div class="newchat-empty">
+              <span style="color: var(--text-tertiary);">{newChatSearch.trim() ? 'No users match your search' : 'No users found'}</span>
+            </div>
+          {:else}
+            {#each filteredAvailableUsers as user (user.id)}
+              <button
+                class="newchat-user"
+                onclick={() => startNewChat(user.id)}
+                onkeydown={(e) => e.key === 'Enter' && startNewChat(user.id)}
+              >
+                <div class="newchat-avatar">
+                  {user.username.charAt(0).toUpperCase()}
+                </div>
+                <div class="newchat-info">
+                  <p class="newchat-name">{user.displayName}</p>
+                  <p class="newchat-handle">@{user.username}</p>
+                </div>
+              </button>
+            {/each}
+          {/if}
+        </div>
       </div>
     </div>
   {/if}
@@ -487,7 +520,76 @@
     border-radius: var(--radius-lg, 16px);
     padding: 12px;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
+
+  .newchat-search-wrap {
+    margin-bottom: 8px;
+  }
+
+  .newchat-search-inner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 10px;
+    height: 34px;
+    border-radius: var(--radius-pill, 99px);
+    background: var(--input-bg);
+    border: 1.5px solid var(--border-subtle);
+    transition: border-color 300ms cubic-bezier(0.4, 0, 0.2, 1),
+                box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1),
+                background 300ms ease;
+  }
+
+  .newchat-search-inner:focus-within {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 15%, transparent);
+    background: var(--bg-surface);
+  }
+
+  .newchat-search-input {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: var(--font-sans, inherit);
+    line-height: 1;
+  }
+  .newchat-search-input::placeholder {
+    color: var(--text-tertiary);
+  }
+  .newchat-search-inner:focus-within .newchat-search-input::placeholder {
+    opacity: 0.5;
+  }
+
+  .newchat-search-clear {
+    min-width: 20px;
+    min-height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    transition: transform 150ms ease, background 150ms ease;
+    -webkit-tap-highlight-color: transparent;
+    padding: 0;
+  }
+  .newchat-search-clear:active { transform: scale(0.85); background: var(--border-subtle); }
+
+  .newchat-list {
+    max-height: 280px;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scrollbar-width: none;
+  }
+  .newchat-list::-webkit-scrollbar { display: none; }
 
   .newchat-header {
     display: flex;
