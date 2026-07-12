@@ -3,6 +3,7 @@
   import ChatTile from './ChatTile.svelte';
   import { chatStore } from '$lib/stores/chat.svelte';
   import { uiStore } from '$lib/stores/ui.svelte';
+  import { toastStore } from '$lib/stores/toast.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
   import * as rtdb from '$lib/firebase/rtdb';
 
@@ -45,6 +46,7 @@
       showNewChat = false;
     } catch (err) {
       console.error('Failed to create chat:', err);
+      toastStore.show(err instanceof Error ? err.message : 'Failed to start chat', 'error');
     }
   }
 

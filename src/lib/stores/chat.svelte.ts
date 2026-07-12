@@ -514,6 +514,7 @@ class ChatStore {
     const user = authStore.user;
     if (!user) throw new Error('Not authenticated');
 
+    // Check if a direct chat with this user already exists (local + server)
     for (const [, meta] of this.chats) {
       if (meta.type === 'direct' &&
           meta.participantIds.includes(user.id) &&
@@ -535,7 +536,7 @@ class ChatStore {
     const data = await res.json() as { chatId: string };
     const chatId = data.chatId;
 
-    // Set local state immediately
+    // Set local state immediately so the chat appears in inbox
     const now = Date.now();
     const meta: ChatMeta = {
       id: chatId,
@@ -551,6 +552,15 @@ class ChatStore {
     const ucMap = new Map(this.userChats);
     ucMap.set(chatId, { chatId, uid: user.id, lrid: null, uc: 0, jt: now });
     this.userChats = ucMap;
+
+    // Fetch the other user's profile so the chat tile can show name/avatar
+    if (!this.userDict.has(otherUserId)) {
+      this.fetchUser(otherUserId);
+    }
+
+    // Attach a real-time meta listener so the inbox stays in sync when
+    // messages are sent and the chat meta (lm, ts) changes on the server.
+    this.attachChatMetaListener(chatId).catch(() => {});
 
     return chatId;
   }

@@ -84,51 +84,106 @@
   let currentOffset = 0;
   let lastTouchX = 0;
   let lastTouchTime = 0;
-  let velocityX = 0;
   let isSwiping = false; // plain var, not reactive
   let longPressTimer: ReturnType<typeof setTimeout> | null = null;
   let lastTapTime = 0;
   let touchStartTime = 0;
   let rowEl: HTMLDivElement | undefined;
   let swipeFlash = $state(false);
-  let showSwipeIndicator = $state(false); // only toggles at threshold, not every frame
-  let isSpringingBack = false;
+  let showSwipeIndicator = $state(false);
+  let isAnimating = false;
+  let animFrameId: number | null = null;
 
-  const SWIPE_THRESHOLD = 60;
-  const ELASTIC_FACTOR = 0.2;
+  const SWIPE_THRESHOLD = 55;
+  const MAX_PULL = 100;
+
+  // Exponential moving average for velocity (smoother than raw)
+  let velocitySamples: Array<{ v: number; t: number }> = [];
+  const VELOCITY_WINDOW = 120; // ms
+
+  function getSmoothedVelocity(): number {
+    const now = Date.now();
+    // Keep only recent samples
+    velocitySamples = velocitySamples.filter(s => now - s.t < VELOCITY_WINDOW);
+    if (velocitySamples.length === 0) return 0;
+    // Weighted average: more recent = higher weight
+    let totalWeight = 0;
+    let weightedSum = 0;
+    for (const s of velocitySamples) {
+      const age = (now - s.t) / VELOCITY_WINDOW;
+      const weight = 1 - age;
+      weightedSum += s.v * weight;
+      totalWeight += weight;
+    }
+    return totalWeight > 0 ? weightedSum / totalWeight : 0;
+  }
 
   function applySwipeTransform(offset: number, scale: number = 1) {
     if (!rowEl) return;
     rowEl.style.transition = 'none';
     rowEl.style.transform = `translateX(${offset}px) scale(${scale})`;
-    // Subtle opacity fade at extreme offsets
-    const progress = Math.min(Math.abs(offset) / 120, 1);
-    rowEl.style.opacity = String(1 - progress * 0.15);
   }
 
-  function resetSwipeTransform() {
-    if (!rowEl) return;
-    isSpringingBack = true;
-    // Spring-like overshoot: overshoots slightly past 0 then settles
-    rowEl.style.transition = 'transform 500ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 350ms ease';
-    rowEl.style.transform = 'translateX(0) scale(1)';
-    rowEl.style.opacity = '1';
-    setTimeout(() => {
-      if (rowEl) rowEl.style.transition = '';
-      isSpringingBack = false;
-    }, 550);
+  function animateSpringBack(fromOffset: number, initialVelocity: number) {
+    if (animFrameId) cancelAnimationFrame(animFrameId);
+    isAnimating = true;
+
+    let offset = fromOffset;
+    let velocity = initialVelocity;
+    const stiffness = 0.12;  // spring pull strength
+    const damping = 0.72;    // friction (lower = more bouncy)
+    const now = performance.now();
+    let lastTime = now;
+
+    function step(time: number) {
+      const dt = Math.min((time - lastTime) / 16.67, 3); // normalize to ~60fps, cap at 3 frames
+      lastTime = time;
+
+      // Spring force: pulls toward 0
+      const springForce = -offset * stiffness;
+      // Damping: slows down velocity
+      const dampingForce = -velocity * (1 - damping);
+      velocity += (springForce + dampingForce) * dt;
+      offset += velocity * dt;
+
+      const absOffset = Math.abs(offset);
+      const absVelocity = Math.abs(velocity);
+
+      if (!rowEl) { isAnimating = false; return; }
+
+      // Apply transform with subtle scale based on offset
+      const scale = 1 - absOffset * 0.0003;
+      rowEl.style.transform = `translateX(${offset}px) scale(${Math.max(0.97, Math.min(1, scale))})`;
+      rowEl.style.opacity = String(Math.max(0.85, 1 - absOffset * 0.001));
+
+      // Stop when close to rest
+      if (absOffset < 0.3 && absVelocity < 0.05) {
+        rowEl.style.transform = 'translateX(0) scale(1)';
+        rowEl.style.opacity = '1';
+        isAnimating = false;
+        animFrameId = null;
+        return;
+      }
+
+      animFrameId = requestAnimationFrame(step);
+    }
+
+    animFrameId = requestAnimationFrame(step);
   }
 
   function handleTouchStart(e: TouchEvent) {
-    // Ignore if already springing back from a previous swipe
-    if (isSpringingBack) return;
+    if (isAnimating) {
+      // Cancel any running spring animation
+      if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
+      isAnimating = false;
+    }
 
     touchStartX = e.touches[0].clientX;
     touchStartY = e.touches[0].clientY;
     lastTouchX = touchStartX;
     touchStartTime = Date.now();
     lastTouchTime = Date.now();
-    velocityX = 0;
+    velocitySamples = [];
     isSwiping = false;
     currentOffset = 0;
     showSwipeIndicator = false;
@@ -145,16 +200,12 @@
   }
 
   function handleTouchMove(e: TouchEvent) {
-    if (isSpringingBack) return;
+    if (isAnimating) return;
 
     const cx = e.touches[0].clientX;
     const cy = e.touches[0].clientY;
     const now = Date.now();
     const dt = now - lastTouchTime;
-    if (dt > 0) velocityX = (cx - lastTouchX) / dt;
-    lastTouchX = cx;
-    lastTouchTime = now;
-
     const rawDx = isOwn ? touchStartX - cx : cx - touchStartX;
     const dy = Math.abs(cy - touchStartY);
 
@@ -165,62 +216,81 @@
 
       let effectiveDx: number;
       if (rawDx > SWIPE_THRESHOLD) {
-        // Elastic zone: rubber-band resistance
-        const beyond = rawDx - SWIPE_THRESHOLD;
-        effectiveDx = SWIPE_THRESHOLD + beyond * ELASTIC_FACTOR;
+        // Soft elastic zone: cubic dampening for natural rubber-band feel
+        const normalized = (rawDx - SWIPE_THRESHOLD) / (MAX_PULL - SWIPE_THRESHOLD);
+        const clamped = Math.min(normalized, 1);
+        const elastic = 1 - Math.pow(1 - clamped, 3); // ease-out cubic
+        effectiveDx = SWIPE_THRESHOLD + elastic * (MAX_PULL - SWIPE_THRESHOLD) * 0.5;
       } else {
-        // Ease-in curve: starts slow, accelerates toward threshold
+        // Smooth ease-in: responsive from the start
         const t = rawDx / SWIPE_THRESHOLD;
-        effectiveDx = rawDx * (0.4 + 0.6 * t * t);
+        effectiveDx = rawDx * (0.6 + 0.4 * t);
       }
       currentOffset = effectiveDx * (isOwn ? -1 : 1);
 
-      // Direct DOM manipulation for 60fps
-      applySwipeTransform(currentOffset, 1);
+      applySwipeTransform(currentOffset);
 
-      // Show/hide indicator based on live position (not a flag)
-      if (rawDx >= SWIPE_THRESHOLD * 0.35 && !showSwipeIndicator) {
+      // Track velocity samples for smooth averaging (BEFORE updating lastTouchX)
+      if (dt > 0 && dt < 100) {
+        velocitySamples.push({ v: (cx - lastTouchX) / dt, t: now });
+        if (velocitySamples.length > 6) velocitySamples.shift();
+      }
+
+      // Show/hide indicator based on live position
+      if (rawDx >= SWIPE_THRESHOLD * 0.3 && !showSwipeIndicator) {
         showSwipeIndicator = true;
-      } else if (rawDx < SWIPE_THRESHOLD * 0.2 && showSwipeIndicator) {
+      } else if (rawDx < SWIPE_THRESHOLD * 0.15 && showSwipeIndicator) {
         showSwipeIndicator = false;
       }
     } else if (dy > 10 && rawDx < 15) {
       if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
     }
+
+    lastTouchX = cx;
+    lastTouchTime = now;
   }
 
   function handleTouchEnd() {
     if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
-    if (isSpringingBack) return;
+    if (isAnimating) return;
 
-    // Decision is based purely on WHERE the finger is at release + velocity
     const absOffset = Math.abs(currentOffset);
-    const absVelocity = Math.abs(velocityX);
+    const velocity = getSmoothedVelocity();
+    const absVelocity = Math.abs(velocity);
+    // Project where the offset would end up based on velocity (in pixels)
+    const projectedOffset = absOffset + absVelocity * 180;
 
-    // Trigger reply if:
-    // 1. Pulled past 80% of threshold (forgiving), OR
-    // 2. Near threshold (40%+) with a fast fling
-    const shouldTrigger = absOffset >= SWIPE_THRESHOLD * 0.8 ||
-      (absOffset >= SWIPE_THRESHOLD * 0.4 && absVelocity > 0.4);
+    // Trigger reply if projected to pass threshold or already past it
+    const shouldTrigger = projectedOffset >= SWIPE_THRESHOLD * 0.85 || absOffset >= SWIPE_THRESHOLD * 0.85;
 
     if (shouldTrigger) {
-      navigator.vibrate?.(30);
+      navigator.vibrate?.(25);
       swipeFlash = true;
-      applySwipeTransform(currentOffset, 0.97);
+      if (rowEl) {
+        rowEl.style.transition = 'transform 200ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms ease';
+        rowEl.style.transform = `translateX(${currentOffset}px) scale(0.97)`;
+        rowEl.style.opacity = '0.9';
+      }
       onSwipeReply?.(msg);
       setTimeout(() => {
         swipeFlash = false;
-        resetSwipeTransform();
         showSwipeIndicator = false;
-      }, 250);
+        if (rowEl) {
+          rowEl.style.transition = 'transform 350ms cubic-bezier(0.22, 1, 0.36, 1), opacity 250ms ease';
+          rowEl.style.transform = 'translateX(0) scale(1)';
+          rowEl.style.opacity = '1';
+          setTimeout(() => { if (rowEl) rowEl.style.transition = ''; }, 400);
+        }
+      }, 200);
     } else {
-      // Spring back smoothly — the key fix: always springs back if not triggered
-      resetSwipeTransform();
+      // Spring back with momentum — the offset and velocity carry into the animation
+      const releaseVelocity = velocity * 8; // amplify for visible fling
+      animateSpringBack(currentOffset, releaseVelocity);
       showSwipeIndicator = false;
     }
     isSwiping = false;
     currentOffset = 0;
-    velocityX = 0;
+    velocitySamples = [];
   }
 
   function handleContextMenu(e: MouseEvent) {
