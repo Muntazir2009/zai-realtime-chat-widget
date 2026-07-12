@@ -15,43 +15,20 @@
   let isUploading = $state(false);
   let uploadProgress = $state(0);
   let activeTab = $state<'presets' | 'custom' | 'cloud'>('presets');
-
-  // ── Uploaded wallpapers (localStorage) ──
-  const STORAGE_KEY = 'chat-uploaded-wallpapers';
   const MAX_UPLOADED = 20;
 
-  let uploadedWallpapers = $state<string[]>([]);
-
-  function loadUploadedWallpapers() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) uploadedWallpapers = JSON.parse(raw) as string[];
-    } catch { /* ignore */ }
-  }
-
-  function saveUploadedWallpapers(list: string[]) {
-    uploadedWallpapers = list;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-    } catch { /* ignore */ }
-  }
-
-  function addToUploaded(url: string) {
-    const list = [url, ...uploadedWallpapers.filter(u => u !== url)].slice(0, MAX_UPLOADED);
-    saveUploadedWallpapers(list);
-  }
+  // ── Shared uploaded wallpapers (from Firebase RTDB) ──
+  let uploadedWallpapers = $derived(
+    chatStore.chats.get(chatId)?.uploadedWallpapers ?? []
+  );
 
   function removeFromUploaded(url: string) {
-    saveUploadedWallpapers(uploadedWallpapers.filter(u => u !== url));
+    chatStore.removeChatUploadedWallpaper(chatId, url);
     // If the removed wallpaper was active, clear it
     if (currentWallpaper === url) {
       chatStore.setChatWallpaper(chatId, null);
     }
-    toastStore.info('Wallpaper removed from gallery');
   }
-
-  // Load on mount
-  loadUploadedWallpapers();
 
   const presetWallpapers = [
     { id: 'none', label: 'Default', preview: 'var(--bg-page)', css: '' },
@@ -124,11 +101,9 @@
     uploadProgress = 0;
     try {
       const result = await uploadFile(file, 'wallpapers', `wp-${Date.now()}.jpg`, (pct) => { uploadProgress = pct; });
-      // Save to uploaded gallery
-      addToUploaded(result.publicUrl);
-      // Set as current wallpaper
-      await chatStore.setChatWallpaper(chatId, result.publicUrl);
-      onClose();
+      // Save to shared uploaded gallery (Firebase) and local cache
+      await chatStore.addChatUploadedWallpaper(chatId, result.publicUrl);
+      toastStore.success('Wallpaper uploaded — tap to apply');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('Wallpaper upload failed:', msg);
@@ -163,7 +138,7 @@
       </button>
       <button class="wp-tab" class:wp-tab-active={activeTab === 'custom'} onclick={() => (activeTab = 'custom')}>
         <Upload size={14} />
-        <span>My Uploads</span>
+        <span>Shared Uploads</span>
       </button>
     </div>
 

@@ -407,6 +407,8 @@ class ChatStore {
       lm: lastMessageSnippet,
       ts: message.ts,
       updatedAt: message.ts,
+      wallpaper: meta?.wallpaper ?? null,
+      uploadedWallpapers: meta?.uploadedWallpapers ?? [],
     };
     const senderUC = this.userChats.get(chatId);
     updates[RTDB_PATHS.USER_CHAT_ENTRY(user.id, chatId)] = {
@@ -1107,6 +1109,47 @@ class ChatStore {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('[setChatWallpaper]', msg);
       toastStore.error(`Failed to set wallpaper`);
+    }
+  }
+
+  /** Add a wallpaper URL to the shared uploaded gallery for this chat. */
+  async addChatUploadedWallpaper(chatId: string, url: string): Promise<void> {
+    try {
+      const meta = this.chats.get(chatId);
+      if (!meta) return;
+      const current = meta.uploadedWallpapers ?? [];
+      // Deduplicate and cap at 20
+      const updated = [url, ...current.filter(u => u !== url)].slice(0, 20);
+      const metaRef = await rtdb.ref(RTDB_PATHS.CHAT_META(chatId));
+      await rtdb.update(metaRef, { uploadedWallpapers: updated } as any);
+      // Optimistic local update
+      const newMap = new Map(this.chats);
+      newMap.set(chatId, { ...meta, uploadedWallpapers: updated });
+      this.chats = newMap;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[addChatUploadedWallpaper]', msg);
+      toastStore.error('Failed to save wallpaper');
+    }
+  }
+
+  /** Remove a wallpaper URL from the shared uploaded gallery for this chat. */
+  async removeChatUploadedWallpaper(chatId: string, url: string): Promise<void> {
+    try {
+      const meta = this.chats.get(chatId);
+      if (!meta) return;
+      const current = meta.uploadedWallpapers ?? [];
+      const updated = current.filter(u => u !== url);
+      const metaRef = await rtdb.ref(RTDB_PATHS.CHAT_META(chatId));
+      await rtdb.update(metaRef, { uploadedWallpapers: updated } as any);
+      // Optimistic local update
+      const newMap = new Map(this.chats);
+      newMap.set(chatId, { ...meta, uploadedWallpapers: updated });
+      this.chats = newMap;
+      toastStore.info('Wallpaper removed');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[removeChatUploadedWallpaper]', msg);
     }
   }
 

@@ -31,6 +31,8 @@ export interface ChatMeta {
   updatedAt: number;
   /** Per-chat wallpaper: preset ID, URL, or null for default */
   wallpaper?: string | null;
+  /** Shared uploaded wallpaper URLs visible to all participants */
+  uploadedWallpapers?: string[];
 }
 
 /* ---------- Message ---------- */
