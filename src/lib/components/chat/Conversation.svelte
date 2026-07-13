@@ -81,6 +81,20 @@
     return chatStore.presence.get(otherUser.id) ?? null;
   });
 
+  // Tick every 30s so "Last seen Xm ago" re-formats without needing presence changes
+  let presenceTick = $state(0);
+  $effect(() => {
+    const t = setInterval(() => { presenceTick++; }, 30_000);
+    return () => clearInterval(t);
+  });
+
+  let formattedLastSeen = $derived.by(() => {
+    void presenceTick; // track tick so this re-evaluates
+    if (!otherPresence || !otherPresence.lastSeen) return null;
+    if (otherPresence.status === 'online') return null;
+    return formatLastSeen(otherPresence.lastSeen);
+  });
+
   let typingNames = $derived.by(() => {
     if (!chatStore.activeChatId || !authStore.user) return [];
     const chatId = chatStore.activeChatId;
@@ -389,8 +403,8 @@
             <p class="header-sub header-online">Online</p>
           {:else if otherPresence}
             <p class="header-sub header-away">
-              {otherPresence.status === 'offline' && otherPresence.lastSeen > 0
-                ? `Last seen ${formatLastSeen(otherPresence.lastSeen)}`
+              {otherPresence.status === 'offline' && formattedLastSeen
+                ? `Last seen ${formattedLastSeen}`
                 : otherPresence.status === 'away' ? 'Away' : 'Offline'}
             </p>
           {:else}
