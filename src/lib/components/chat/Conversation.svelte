@@ -23,6 +23,7 @@
   let showMediaGallery = $state(false);
   let showWallpaperPicker = $state(false);
   let showPinnedPanel = $state(false);
+  let pinBannerPointerStart: { x: number; y: number } | null = null;
   let isMuted = $state(false);
   let contextMenuMsg: Message | null = $state(null);
   let showContextMenu = $state(false);
@@ -393,6 +394,20 @@
       chatStore.messages = [];
     }
   }
+
+  // Pin banner tap detection (reliable on mobile)
+  function onPinBannerPointerDown(e: PointerEvent) {
+    pinBannerPointerStart = { x: e.clientX, y: e.clientY };
+  }
+  function onPinBannerPointerUp(e: PointerEvent) {
+    if (!pinBannerPointerStart) return;
+    const dx = Math.abs(e.clientX - pinBannerPointerStart.x);
+    const dy = Math.abs(e.clientY - pinBannerPointerStart.y);
+    pinBannerPointerStart = null;
+    if (dx < 10 && dy < 10) {
+      showPinnedPanel = true;
+    }
+  }
 </script>
 
 <svelte:window ontouchstart={handleGlobalTouchStart} onkeydown={handleKeyDown} />
@@ -458,7 +473,7 @@
 
   <!-- Pinned Banner -->
   {#if sortedPinned.length > 0}
-    <button class="pin-banner" onclick={() => (showPinnedPanel = true)} aria-label="View pinned messages">
+    <button class="pin-banner" onpointerdown={onPinBannerPointerDown} onpointerup={onPinBannerPointerUp} onpointercancel={() => (pinBannerPointerStart = null)} aria-label="View pinned messages">
       <div class="pin-inner">
         <Pin size={13} style="color: var(--color-primary); flex-shrink: 0;" />
         <div class="pin-content">
@@ -941,6 +956,10 @@
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
     transition: background 150ms ease;
+    position: relative;
+    z-index: 5;
+    touch-action: manipulation;
+    min-height: 44px;
   }
   .pin-banner:active { background: color-mix(in srgb, var(--input-bg) 60%, transparent); }
 
