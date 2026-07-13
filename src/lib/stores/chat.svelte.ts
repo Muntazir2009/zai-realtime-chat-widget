@@ -147,10 +147,19 @@ class ChatStore {
         newMap.set(chatId, meta);
         this.chats = newMap;
         // Fetch participant profiles if not cached
+        const otherIds: string[] = [];
         for (const pid of meta.participantIds) {
           if (!this.userDict.has(pid)) {
             this.fetchUser(pid);
           }
+          // Collect other users (not self) for presence listening
+          if (pid !== authStore.user?.id) {
+            otherIds.push(pid);
+          }
+        }
+        // Ensure presence listeners for inbox participants (real-time online dots)
+        if (otherIds.length > 0) {
+          this.ensurePresenceListeners(otherIds);
         }
       }
     });
@@ -330,7 +339,7 @@ class ChatStore {
       this.messageRemovedUnsub();
       this.messageRemovedUnsub = null;
     }
-    this.detachPresenceListeners();
+    // Don't detach presence listeners — they stay global for the inbox online dots
     this.detachTypingListener();
     this.detachOtherUserReadListener();
     this.detachPinnedListener();
@@ -595,7 +604,14 @@ class ChatStore {
   private async attachPresenceListeners(chatId: string): Promise<void> {
     const meta = this.chats.get(chatId);
     if (!meta) return;
-    for (const uid of meta.participantIds) {
+    const uids = meta.participantIds.filter((uid) => uid !== authStore.user?.id);
+    await this.ensurePresenceListeners(uids);
+    this.startPresenceStaleCheck();
+  }
+
+  /** Idempotent: attaches presence listeners for the given UIDs if not already subscribed */
+  async ensurePresenceListeners(uids: string[]): Promise<void> {
+    for (const uid of uids) {
       if (this.presenceUnsubs.has(uid)) continue;
       const r = await rtdb.ref(RTDB_PATHS.PRESENCE(uid));
       const unsub = await rtdb.onValue(r, (snap) => {
@@ -836,6 +852,7 @@ class ChatStore {
   detachAllListeners(): void {
     this.detachInboxListener();
     this.closeChat();
+    this.detachPresenceListeners(); // Full cleanup on logout
     this.detachSelfProfileListener();
   }
 
