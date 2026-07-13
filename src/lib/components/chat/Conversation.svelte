@@ -1019,7 +1019,7 @@
   }
 
   .scroll-bottom-pad {
-    height: 200px;
+    height: 12px;
     flex-shrink: 0;
   }
 
@@ -1047,7 +1047,7 @@
   /* === SCROLL FAB === */
   .scroll-fab {
     position: absolute;
-    bottom: 200px;
+    bottom: 80px;
     right: 12px;
     border-radius: 50%;
     border: none;
@@ -1163,15 +1163,11 @@
     margin: 0;
   }
 
-  /* === FLOATING INPUT AREA === */
+  /* === FLOATING INPUT AREA (in flex flow, not absolute) === */
   .floating-input-area {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
+    flex-shrink: 0;
+    position: relative;
     z-index: 30;
-    padding-bottom: 52px; /* space for bottom nav bar */
-    padding-top: 0;
   }
 
   /* === TYPING AREA === */
