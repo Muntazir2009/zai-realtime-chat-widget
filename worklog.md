@@ -801,3 +801,14 @@ Stage Summary:
 - Pushed commit 6ca31f09 to main
 - DM list online indicator CSS appears structurally correct (presence listeners are global, dot has proper styling with z-index 2)
 - Input bar 3D edges and visibility improvement remains a pending task
+---
+Task ID: input-bar-lift
+Agent: Main Agent
+Task: Lift up the input bar by 5px
+
+Work Log:
+- Added `margin-bottom: -5px` to `.floating-input-area` in Conversation.svelte to lift the input bar up by 5px
+
+Stage Summary:
+- Input bar raised by 5px via negative margin-bottom on the floating-input-area container
+

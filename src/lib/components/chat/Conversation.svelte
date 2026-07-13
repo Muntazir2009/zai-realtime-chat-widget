@@ -1168,6 +1168,7 @@
     flex-shrink: 0;
     position: relative;
     z-index: 30;
+    margin-bottom: -5px;
   }
 
   /* === TYPING AREA === */
