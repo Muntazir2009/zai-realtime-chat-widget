@@ -1226,12 +1226,23 @@
 
   /* Message highlight animation for reply-tap navigation */
   [data-msg-id].msg-highlight {
-    animation: msgHighlight 1.5s ease both;
+    position: relative;
   }
 
-  @keyframes msgHighlight {
-    0% { background: color-mix(in srgb, var(--color-primary) 15%, transparent); border-radius: 12px; }
-    30% { background: color-mix(in srgb, var(--color-primary) 20%, transparent); border-radius: 12px; }
-    100% { background: transparent; border-radius: 12px; }
+  [data-msg-id].msg-highlight::before {
+    content: '';
+    position: absolute;
+    inset: 0 6px;
+    border-radius: 14px;
+    background: var(--color-primary);
+    animation: msgHighlightOverlay 1.6s ease both;
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  @keyframes msgHighlightOverlay {
+    0% { opacity: 0.2; }
+    15% { opacity: 0.25; }
+    100% { opacity: 0; }
   }
 </style>

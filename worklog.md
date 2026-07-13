@@ -755,3 +755,19 @@ Stage Summary:
 - New chat sheet now has a functional search input that filters users by name or username in real-time
 - Scrollable user list with hidden scrollbar for clean appearance
 - Search input has focus ring animation matching the app's design language
+
+---
+Task ID: 1
+Agent: main
+Task: Fix reply embed highlight not visible + accent color selection indicator stuck
+
+Work Log:
+- Diagnosed highlight issue: old CSS used `background` on the `[data-msg-id]` wrapper div, which was completely hidden behind the MessageBubble's own opaque background
+- Replaced with `::before` pseudo-element overlay approach: absolutely positioned, `z-index: 2` above the bubble, `pointer-events: none`, with accent color at 20-25% opacity fading to 0 over 1.6s
+- Diagnosed accent color issue: `updateProfile()` optimistically updated `authStore.user.displayName` but NOT `authStore.user.accentColor`. The derived `userProfile` reads from `chatStore.userDict` first (which had stale data), so the UI selection indicator never moved
+- Fixed by optimistically updating both `authStore.user` and `chatStore.userDict` with the new `accentColor` in `updateProfile()`
+- Confirmed InputBar.svelte build failure was already fixed (wrappers are on `<div>` elements)
+
+Stage Summary:
+- Conversation.svelte: Rewrote highlight CSS from background-based (invisible) to ::before pseudo-element overlay (visible tint above bubble)
+- SettingsView.svelte: Added optimistic update of both `authStore.user` and `chatStore.userDict` when accentColor changes, so the color-grid selection indicator updates immediately

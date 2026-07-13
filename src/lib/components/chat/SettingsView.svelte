@@ -173,8 +173,14 @@
       if (fields.displayName && authStore.user) {
         authStore.user = { ...authStore.user, displayName: fields.displayName as string };
       }
-      // Apply accent color locally to --color-primary
-      if ('accentColor' in fields) {
+      // Optimistically update authStore.user + userDict so derived UI reacts immediately
+      if ('accentColor' in fields && authStore.user) {
+        const updated = { ...authStore.user, accentColor: fields.accentColor as string | null };
+        authStore.user = updated;
+        // Also patch userDict so userProfile derived picks it up
+        const m = new Map(chatStore.userDict);
+        m.set(authStore.user.id, updated);
+        chatStore.userDict = m;
         applyLocalAccentColor(fields.accentColor as string | null);
       }
       toastStore.show('Profile updated', 'success');
