@@ -173,6 +173,10 @@
       if (fields.displayName && authStore.user) {
         authStore.user = { ...authStore.user, displayName: fields.displayName as string };
       }
+      // Apply accent color locally to --color-primary
+      if ('accentColor' in fields) {
+        applyLocalAccentColor(fields.accentColor as string | null);
+      }
       toastStore.show('Profile updated', 'success');
     } catch (err) {
       toastStore.show(err instanceof Error ? err.message : 'Failed to update', 'error');
@@ -180,6 +184,25 @@
       isSavingProfile = false;
     }
   }
+
+  function applyLocalAccentColor(color: string | null) {
+    const root = document.documentElement;
+    if (color) {
+      root.style.setProperty('--color-primary', color);
+      // Compute a lighter variant for backgrounds
+      root.style.setProperty('--color-primary-light', color + '20');
+    } else {
+      root.style.removeProperty('--color-primary');
+      root.style.removeProperty('--color-primary-light');
+    }
+  }
+
+  // Apply accent color on mount if already set
+  $effect(() => {
+    if (currentAccentColor) {
+      applyLocalAccentColor(currentAccentColor);
+    }
+  });
 
   async function handleAvatarUpload() {
     const input = document.createElement('input');

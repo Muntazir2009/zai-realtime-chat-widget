@@ -126,6 +126,25 @@
     return chatStore.messages.find(m => m.id === msg.rid) ?? null;
   }
 
+  // Scroll to a specific message and highlight it
+  let highlightedMsgId = $state<string | null>(null);
+  function scrollToMessage(messageId: string) {
+    const el = messagesContainer?.querySelector(`[data-msg-id="${messageId}"]`);
+    if (!el || !messagesContainer) return;
+    // Remove previous highlight
+    if (highlightedMsgId) {
+      const prev = messagesContainer.querySelector(`[data-msg-id="${highlightedMsgId}"]`);
+      prev?.classList.remove('msg-highlight');
+    }
+    highlightedMsgId = messageId;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('msg-highlight');
+    setTimeout(() => {
+      el.classList.remove('msg-highlight');
+      if (highlightedMsgId === messageId) highlightedMsgId = null;
+    }, 1500);
+  }
+
   // Scroll tracking
   function updateScrollState() {
     if (!messagesContainer) return;
@@ -434,6 +453,7 @@
           {@const nextMsg = idx < group.messages.length - 1 ? group.messages[idx + 1] : null}
           {@const isConsecutive = prevMsg?.sid === msg.sid}
           {@const isLastInGroup = nextMsg?.sid !== msg.sid}
+          <div data-msg-id={msg.id}>
           <MessageBubble
             {msg}
             {isOwn}
@@ -448,11 +468,13 @@
             onImageTap={handleImageTap}
             onReaction={handleReaction}
             onSwipeReply={handleSwipeReply}
+            onReplyTap={scrollToMessage}
             openReactionPicker={reactionPickerTargetId === msg.id}
             senderAccentColor={msg.sid === authStore.user?.id ? null : (chatStore.userDict.get(msg.sid)?.accentColor ?? null)}
             senderEmojiStatus={msg.sid === authStore.user?.id ? null : (chatStore.userDict.get(msg.sid)?.emojiStatus ?? null)}
             senderAvatarUrl={chatStore.userDict.get(msg.sid)?.avatarUrl ?? null}
           />
+          </div>
         {/each}
       {/each}
     {/if}
@@ -1200,5 +1222,16 @@
   @keyframes typingFadeIn {
     from { opacity: 0; transform: translateY(4px); }
     to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Message highlight animation for reply-tap navigation */
+  [data-msg-id].msg-highlight {
+    animation: msgHighlight 1.5s ease both;
+  }
+
+  @keyframes msgHighlight {
+    0% { background: color-mix(in srgb, var(--color-primary) 15%, transparent); border-radius: 12px; }
+    30% { background: color-mix(in srgb, var(--color-primary) 20%, transparent); border-radius: 12px; }
+    100% { background: transparent; border-radius: 12px; }
   }
 </style>

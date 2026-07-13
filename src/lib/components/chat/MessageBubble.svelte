@@ -65,6 +65,7 @@
     onImageTap?: (imageUrl: string, caption?: string) => void;
     onReaction?: (msg: Message, emoji: string) => void;
     onSwipeReply?: (msg: Message) => void;
+    onReplyTap?: (messageId: string) => void;
     openReactionPicker?: boolean;
     senderAccentColor?: string | null;
     senderEmojiStatus?: string | null;
@@ -74,121 +75,33 @@
   let {
     msg, isOwn, showAvatar = false, senderName, isGrouped = false,
     isPinned = false, isStarred = false, replyPreviewMsg,
-    onReply, onLongPress, onImageTap, onReaction, onSwipeReply,
+    onReply, onLongPress, onImageTap, onReaction, onSwipeReply, onReplyTap,
     openReactionPicker = false, senderAccentColor = null, senderEmojiStatus = null, senderAvatarUrl = null,
   }: Props = $props();
 
   // --- Swipe physics state ---
   let touchStartX = 0;
   let touchStartY = 0;
-  let currentOffset = 0;
   let lastTouchX = 0;
   let lastTouchTime = 0;
-  let isSwiping = false; // plain var, not reactive
+  let isSwiping = false;
   let longPressTimer: ReturnType<typeof setTimeout> | null = null;
   let lastTapTime = 0;
-  let touchStartTime = 0;
   let rowEl: HTMLDivElement | undefined;
   let swipeFlash = $state(false);
   let showSwipeIndicator = $state(false);
-  let isAnimating = false;
-  let animFrameId: number | null = null;
 
-  const SWIPE_THRESHOLD = 55;
-  const MAX_PULL = 100;
-
-  // Exponential moving average for velocity (smoother than raw)
-  let velocitySamples: Array<{ v: number; t: number }> = [];
-  const VELOCITY_WINDOW = 120; // ms
-
-  function getSmoothedVelocity(): number {
-    const now = Date.now();
-    // Keep only recent samples
-    velocitySamples = velocitySamples.filter(s => now - s.t < VELOCITY_WINDOW);
-    if (velocitySamples.length === 0) return 0;
-    // Weighted average: more recent = higher weight
-    let totalWeight = 0;
-    let weightedSum = 0;
-    for (const s of velocitySamples) {
-      const age = (now - s.t) / VELOCITY_WINDOW;
-      const weight = 1 - age;
-      weightedSum += s.v * weight;
-      totalWeight += weight;
-    }
-    return totalWeight > 0 ? weightedSum / totalWeight : 0;
-  }
-
-  function applySwipeTransform(offset: number, scale: number = 1) {
-    if (!rowEl) return;
-    rowEl.style.transition = 'none';
-    rowEl.style.transform = `translateX(${offset}px) scale(${scale})`;
-  }
-
-  function animateSpringBack(fromOffset: number, initialVelocity: number) {
-    if (animFrameId) cancelAnimationFrame(animFrameId);
-    isAnimating = true;
-
-    let offset = fromOffset;
-    let velocity = initialVelocity;
-    const stiffness = 0.12;  // spring pull strength
-    const damping = 0.72;    // friction (lower = more bouncy)
-    const now = performance.now();
-    let lastTime = now;
-
-    function step(time: number) {
-      const dt = Math.min((time - lastTime) / 16.67, 3); // normalize to ~60fps, cap at 3 frames
-      lastTime = time;
-
-      // Spring force: pulls toward 0
-      const springForce = -offset * stiffness;
-      // Damping: slows down velocity
-      const dampingForce = -velocity * (1 - damping);
-      velocity += (springForce + dampingForce) * dt;
-      offset += velocity * dt;
-
-      const absOffset = Math.abs(offset);
-      const absVelocity = Math.abs(velocity);
-
-      if (!rowEl) { isAnimating = false; return; }
-
-      // Apply transform with subtle scale based on offset
-      const scale = 1 - absOffset * 0.0003;
-      rowEl.style.transform = `translateX(${offset}px) scale(${Math.max(0.97, Math.min(1, scale))})`;
-      rowEl.style.opacity = String(Math.max(0.85, 1 - absOffset * 0.001));
-
-      // Stop when close to rest
-      if (absOffset < 0.3 && absVelocity < 0.05) {
-        rowEl.style.transform = 'translateX(0) scale(1)';
-        rowEl.style.opacity = '1';
-        isAnimating = false;
-        animFrameId = null;
-        return;
-      }
-
-      animFrameId = requestAnimationFrame(step);
-    }
-
-    animFrameId = requestAnimationFrame(step);
-  }
+  const SWIPE_THRESHOLD = 50;
+  const MAX_PULL = 90;
 
   function handleTouchStart(e: TouchEvent) {
-    if (isAnimating) {
-      // Cancel any running spring animation
-      if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
-      isAnimating = false;
-    }
-
     touchStartX = e.touches[0].clientX;
     touchStartY = e.touches[0].clientY;
     lastTouchX = touchStartX;
-    touchStartTime = Date.now();
     lastTouchTime = Date.now();
-    velocitySamples = [];
     isSwiping = false;
-    currentOffset = 0;
     showSwipeIndicator = false;
 
-    // Ensure entrance animation doesn't block inline transform for swipe
     if (rowEl) rowEl.style.animation = 'none';
 
     longPressTimer = setTimeout(() => {
@@ -200,97 +113,94 @@
   }
 
   function handleTouchMove(e: TouchEvent) {
-    if (isAnimating) return;
-
     const cx = e.touches[0].clientX;
     const cy = e.touches[0].clientY;
-    const now = Date.now();
-    const dt = now - lastTouchTime;
     const rawDx = isOwn ? touchStartX - cx : cx - touchStartX;
     const dy = Math.abs(cy - touchStartY);
 
-    if (rawDx > 8 && dy < rawDx * 0.7) {
+    if (rawDx > 6 && dy < rawDx * 0.6) {
       e.preventDefault();
-      isSwiping = true;
-      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+      if (!isSwiping) {
+        isSwiping = true;
+        if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+      }
 
-      let effectiveDx: number;
-      if (rawDx > SWIPE_THRESHOLD) {
-        // Soft elastic zone: cubic dampening for natural rubber-band feel
-        const normalized = (rawDx - SWIPE_THRESHOLD) / (MAX_PULL - SWIPE_THRESHOLD);
-        const clamped = Math.min(normalized, 1);
-        const elastic = 1 - Math.pow(1 - clamped, 3); // ease-out cubic
-        effectiveDx = SWIPE_THRESHOLD + elastic * (MAX_PULL - SWIPE_THRESHOLD) * 0.5;
+      // Simple linear drag with mild rubber-band past threshold
+      let offset: number;
+      if (rawDx <= SWIPE_THRESHOLD) {
+        offset = rawDx;
       } else {
-        // Smooth ease-in: responsive from the start
-        const t = rawDx / SWIPE_THRESHOLD;
-        effectiveDx = rawDx * (0.6 + 0.4 * t);
+        const over = rawDx - SWIPE_THRESHOLD;
+        offset = SWIPE_THRESHOLD + over * 0.3;
       }
-      currentOffset = effectiveDx * (isOwn ? -1 : 1);
+      offset = Math.min(offset, MAX_PULL);
+      const direction = isOwn ? -1 : 1;
 
-      applySwipeTransform(currentOffset);
-
-      // Track velocity samples for smooth averaging (BEFORE updating lastTouchX)
-      if (dt > 0 && dt < 100) {
-        velocitySamples.push({ v: (cx - lastTouchX) / dt, t: now });
-        if (velocitySamples.length > 6) velocitySamples.shift();
+      if (rowEl) {
+        rowEl.style.transition = 'none';
+        rowEl.style.transform = `translateX(${offset * direction}px)`;
       }
 
-      // Show/hide indicator based on live position
-      if (rawDx >= SWIPE_THRESHOLD * 0.3 && !showSwipeIndicator) {
+      // Show/hide indicator
+      if (rawDx >= SWIPE_THRESHOLD * 0.4 && !showSwipeIndicator) {
         showSwipeIndicator = true;
-      } else if (rawDx < SWIPE_THRESHOLD * 0.15 && showSwipeIndicator) {
+      } else if (rawDx < SWIPE_THRESHOLD * 0.2 && showSwipeIndicator) {
         showSwipeIndicator = false;
       }
-    } else if (dy > 10 && rawDx < 15) {
+    } else if (dy > 10 && rawDx < 12 && !isSwiping) {
       if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
     }
 
     lastTouchX = cx;
-    lastTouchTime = now;
+    lastTouchTime = Date.now();
   }
 
   function handleTouchEnd() {
     if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
-    if (isAnimating) return;
+    if (!isSwiping) return;
 
-    const absOffset = Math.abs(currentOffset);
-    const velocity = getSmoothedVelocity();
-    const absVelocity = Math.abs(velocity);
-    // Project where the offset would end up based on velocity (in pixels)
-    const projectedOffset = absOffset + absVelocity * 180;
+    // Calculate velocity from last two touch points
+    const dt = Date.now() - lastTouchTime;
+    const dx = Math.abs(lastTouchX - (isOwn ? touchStartX : touchStartX));
+    const velocity = dt > 0 ? dx / dt : 0; // px/ms
 
-    // Trigger reply if projected to pass threshold or already past it
-    const shouldTrigger = projectedOffset >= SWIPE_THRESHOLD * 0.85 || absOffset >= SWIPE_THRESHOLD * 0.85;
+    // Read current transform to get actual offset
+    const style = rowEl?.style.transform || '';
+    const match = style.match(/translateX\((-?\d+\.?\d*)px\)/);
+    const currentPx = match ? Math.abs(parseFloat(match[1])) : 0;
 
-    if (shouldTrigger) {
+    const shouldTrigger = currentPx >= SWIPE_THRESHOLD * 0.75 || (currentPx >= SWIPE_THRESHOLD * 0.3 && velocity > 0.3);
+
+    if (shouldTrigger && rowEl) {
       navigator.vibrate?.(25);
       swipeFlash = true;
-      if (rowEl) {
-        rowEl.style.transition = 'transform 200ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms ease';
-        rowEl.style.transform = `translateX(${currentOffset}px) scale(0.97)`;
-        rowEl.style.opacity = '0.9';
-      }
+      const dir = isOwn ? -1 : 1;
+      // Quick snap out then back
+      rowEl.style.transition = 'transform 150ms ease-out, opacity 150ms ease';
+      rowEl.style.transform = `translateX(${SWIPE_THRESHOLD * dir}px) scale(0.97)`;
+      rowEl.style.opacity = '0.85';
       onSwipeReply?.(msg);
       setTimeout(() => {
         swipeFlash = false;
         showSwipeIndicator = false;
         if (rowEl) {
-          rowEl.style.transition = 'transform 350ms cubic-bezier(0.22, 1, 0.36, 1), opacity 250ms ease';
+          rowEl.style.transition = 'transform 300ms cubic-bezier(0.25, 1, 0.5, 1), opacity 200ms ease';
           rowEl.style.transform = 'translateX(0) scale(1)';
           rowEl.style.opacity = '1';
-          setTimeout(() => { if (rowEl) rowEl.style.transition = ''; }, 400);
+          setTimeout(() => { if (rowEl) rowEl.style.transition = ''; }, 350);
         }
-      }, 200);
-    } else {
-      // Spring back with momentum — the offset and velocity carry into the animation
-      const releaseVelocity = velocity * 8; // amplify for visible fling
-      animateSpringBack(currentOffset, releaseVelocity);
+      }, 150);
+    } else if (rowEl) {
+      // Smooth spring-back with CSS transition (no rAF needed)
       showSwipeIndicator = false;
+      const duration = Math.min(200 + currentPx * 2, 400);
+      rowEl.style.transition = `transform ${duration}ms cubic-bezier(0.25, 1, 0.5, 1)`;
+      rowEl.style.transform = 'translateX(0) scale(1)';
+      rowEl.style.opacity = '1';
+      setTimeout(() => { if (rowEl) rowEl.style.transition = ''; }, duration + 50);
     }
+
     isSwiping = false;
-    currentOffset = 0;
-    velocitySamples = [];
   }
 
   function handleContextMenu(e: MouseEvent) {
@@ -357,7 +267,7 @@
 
   // Detect if message is emoji-only for larger display
   const isEmojiOnly = $derived(
-    msg.t === 'text' && /^[\p{Emoji_Presentation}\p{Extended_Pictographic}\u{FE0F}\u{200D}\u{20E3}\u{200C}]+$/u.test(msg.c.trim()) && msg.c.trim().length <= 12
+    msg.t === 'text' && /^[\p{Emoji_Presentation}\p{Extended_Pictographic}\u{FE0F}\u{200D}\u{20E3}\u{200C}\u{1F3FB}\u{1F3FC}\u{1F3FD}\u{1F3FE}\u{1F3FF}\u{1F9B0}\u{1F9B1}\u{1F9B2}\u{1F9B3}\u{1F9B4}\u{1F9B5}\u{1F9B6}\u{1F9B7}\u{1F9B8}\u{1F9B9}\u{1F9BA}\u{1F9BB}\u{1F9BC}\u{1F9BD}]+$/u.test(msg.c.trim()) && msg.c.trim().length <= 20
   );
 
   // --- Reactions ---
@@ -435,7 +345,14 @@
     >
     <!-- Reply Preview -->
     {#if msg.rid}
-      <div class="rply-bar">
+      <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+      <div
+        class="rply-bar"
+        role="button"
+        tabindex={0}
+        onclick={(e) => { e.stopPropagation(); onReplyTap?.(msg.rid!); }}
+        onkeydown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); onReplyTap?.(msg.rid!); } }}
+      >
         <div class="rply-accent"></div>
         <div class="rply-body">
           {#if replyPreviewMsg}
@@ -736,8 +653,8 @@
   }
 
   .bbl-emoji-text {
-    font-size: 64px;
-    line-height: 1.1;
+    font-size: 80px;
+    line-height: 1.15;
   }
 
   /* === CONTENT === */
@@ -808,6 +725,12 @@
     position: relative;
     z-index: 1;
     max-width: 100%;
+    cursor: pointer;
+    transition: opacity 150ms ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .rply-bar:active {
+    opacity: 0.7;
   }
 
   .bbl-sent .rply-bar {
