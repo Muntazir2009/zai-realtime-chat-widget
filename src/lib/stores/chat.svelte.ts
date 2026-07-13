@@ -56,6 +56,7 @@ class ChatStore {
 
   // ---- Pinned messages ----
   pinnedMessages: Map<string, Message> = $state(new Map());
+  pinnedMeta: Map<string, { pinnedBy: string; pinnedAt: number }> = $state(new Map());
   private pinnedUnsub: (() => void) | null = null;
   private pinnedRemovedUnsub: (() => void) | null = null;
 
@@ -899,6 +900,10 @@ class ChatStore {
         }
       }
       this.pinnedMessages = newMap;
+      // Track pinned metadata
+      const newMeta = new Map(this.pinnedMeta);
+      newMeta.set(data.messageId, { pinnedBy: data.pinnedBy, pinnedAt: data.pinnedAt });
+      this.pinnedMeta = newMeta;
     });
 
     this.pinnedRemovedUnsub = await rtdb.onChildRemoved(r, (snap) => {
@@ -907,6 +912,9 @@ class ChatStore {
       const newMap = new Map(this.pinnedMessages);
       newMap.delete(msgId);
       this.pinnedMessages = newMap;
+      const newMeta = new Map(this.pinnedMeta);
+      newMeta.delete(msgId);
+      this.pinnedMeta = newMeta;
     });
   }
 
@@ -920,6 +928,7 @@ class ChatStore {
       this.pinnedRemovedUnsub = null;
     }
     this.pinnedMessages = new Map();
+    this.pinnedMeta = new Map();
   }
 
   async togglePin(chatId: string, msg: Message): Promise<void> {
@@ -933,10 +942,16 @@ class ChatStore {
       const newMap = new Map(this.pinnedMessages);
       newMap.delete(msg.id);
       this.pinnedMessages = newMap;
+      const newMeta = new Map(this.pinnedMeta);
+      newMeta.delete(msg.id);
+      this.pinnedMeta = newMeta;
     } else if (this.pinnedMessages.size < 3) {
       const newMap = new Map(this.pinnedMessages);
       newMap.set(msg.id, msg);
       this.pinnedMessages = newMap;
+      const newMeta = new Map(this.pinnedMeta);
+      newMeta.set(msg.id, { pinnedBy: user.id, pinnedAt: Date.now() });
+      this.pinnedMeta = newMeta;
     } else {
       toastStore.warning('Maximum 3 pinned messages');
       return;
@@ -962,10 +977,16 @@ class ChatStore {
         const newMap = new Map(this.pinnedMessages);
         newMap.set(msg.id, msg);
         this.pinnedMessages = newMap;
+        const newMeta = new Map(this.pinnedMeta);
+        newMeta.set(msg.id, { pinnedBy: user.id, pinnedAt: Date.now() });
+        this.pinnedMeta = newMeta;
       } else {
         const newMap = new Map(this.pinnedMessages);
         newMap.delete(msg.id);
         this.pinnedMessages = newMap;
+        const newMeta = new Map(this.pinnedMeta);
+        newMeta.delete(msg.id);
+        this.pinnedMeta = newMeta;
       }
       const msg2 = err instanceof Error ? err.message : String(err);
       console.error('[togglePin]', msg2);

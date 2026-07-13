@@ -22,6 +22,7 @@
   let showMenu = $state(false);
   let showMediaGallery = $state(false);
   let showWallpaperPicker = $state(false);
+  let showPinnedPanel = $state(false);
   let isMuted = $state(false);
   let contextMenuMsg: Message | null = $state(null);
   let showContextMenu = $state(false);
@@ -111,9 +112,29 @@
 
   let sortedPinned = $derived.by(() => {
     return Array.from(chatStore.pinnedMessages.entries())
-      .sort((a, b) => b[1].ts - a[1].ts)
-      .map(([id, msg]) => ({ id, msg }));
+      .sort((a, b) => {
+        const metaA = chatStore.pinnedMeta.get(a[0]);
+        const metaB = chatStore.pinnedMeta.get(b[0]);
+        return (metaB?.pinnedAt ?? 0) - (metaA?.pinnedAt ?? 0);
+      })
+      .map(([id, msg]) => ({
+        id,
+        msg,
+        pinnedBy: chatStore.pinnedMeta.get(id)?.pinnedBy ?? '',
+        pinnedAt: chatStore.pinnedMeta.get(id)?.pinnedAt ?? 0,
+      }));
   });
+
+  // For pinned panel: who pinned each message
+  let pinnedItemAuthor = $derived.by((() => {
+    const cache = new Map<string, string>();
+    return (uid: string) => {
+      if (cache.has(uid)) return cache.get(uid)!;
+      const name = chatStore.userDict.get(uid)?.displayName ?? 'Unknown';
+      cache.set(uid, name);
+      return name;
+    };
+  })());
 
   let messageGroups = $derived.by(() => {
     const groups: Array<{ date: string; isToday: boolean; isYesterday: boolean; messages: typeof chatStore.messages }> = [];
@@ -325,6 +346,20 @@
     return new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric' });
   }
 
+  function formatPinnedTime(ts: number): string {
+    if (!ts) return '';
+    const now = Date.now();
+    const diff = now - ts;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'Just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days}d ago`;
+    return new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric' });
+  }
+
   // Close menu on any touch that isn't a deliberate tap on the menu button
   function handleGlobalTouchStart(e: TouchEvent) {
     if (!showMenu) return;
@@ -423,15 +458,16 @@
 
   <!-- Pinned Banner -->
   {#if sortedPinned.length > 0}
-    <div class="pin-banner">
+    <button class="pin-banner" onclick={() => (showPinnedPanel = true)} aria-label="View pinned messages">
       <div class="pin-inner">
-        <Pin size={12} style="color: var(--color-primary); flex-shrink: 0;" />
+        <Pin size={13} style="color: var(--color-primary); flex-shrink: 0;" />
         <div class="pin-content">
           <p class="pin-label">Pinned{sortedPinned.length > 1 ? ` (${sortedPinned.length})` : ''}</p>
-          <p class="pin-text">{sortedPinned[0].msg.t === 'image' ? '📷 Photo' : sortedPinned[0].msg.c.slice(0, 80)}</p>
+          <p class="pin-text">{sortedPinned[0].msg.t === 'image' ? '📷 Photo' : sortedPinned[0].msg.c.slice(0, 60)}</p>
         </div>
+        <svg class="pin-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
       </div>
-    </div>
+    </button>
   {/if}
 
   <!-- Messages -->
@@ -640,6 +676,81 @@
   />
 {/if}
 
+<!-- Pinned Messages Panel -->
+{#if showPinnedPanel}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="pin-panel-backdrop" onclick={() => (showPinnedPanel = false)} onkeydown={(e) => e.key === 'Escape' && (showPinnedPanel = false)}>
+    <div class="pin-panel-sheet" onclick={(e) => e.stopPropagation()}>
+      <!-- Header -->
+      <div class="pin-panel-header">
+        <div class="pin-panel-title-wrap">
+          <Pin size={16} style="color: var(--color-primary);" />
+          <h2 class="pin-panel-title">Pinned Messages</h2>
+          <span class="pin-panel-count">{sortedPinned.length}</span>
+        </div>
+        <button class="pin-panel-close" onclick={() => (showPinnedPanel = false)} aria-label="Close">
+          <X size={18} />
+        </button>
+      </div>
+
+      <!-- Pinned list -->
+      <div class="pin-panel-list">
+        {#each sortedPinned as item (item.id)}
+          {@const senderName = chatStore.userDict.get(item.msg.sid)?.displayName ?? 'Unknown'}
+          {@const isOwn = item.msg.sid === authStore.user?.id}
+          <div class="pin-card">
+            <div class="pin-card-body" onclick={() => { showPinnedPanel = false; scrollToMessage(item.id); }}>
+              <div class="pin-card-avatar">
+                <div class="pin-avatar-circle" style="background: {isOwn ? 'var(--color-primary)' : 'var(--input-bg)'}; color: {isOwn ? 'var(--color-primary-foreground)' : 'var(--text-secondary)'};">
+                  {senderName.charAt(0).toUpperCase()}
+                </div>
+              </div>
+              <div class="pin-card-content">
+                <div class="pin-card-top">
+                  <span class="pin-card-sender">{senderName}</span>
+                  <span class="pin-card-time">{formatPinnedTime(item.pinnedAt)}</span>
+                </div>
+                <p class="pin-card-text">
+                  {item.msg.t === 'image' ? '📷 Photo' : item.msg.c.length > 120 ? item.msg.c.slice(0, 120) + '…' : item.msg.c}
+                </p>
+                {#if item.pinnedBy}
+                  <p class="pin-card-meta">Pinned by {pinnedItemAuthor(item.pinnedBy)}</p>
+                {/if}
+              </div>
+            </div>
+            <div class="pin-card-actions">
+              <button
+                class="pin-action-btn pin-action-goto"
+                onclick={() => { showPinnedPanel = false; scrollToMessage(item.id); }}
+                aria-label="Scroll to message"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                <span>Go to</span>
+              </button>
+              <button
+                class="pin-action-btn pin-action-unpin"
+                onclick={() => handlePinMessage(item.msg)}
+                aria-label="Unpin message"
+              >
+                <Pin size={14} />
+                <span>Unpin</span>
+              </button>
+            </div>
+          </div>
+        {/each}
+      </div>
+
+      <!-- Empty (shouldn't happen since panel only opens when there are pins) -->
+      {#if sortedPinned.length === 0}
+        <div class="pin-panel-empty">
+          <Pin size={24} style="color: var(--text-tertiary);" />
+          <p style="color: var(--text-tertiary); margin: 8px 0 0;">No pinned messages</p>
+        </div>
+      {/if}
+    </div>
+  </div>
+{/if}
+
 <style>
   /* === SHELL === */
   .conv-shell {
@@ -818,6 +929,7 @@
 
   /* === PINNED BANNER === */
   .pin-banner {
+    width: 100%;
     padding: 4px 10px;
     background: var(--glass-bg);
     backdrop-filter: var(--glass-blur);
@@ -825,7 +937,12 @@
     border-bottom: 0.5px solid var(--border-subtle);
     animation: pinBannerIn 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
     flex-shrink: 0;
+    border: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 150ms ease;
   }
+  .pin-banner:active { background: color-mix(in srgb, var(--input-bg) 60%, transparent); }
 
   .pin-inner {
     display: flex;
@@ -834,7 +951,17 @@
     padding: 7px 10px;
     border-radius: var(--radius-md, 12px);
     background: var(--input-bg);
+    width: 100%;
+    text-align: left;
   }
+
+  .pin-chevron {
+    flex-shrink: 0;
+    color: var(--text-tertiary);
+    margin-left: auto;
+    transition: transform 200ms ease;
+  }
+  .pin-banner:active .pin-chevron { transform: translateX(2px); }
 
   .pin-content { min-width: 0; flex: 1; }
 
@@ -1258,5 +1385,225 @@
     0% { opacity: 0.2; }
     15% { opacity: 0.25; }
     100% { opacity: 0; }
+  }
+
+  /* === PINNED MESSAGES PANEL === */
+  .pin-panel-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    background: var(--overlay-bg);
+    animation: pinPanelFadeIn 200ms ease both;
+  }
+
+  @keyframes pinPanelFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .pin-panel-sheet {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    max-height: 75vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-elevated);
+    border-radius: var(--radius-xl, 20px) var(--radius-xl, 20px) 0 0;
+    box-shadow: 0 -4px 32px rgba(0,0,0,0.12), 0 0 1px rgba(0,0,0,0.06);
+    animation: pinPanelSlideUp 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    overflow: hidden;
+  }
+
+  @keyframes pinPanelSlideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+
+  .pin-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 16px 12px;
+    flex-shrink: 0;
+    border-bottom: 0.5px solid var(--border-subtle);
+  }
+
+  .pin-panel-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .pin-panel-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+
+  .pin-panel-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--color-primary) 15%, transparent);
+    color: var(--color-primary);
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .pin-panel-close {
+    min-width: 36px;
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: none;
+    background: var(--input-bg);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1), background 150ms ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .pin-panel-close:active { transform: scale(0.88); background: var(--border-subtle); }
+
+  .pin-panel-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 12px 24px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .pin-panel-list::-webkit-scrollbar { width: 0px; }
+
+  .pin-card {
+    background: var(--input-bg);
+    border-radius: var(--radius-lg, 16px);
+    margin-bottom: 8px;
+    border: 1px solid var(--border-subtle);
+    overflow: hidden;
+    animation: pinCardIn 250ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .pin-card:last-child { margin-bottom: 0; }
+
+  @keyframes pinCardIn {
+    from { opacity: 0; transform: translateY(8px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  .pin-card-body {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 12px 10px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 150ms ease;
+    min-height: 44px;
+  }
+  .pin-card-body:active { background: var(--border-subtle); }
+
+  .pin-card-avatar {
+    flex-shrink: 0;
+    padding-top: 2px;
+  }
+
+  .pin-avatar-circle {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .pin-card-content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .pin-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 3px;
+  }
+
+  .pin-card-sender {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .pin-card-time {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    flex-shrink: 0;
+  }
+
+  .pin-card-text {
+    font-size: 14px;
+    line-height: 1.45;
+    color: var(--text-secondary);
+    margin: 0;
+    word-break: break-word;
+  }
+
+  .pin-card-meta {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    margin: 4px 0 0;
+    font-style: italic;
+  }
+
+  .pin-card-actions {
+    display: flex;
+    border-top: 0.5px solid var(--border-subtle);
+  }
+
+  .pin-action-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: background 150ms ease, transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    -webkit-tap-highlight-color: transparent;
+    min-height: 44px;
+  }
+  .pin-action-btn:active { transform: scale(0.95); }
+
+  .pin-action-goto {
+    color: var(--color-primary);
+    border-right: 0.5px solid var(--border-subtle);
+  }
+  .pin-action-goto:active { background: color-mix(in srgb, var(--color-primary) 8%, transparent); }
+
+  .pin-action-unpin {
+    color: var(--color-danger, #ef4444);
+  }
+  .pin-action-unpin:active { background: color-mix(in srgb, var(--color-danger, #ef4444) 8%, transparent); }
+
+  .pin-panel-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 24px;
   }
 </style>
