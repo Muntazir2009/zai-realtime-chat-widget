@@ -204,8 +204,12 @@
     <!-- Picker panels (always mounted to preserve scroll/search state) -->
     <div class="picker-panel" class:picker-panel-hidden={!activePicker}>
       <div class="picker-animate-in">
-        <GIFPicker onGifSelect={handleGif} class:picker-pane-hidden={activePicker !== 'gif'} />
-        <StickerPicker onStickerSelect={handleSticker} class:picker-pane-hidden={activePicker !== 'sticker'} />
+        <div class:picker-pane-hidden={activePicker !== 'gif'}>
+          <GIFPicker onGifSelect={handleGif} />
+        </div>
+        <div class:picker-pane-hidden={activePicker !== 'sticker'}>
+          <StickerPicker onStickerSelect={handleSticker} />
+        </div>
       </div>
     </div>
 
