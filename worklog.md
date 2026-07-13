@@ -771,3 +771,33 @@ Work Log:
 Stage Summary:
 - Conversation.svelte: Rewrote highlight CSS from background-based (invisible) to ::before pseudo-element overlay (visible tint above bubble)
 - SettingsView.svelte: Added optimistic update of both `authStore.user` and `chatStore.userDict` when accentColor changes, so the color-grid selection indicator updates immediately
+
+---
+Task ID: pinned-controls
+Agent: Main Agent
+Task: Add pinned message controls panel and push remaining changes
+
+Work Log:
+- Added `pinnedMeta: Map<string, { pinnedBy: string; pinnedAt: number }>` to ChatStore for tracking who pinned each message and when
+- Updated `attachPinnedListener` to populate pinnedMeta when child added
+- Updated `onChildRemoved` handler to clean up pinnedMeta
+- Updated `detachPinnedListener` to clear pinnedMeta
+- Updated `togglePin` optimistic update to also update pinnedMeta
+- Updated `togglePin` revert-on-failure to also revert pinnedMeta
+- Made pin banner a clickable `<button>` with chevron indicator
+- Updated `sortedPinned` derivation to sort by `pinnedAt` (most recent first) instead of message timestamp
+- Added `pinnedItemAuthor` derived helper for resolving pinner display names
+- Added `formatPinnedTime` helper function
+- Built full Pinned Messages Panel (bottom sheet) with:
+  - Header with Pin icon, title, count badge, and close button
+  - List of pinned message cards showing: sender avatar initial, sender name, message preview (up to 120 chars), relative pin time, and who pinned it
+  - Each card has two action buttons: "Go to" (scrolls to message with highlight) and "Unpin" (removes pin)
+  - Smooth slide-up animation, glass-morphism styling
+  - Staggered card entry animation
+- Verified build passes and pushed to remote
+
+Stage Summary:
+- Pinned message controls fully implemented — clicking the pinned banner now opens a panel showing all pinned messages with scroll-to and unpin actions
+- Pushed commit 6ca31f09 to main
+- DM list online indicator CSS appears structurally correct (presence listeners are global, dot has proper styling with z-index 2)
+- Input bar 3D edges and visibility improvement remains a pending task
