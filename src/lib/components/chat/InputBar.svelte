@@ -335,34 +335,47 @@
     text-align: right;
   }
 
-  /* Picker panels */
+  /* Picker panels — NEVER use display:none (resets scroll). Collapse via max-height. */
   .picker-panel {
     margin-bottom: 8px;
     border-radius: var(--radius-lg);
     overflow: hidden;
+    max-height: 360px;
+    opacity: 1;
+    transition: max-height 300ms cubic-bezier(0.22, 1, 0.36, 1),
+                opacity 250ms ease,
+                margin-bottom 300ms ease;
+    position: relative;
   }
 
   .picker-panel-hidden {
-    display: none;
+    max-height: 0 !important;
+    opacity: 0 !important;
+    pointer-events: none;
+    margin-bottom: 0 !important;
   }
 
+  /* Hidden pane: absolute so it doesn't take flow space; never display:none */
   .picker-pane-hidden {
-    display: none;
+    position: absolute;
+    inset: 0;
+    visibility: hidden;
+    pointer-events: none;
+    z-index: -1;
+    overflow: hidden;
   }
 
   .picker-animate-in {
-    animation: pickerExpand 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: pickerFadeSlide 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 
-  @keyframes pickerExpand {
+  @keyframes pickerFadeSlide {
     0% {
       opacity: 0;
-      max-height: 0;
       transform: translateY(8px);
     }
     100% {
       opacity: 1;
-      max-height: 340px;
       transform: translateY(0);
     }
   }

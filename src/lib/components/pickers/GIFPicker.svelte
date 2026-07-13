@@ -60,17 +60,17 @@
     untrack(() => fetchGifs('trending'));
   });
 
-  function handleSearch(value: string) {
-    searchQuery = value;
+  function handleSearchInput() {
+    // searchQuery already updated by bind:value
     if (searchDebounce) clearTimeout(searchDebounce);
-    if (!value.trim()) {
+    if (!searchQuery.trim()) {
       activeCategory = 'Trending';
       fetchGifs('trending');
       return;
     }
     searchDebounce = setTimeout(() => {
       activeCategory = '';
-      fetchGifs(value.trim());
+      fetchGifs(searchQuery.trim());
     }, 300);
   }
 
@@ -130,11 +130,11 @@
           type="text"
           placeholder="Search GIFs..."
           class="gif-search-input"
-          value={searchQuery}
-          oninput={(e) => handleSearch((e.target as HTMLInputElement).value)}
+          bind:value={searchQuery}
+          oninput={handleSearchInput}
         />
         {#if searchQuery}
-          <button class="gif-search-clear" onclick={() => handleSearch('')}>
+          <button class="gif-search-clear" onclick={() => { searchQuery = ''; handleSearchInput(); }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
           </button>
         {/if}
@@ -165,7 +165,8 @@
           <div class="gif-empty-icon-ring"></div>
         </div>
         <p class="gif-empty-text">{error}</p>
-        <button class="gif-retry" onclick={() => fetchGifs(searchQuery.trim() || 'trending')}>Retry</button>
+        <button class="gif-retry" onclick={() => fetchGifs(searchQuery.trim() || 'trending')}
+          >Retry</button>
       </div>
     {:else if gifs.length === 0}
       <div class="gif-empty">
