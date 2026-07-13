@@ -380,35 +380,41 @@
     }
   }
 
-  /* Input row — compact floating pill with 3D frosted glass corners */
+  /* Input row — full-width 3D frosted glass bar */
   .input-row {
     display: flex;
     align-items: center;
     gap: 2px;
-    padding: 6px 6px 6px 4px;
-    border-radius: 28px;
-    background: color-mix(in srgb, var(--bg-surface) 72%, transparent);
-    backdrop-filter: blur(24px) saturate(180%);
-    -webkit-backdrop-filter: blur(24px) saturate(180%);
-    border: 0.5px solid color-mix(in srgb, var(--border-subtle) 50%, transparent);
+    padding: 6px 8px 6px 6px;
+    border-radius: 24px;
+    background: color-mix(in srgb, var(--bg-surface) 80%, transparent);
+    backdrop-filter: blur(32px) saturate(200%);
+    -webkit-backdrop-filter: blur(32px) saturate(200%);
+    border: 1px solid color-mix(in srgb, white 10%, transparent);
+    border-bottom-color: color-mix(in srgb, black 15%, transparent);
+    border-right-color: color-mix(in srgb, black 8%, transparent);
     box-shadow:
-      inset 0 1px 0 color-mix(in srgb, white 12%, transparent),
-      inset 0 -0.5px 0 color-mix(in srgb, black 8%, transparent),
-      0 1px 3px color-mix(in srgb, black 6%, transparent),
-      0 4px 12px color-mix(in srgb, black 4%, transparent);
-    transition: background-color 200ms ease, box-shadow 250ms ease, border-color 250ms ease;
-    max-width: 600px;
-    margin: 0 auto;
+      inset 0 1px 0 color-mix(in srgb, white 18%, transparent),
+      inset 0 -1px 0 color-mix(in srgb, black 6%, transparent),
+      0 -1px 0 color-mix(in srgb, white 5%, transparent),
+      0 2px 4px color-mix(in srgb, black 8%, transparent),
+      0 6px 20px color-mix(in srgb, black 5%, transparent);
+    transition: background-color 200ms ease, box-shadow 300ms ease, border-color 300ms ease;
+    width: 100%;
   }
 
   .input-row-focused {
-    background: color-mix(in srgb, var(--bg-surface) 82%, transparent);
-    border-color: color-mix(in srgb, var(--color-primary) 20%, transparent);
+    background: color-mix(in srgb, var(--bg-surface) 90%, transparent);
+    border-color: color-mix(in srgb, var(--color-primary) 25%, transparent);
+    border-bottom-color: color-mix(in srgb, black 12%, transparent);
+    border-right-color: color-mix(in srgb, black 6%, transparent);
     box-shadow:
-      inset 0 1px 0 color-mix(in srgb, white 15%, transparent),
-      inset 0 -0.5px 0 color-mix(in srgb, black 8%, transparent),
-      0 0 0 2px color-mix(in srgb, var(--color-primary) 8%, transparent),
-      0 2px 8px color-mix(in srgb, black 6%, transparent);
+      inset 0 1px 0 color-mix(in srgb, white 22%, transparent),
+      inset 0 -1px 0 color-mix(in srgb, black 5%, transparent),
+      0 -1px 0 color-mix(in srgb, white 8%, transparent),
+      0 0 0 3px color-mix(in srgb, var(--color-primary) 10%, transparent),
+      0 4px 12px color-mix(in srgb, black 7%, transparent),
+      0 8px 28px color-mix(in srgb, black 4%, transparent);
   }
 
   .input-row-active {
@@ -481,7 +487,7 @@
     line-height: 1;
   }
 
-  /* Send button */
+  /* Send button — 3D raised */
   .send-btn {
     display: flex;
     align-items: center;
@@ -492,19 +498,25 @@
     min-height: 38px;
     border-radius: 50%;
     border: none;
-    background: var(--color-primary);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--color-primary) 90%, white), var(--color-primary));
     color: var(--color-primary-foreground);
     cursor: pointer;
     transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1),
-                box-shadow 200ms ease,
+                box-shadow 250ms ease,
                 background-color 200ms ease;
-    box-shadow: 0 2px 8px color-mix(in srgb, var(--color-primary) 35%, transparent);
+    box-shadow:
+      0 2px 4px color-mix(in srgb, black 15%, transparent),
+      0 4px 12px color-mix(in srgb, var(--color-primary) 40%, transparent),
+      inset 0 1px 0 color-mix(in srgb, white 25%, transparent);
     -webkit-tap-highlight-color: transparent;
   }
 
   .send-btn:active {
     transform: scale(0.88);
-    box-shadow: 0 1px 4px color-mix(in srgb, var(--color-primary) 20%, transparent);
+    box-shadow:
+      0 1px 2px color-mix(in srgb, black 12%, transparent),
+      0 1px 4px color-mix(in srgb, var(--color-primary) 20%, transparent),
+      inset 0 1px 0 color-mix(in srgb, white 15%, transparent);
   }
 
   @keyframes fadeIn {

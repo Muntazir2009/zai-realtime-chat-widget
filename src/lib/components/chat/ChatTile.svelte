@@ -22,10 +22,13 @@
   let longPressTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Derived presence
-  let isOnline = $derived.by(() => {
-    if (!otherUser) return false;
-    return chatStore.presence.get(otherUser.id)?.status === 'online';
+  let presenceStatus = $derived.by(() => {
+    if (!otherUser) return 'offline' as const;
+    return chatStore.presence.get(otherUser.id)?.status ?? 'offline';
   });
+
+  let isOnline = $derived(presenceStatus === 'online');
+  let isAway = $derived(presenceStatus === 'away');
 
   function handleTap() {
     if (showContextMenu) {
@@ -103,9 +106,7 @@
       accentColor={otherUser?.accentColor}
       emojiStatus={otherUser?.emojiStatus}
     />
-    {#if isOnline}
-      <span class="tile-online-dot"></span>
-    {/if}
+    <span class="tile-presence-dot" class:dot-online={isOnline} class:dot-away={isAway}></span>
   </div>
 
   <div class="tile-content">
@@ -179,22 +180,43 @@
     flex-shrink: 0;
   }
 
-  .tile-online-dot {
+  /* Always-visible presence indicator */
+  .tile-presence-dot {
     position: absolute;
-    bottom: 1px;
-    right: 1px;
-    width: 10px;
-    height: 10px;
+    bottom: 0px;
+    right: 0px;
+    width: 12px;
+    height: 12px;
     border-radius: 50%;
-    border: 2px solid var(--bg-surface);
-    background: #22c55e;
-    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4);
-    animation: tileDotPulse 2s ease-in-out infinite;
+    border: 2.5px solid var(--bg-page);
+    background: #9ca3af;
+    box-shadow: 0 0 0 0 transparent;
+    transition: background 300ms ease, box-shadow 300ms ease;
+    z-index: 2;
   }
 
-  @keyframes tileDotPulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
-    50% { box-shadow: 0 0 0 3px rgba(34, 197, 94, 0); }
+  .dot-online {
+    background: #22c55e;
+    box-shadow:
+      0 0 0 0 rgba(34, 197, 94, 0.5),
+      0 0 6px 1px rgba(34, 197, 94, 0.25);
+    animation: dotPulseOnline 2.5s ease-in-out infinite;
+  }
+
+  .dot-away {
+    background: #f59e0b;
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4);
+    animation: dotPulseAway 3s ease-in-out infinite;
+  }
+
+  @keyframes dotPulseOnline {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5), 0 0 6px 1px rgba(34, 197, 94, 0.25); }
+    50% { box-shadow: 0 0 0 3px rgba(34, 197, 94, 0), 0 0 8px 2px rgba(34, 197, 94, 0.15); }
+  }
+
+  @keyframes dotPulseAway {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
+    50% { box-shadow: 0 0 0 3px rgba(245, 158, 11, 0); }
   }
 
   .tile-content {
