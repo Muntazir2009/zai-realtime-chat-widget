@@ -24,6 +24,7 @@
   let showWallpaperPicker = $state(false);
   let showPinnedPanel = $state(false);
   let pinBannerPointerStart: { x: number; y: number } | null = null;
+  let pinBannerClickLock = false;
   let isMuted = $state(false);
   let contextMenuMsg: Message | null = $state(null);
   let showContextMenu = $state(false);
@@ -395,17 +396,19 @@
     }
   }
 
-  // Pin banner tap detection (reliable on mobile)
-  function onPinBannerPointerDown(e: PointerEvent) {
-    pinBannerPointerStart = { x: e.clientX, y: e.clientY };
+  // Pin banner tap — use onclick with stopPropagation to avoid
+  // svelte:window ontouchstart interference on mobile
+  function onPinBannerClick(e: MouseEvent) {
+    if (pinBannerClickLock) return;
+    pinBannerClickLock = true;
+    setTimeout(() => (pinBannerClickLock = false), 300);
+    e.stopPropagation();
+    showPinnedPanel = true;
   }
-  function onPinBannerPointerUp(e: PointerEvent) {
-    if (!pinBannerPointerStart) return;
-    const dx = Math.abs(e.clientX - pinBannerPointerStart.x);
-    const dy = Math.abs(e.clientY - pinBannerPointerStart.y);
-    pinBannerPointerStart = null;
-    if (dx < 10 && dy < 10) {
-      showPinnedPanel = true;
+  function onPinBannerUnpin(e: MouseEvent) {
+    e.stopPropagation();
+    if (sortedPinned.length > 0) {
+      handlePinMessage(sortedPinned[0].msg);
     }
   }
 </script>
@@ -473,16 +476,20 @@
 
   <!-- Pinned Banner -->
   {#if sortedPinned.length > 0}
-    <button class="pin-banner" onpointerdown={onPinBannerPointerDown} onpointerup={onPinBannerPointerUp} onpointercancel={() => (pinBannerPointerStart = null)} aria-label="View pinned messages">
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div class="pin-banner" onclick={onPinBannerClick} role="button" tabindex="0" aria-label="View pinned messages">
       <div class="pin-inner">
         <Pin size={13} style="color: var(--color-primary); flex-shrink: 0;" />
         <div class="pin-content">
           <p class="pin-label">Pinned{sortedPinned.length > 1 ? ` (${sortedPinned.length})` : ''}</p>
           <p class="pin-text">{sortedPinned[0].msg.t === 'image' ? '📷 Photo' : sortedPinned[0].msg.c.slice(0, 60)}</p>
         </div>
+        <button class="pin-banner-unpin" onclick={onPinBannerUnpin} aria-label="Unpin this message">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
         <svg class="pin-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
       </div>
-    </button>
+    </div>
   {/if}
 
   <!-- Messages -->
@@ -1000,6 +1007,29 @@
     text-overflow: ellipsis;
     color: var(--text-primary);
     margin: 0;
+  }
+
+  .pin-banner-unpin {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    min-height: 28px;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 150ms ease, color 150ms ease, transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .pin-banner-unpin:active {
+    transform: scale(0.88);
+    background: color-mix(in srgb, var(--color-danger, #ef4444) 12%, transparent);
+    color: var(--color-danger, #ef4444);
   }
 
   /* === MESSAGE SCROLL === */
