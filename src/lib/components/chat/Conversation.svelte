@@ -1168,7 +1168,7 @@
     flex-shrink: 0;
     position: relative;
     z-index: 30;
-    margin-bottom: -10px;
+    transform: translateY(-10px);
   }
 
   /* === TYPING AREA === */
