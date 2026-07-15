@@ -3,6 +3,7 @@
   import Avatar from '$lib/components/ui/Avatar.svelte';
   import DeliveryStatus from '$lib/components/indicators/DeliveryStatus.svelte';
   import AudioPlayer from '$lib/components/media/AudioPlayer.svelte';
+  import VideoPlayer from '$lib/components/media/VideoPlayer.svelte';
   import { Reply as ReplyIcon } from 'lucide-svelte';
   import { chatStore } from '$lib/stores/chat.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
@@ -358,7 +359,7 @@
           {#if replyPreviewMsg}
             {@const replySender = chatStore.userDict.get(replyPreviewMsg.sid)}
             <p class="rply-who">{replyPreviewMsg.sid === (msg.sid) ? (isOwn ? 'You' : (senderName || 'Unknown')) : (replySender?.displayName || (replyPreviewMsg.sid === authStore.user?.id ? 'You' : 'Unknown'))}</p>
-            <p class="rply-text">{replyPreviewMsg.t === 'image' ? '📷 Photo' : replyPreviewMsg.t === 'voice' ? '🎙 Voice' : (replyPreviewMsg.c.replace(/\n/g, ' ').slice(0, 120))}</p>
+            <p class="rply-text">{replyPreviewMsg.t === 'image' ? '📷 Photo' : replyPreviewMsg.t === 'video' ? '🎬 Video' : replyPreviewMsg.t === 'voice' ? '🎙 Voice' : (replyPreviewMsg.c.replace(/\n/g, ' ').slice(0, 120))}</p>
           {:else}
             <p class="rply-text rply-fallback">↩ Reply</p>
           {/if}
@@ -381,6 +382,12 @@
       {/if}
     {:else if msg.t === 'voice' && msg.mu}
       <AudioPlayer url={msg.mu} duration={(msg.md?.duration as number) || 0} />
+    {:else if msg.t === 'video' && msg.mu}
+      <VideoPlayer
+        url={msg.mu}
+        thumbnailUrl={(msg.md?.thumbnailUrl as string) || msg.mh || null}
+        duration={(msg.md?.duration as number) || 0}
+      />
     {:else if msg.t === 'image' && msg.mu}
       <div class="bbl-img-wrap">
         <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->

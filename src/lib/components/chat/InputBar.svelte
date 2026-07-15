@@ -12,11 +12,12 @@
   interface Props {
     onSend: (content: string) => void;
     onImageSend?: (imageUrl: string, blurhash?: string) => void;
+    onVideoSend?: (videoUrl: string, duration?: number, thumbnailUrl?: string) => void;
     onStickerSelect?: (sticker: string) => void;
     onGifSelect?: (gifUrl: string) => void;
   }
 
-  let { onSend, onImageSend, onStickerSelect, onGifSelect }: Props = $props();
+  let { onSend, onImageSend, onVideoSend, onStickerSelect, onGifSelect }: Props = $props();
 
   let message = $state('');
   let isRecording = $state(false);
@@ -164,24 +165,86 @@
     const file = input.files?.[0];
     if (!file || !chatStore.activeChatId) return;
     input.value = '';
-    if (!file.type.startsWith('image/')) {
-      toastStore.info('Only images are supported');
+
+    // Determine type
+    const isImage = file.type.startsWith('image/');
+    const isVideo = file.type.startsWith('video/');
+    if (!isImage && !isVideo) {
+      toastStore.info('Only images and videos are supported');
       return;
     }
+
+    // 100MB limit for videos, 20MB for images
+    const maxSize = isVideo ? 100 * 1024 * 1024 : 20 * 1024 * 1024;
+    if (file.size > maxSize) {
+      toastStore.info(isVideo ? 'Video too large (max 100MB)' : 'Image too large (max 20MB)');
+      return;
+    }
+
     isUploading = true;
     uploadProgress = 0;
-    uploadLabel = 'Sending image...';
+    uploadLabel = isVideo ? 'Sending video...' : 'Sending image...';
     try {
-      const result = await uploadFile(file, 'images', file.name, (pct) => { uploadProgress = pct; });
-      if (onImageSend) onImageSend(result.publicUrl);
+      const folder = isVideo ? 'videos' : 'images';
+      const result = await uploadFile(file, folder, file.name, (pct) => { uploadProgress = pct; });
+
+      if (isVideo) {
+        // Get video duration + generate thumbnail
+        const videoMeta = await getVideoMeta(file);
+        if (onVideoSend) onVideoSend(result.publicUrl, videoMeta.duration, videoMeta.thumbnailUrl);
+      } else {
+        if (onImageSend) onImageSend(result.publicUrl);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error('Image upload failed:', msg);
+      console.error(`${isVideo ? 'Video' : 'Image'} upload failed:`, msg);
       toastStore.error(`Upload failed: ${msg.slice(0, 120)}`);
     } finally {
       isUploading = false;
       uploadProgress = 0;
     }
+  }
+
+  async function getVideoMeta(file: File): Promise<{ duration: number; thumbnailUrl: string | null }> {
+    return new Promise((resolve) => {
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+      video.muted = true;
+      const url = URL.createObjectURL(file);
+
+      video.onloadedmetadata = () => {
+        const duration = video.duration;
+        // Seek to 1s (or 10% of duration) for thumbnail
+        const seekTime = Math.min(1, duration * 0.1);
+        video.currentTime = seekTime;
+      };
+
+      video.onseeked = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          const scale = 360 / Math.max(video.videoWidth, 1);
+          canvas.width = 360;
+          canvas.height = Math.round(video.videoHeight * scale);
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const thumbnailUrl = canvas.toDataURL('image/jpeg', 0.7);
+            URL.revokeObjectURL(url);
+            resolve({ duration: video.duration, thumbnailUrl });
+            return;
+          }
+        } catch { /* fallback */ }
+        URL.revokeObjectURL(url);
+        resolve({ duration: video.duration, thumbnailUrl: null });
+      };
+
+      video.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve({ duration: 0, thumbnailUrl: null });
+      };
+
+      video.src = url;
+    });
   }
 </script>
 
@@ -217,7 +280,7 @@
     <input
       bind:this={fileInputEl}
       type="file"
-      accept="image/*"
+      accept="image/*,video/*"
       class="hidden"
       onchange={handleFileSelect}
     />

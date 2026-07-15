@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Message } from '$lib/types/index';
-  import { X, Image as ImageIcon, Mic } from 'lucide-svelte';
+  import { X, Image as ImageIcon, Mic, Video } from 'lucide-svelte';
 
   interface Props {
     message: Message;
@@ -12,12 +12,14 @@
 
   function getMessagePreview(msg: Message): string {
     if (msg.t === 'image') return '📷 Photo';
+    if (msg.t === 'video') return '🎬 Video';
     if (msg.t === 'voice') return '🎙 Voice message';
     return msg.c.slice(0, 80);
   }
 
   function getMessageTypeIcon(msg: Message) {
     if (msg.t === 'image') return ImageIcon;
+    if (msg.t === 'video') return Video;
     if (msg.t === 'voice') return Mic;
     return null;
   }

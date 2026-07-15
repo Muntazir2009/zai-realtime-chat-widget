@@ -16,6 +16,12 @@ import { networkManager } from '$lib/managers/NetworkManager.svelte.js';
 import { cacheMessages, getCachedMessages, cacheUserProfiles, getUserProfile } from '$lib/managers/CacheManager.js';
 import { generateIdempotencyKey } from '$lib/utils/idempotency.js';
 
+function formatVideoDuration(secs: number): string {
+  const m = Math.floor(secs / 60);
+  const s = Math.floor(secs % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
 class ChatStore {
   // ---- Inbox ----
   chats: Map<string, ChatMeta> = $state(new Map());
@@ -486,6 +492,32 @@ class ChatStore {
     this.messages = [...this.messages, message].sort((a, b) => a.ts - b.ts);
     await rtdb.update(await rtdb.ref('/'), updates).catch((err) => {
       console.error('[sendImageMessage] RTDB write failed:', err);
+      this.messages = this.messages.filter((m) => m.id !== messageId);
+    });
+  }
+
+  /** Send a video message */
+  async sendVideoMessage(chatId: string, videoUrl: string, duration: number = 0, thumbnailUrl?: string): Promise<void> {
+    const user = authStore.user;
+    if (!user) return;
+
+    const idempotencyKey = generateIdempotencyKey();
+    if (!this.addSentKey(idempotencyKey)) return;
+
+    const msgRef = await rtdb.push(await rtdb.ref(RTDB_PATHS.CHAT_MESSAGES(chatId)));
+    const messageId = msgRef.key ?? idempotencyKey;
+
+    const durStr = duration > 0 ? formatVideoDuration(duration) : '';
+    const message: Message = {
+      id: messageId, c: '🎬 Video', sid: user.id, t: 'video', ts: Date.now(),
+      rk: idempotencyKey, rid: null, mu: videoUrl, mh: thumbnailUrl ?? null,
+      md: { duration, thumbnailUrl }, edited: false,
+    };
+
+    const updates = this.buildFanOutUpdates(chatId, messageId, message, `🎬 Video ${durStr}`);
+    this.messages = [...this.messages, message].sort((a, b) => a.ts - b.ts);
+    await rtdb.update(await rtdb.ref('/'), updates).catch((err) => {
+      console.error('[sendVideoMessage] RTDB write failed:', err);
       this.messages = this.messages.filter((m) => m.id !== messageId);
     });
   }

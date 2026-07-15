@@ -36,7 +36,7 @@ export interface ChatMeta {
 }
 
 /* ---------- Message ---------- */
-export type MessageType = 'text' | 'image' | 'voice' | 'system';
+export type MessageType = 'text' | 'image' | 'video' | 'voice' | 'system';
 
 export interface Message {
   id: string;

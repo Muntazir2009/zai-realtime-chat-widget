@@ -252,6 +252,11 @@
     await chatStore.sendImageMessage(chatStore.activeChatId, imageUrl);
   }
 
+  async function handleVideoSend(videoUrl: string, duration?: number, thumbnailUrl?: string) {
+    if (!chatStore.activeChatId) return;
+    await chatStore.sendVideoMessage(chatStore.activeChatId, videoUrl, duration ?? 0, thumbnailUrl);
+  }
+
   function handleReply(msg: Message) { uiStore.setReplyTo(msg); }
 
   function handleSwipeReply(msg: Message) {
@@ -307,7 +312,9 @@
   function cancelEdit() { editingMsg = null; editText = ''; }
 
   function handleImageTap(imageUrl: string, caption?: string) {
-    lightboxImages = chatStore.messages.filter(m => m.t === 'image' && m.mu).map(m => ({ url: m.mu!, caption: m.c || undefined }));
+    lightboxImages = chatStore.messages
+      .filter(m => (m.t === 'image' || m.t === 'video' || m.c === 'GIF') && m.mu)
+      .map(m => ({ url: m.mu!, caption: m.c === 'GIF' ? 'GIF' : (m.c || undefined), isGif: m.c === 'GIF' }));
     lightboxIndex = lightboxImages.findIndex(i => i.url === imageUrl);
     if (lightboxIndex < 0) lightboxIndex = 0;
     showLightbox = true;
@@ -482,7 +489,7 @@
         <Pin size={13} style="color: var(--color-primary); flex-shrink: 0;" />
         <div class="pin-content">
           <p class="pin-label">Pinned{sortedPinned.length > 1 ? ` (${sortedPinned.length})` : ''}</p>
-          <p class="pin-text">{sortedPinned[0].msg.t === 'image' ? '📷 Photo' : sortedPinned[0].msg.c.slice(0, 60)}</p>
+          <p class="pin-text">{sortedPinned[0].msg.t === 'image' ? '📷 Photo' : sortedPinned[0].msg.t === 'video' ? '🎬 Video' : sortedPinned[0].msg.c.slice(0, 60)}</p>
         </div>
         <button class="pin-banner-unpin" onclick={onPinBannerUnpin} aria-label="Unpin this message">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
@@ -618,6 +625,7 @@
     <InputBar
       onSend={handleSend}
       onImageSend={handleImageSend}
+      onVideoSend={handleVideoSend}
       onStickerSelect={handleStickerSelect}
       onGifSelect={handleGifSelect}
     />
@@ -733,7 +741,7 @@
                   <span class="pin-card-time">{formatPinnedTime(item.pinnedAt)}</span>
                 </div>
                 <p class="pin-card-text">
-                  {item.msg.t === 'image' ? '📷 Photo' : item.msg.c.length > 120 ? item.msg.c.slice(0, 120) + '…' : item.msg.c}
+                  {item.msg.t === 'image' ? '📷 Photo' : item.msg.t === 'video' ? '🎬 Video' : item.msg.c.length > 120 ? item.msg.c.slice(0, 120) + '…' : item.msg.c}
                 </p>
                 {#if item.pinnedBy}
                   <p class="pin-card-meta">Pinned by {pinnedItemAuthor(item.pinnedBy)}</p>
