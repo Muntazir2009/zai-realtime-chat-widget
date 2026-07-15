@@ -203,20 +203,11 @@ export async function uploadFile(
   const name = filename || (file instanceof File ? file.name : `upload-${Date.now()}.bin`);
   const isImage = file instanceof File && file.type.startsWith('image/');
 
-  // Step 1: Compress image (saves 50-80% bandwidth)
-  let uploadBlob: Blob = file;
+  // Step 1: Generate blurhash for images (no compression — 100% quality)
   let blurhash = '';
 
   if (isImage) {
-    // Run compression and blurhash in parallel
-    const [compressed, hash] = await Promise.all([
-      compressImage(file as File),
-      generateBlurhash(file as File),
-    ]);
-    uploadBlob = compressed.blob;
-    blurhash = hash;
-
-    // Report 5% progress for compression step
+    blurhash = await generateBlurhash(file as File);
     onProgress?.(5);
   }
 
@@ -224,7 +215,7 @@ export async function uploadFile(
   onProgress?.(isImage ? 8 : 2);
   const presignResult = await getPresignedUrl(
     name,
-    uploadBlob.type || (file instanceof File ? file.type : 'application/octet-stream'),
+    file instanceof File ? file.type : 'application/octet-stream',
     folder,
   );
   let publicUrl = presignResult.publicUrl;
@@ -235,8 +226,7 @@ export async function uploadFile(
   try {
     await uploadDirectToR2(
       presignResult.uploadUrl,
-      uploadBlob,
-      uploadBlob.type || 'application/octet-stream',
+      file,
       isImage
         ? (pct) => onProgress?.(10 + Math.round(pct * 0.9)) // 10-100%
         : (pct) => onProgress?.(5 + Math.round(pct * 0.95)), // 5-100%
@@ -245,7 +235,7 @@ export async function uploadFile(
     console.warn('[storage] Direct R2 upload failed, falling back to server proxy:', directErr);
     // Fallback: server proxy upload via /api/upload/file
     const formData = new FormData();
-    formData.append('file', uploadBlob instanceof File ? uploadBlob : new File([uploadBlob], name), name);
+    formData.append('file', file instanceof File ? file : new File([file], name), name);
     formData.append('folder', folder);
 
     await new Promise<void>((resolve, reject) => {
