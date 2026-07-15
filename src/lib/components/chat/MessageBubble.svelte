@@ -64,6 +64,7 @@
     onReply?: (msg: Message) => void;
     onLongPress?: (msg: Message) => void;
     onImageTap?: (imageUrl: string, caption?: string) => void;
+    onVideoTap?: (url: string, thumbUrl?: string | null, duration?: number, caption?: string) => void;
     onReaction?: (msg: Message, emoji: string) => void;
     onSwipeReply?: (msg: Message) => void;
     onReplyTap?: (messageId: string) => void;
@@ -76,7 +77,7 @@
   let {
     msg, isOwn, showAvatar = false, senderName, isGrouped = false,
     isPinned = false, isStarred = false, replyPreviewMsg,
-    onReply, onLongPress, onImageTap, onReaction, onSwipeReply, onReplyTap,
+    onReply, onLongPress, onImageTap, onVideoTap, onReaction, onSwipeReply, onReplyTap,
     openReactionPicker = false, senderAccentColor = null, senderEmojiStatus = null, senderAvatarUrl = null,
   }: Props = $props();
 
@@ -387,6 +388,7 @@
         url={msg.mu}
         thumbnailUrl={(msg.md?.thumbnailUrl as string) || msg.mh || null}
         duration={(msg.md?.duration as number) || 0}
+        onVideoTap={() => onVideoTap?.(msg.mu!, (msg.md?.thumbnailUrl as string) || msg.mh || null, (msg.md?.duration as number) || 0, msg.c)}
       />
     {:else if msg.t === 'image' && msg.mu}
       <div class="bbl-img-wrap">

@@ -2,6 +2,7 @@
   import { ChevronLeft, MoreVertical, Clock, Image as ImageIcon, Pin, X, Trash2, BellOff, Bell, Wallpaper } from 'lucide-svelte';
   import MessageBubble from './MessageBubble.svelte';
   import Lightbox from '$lib/components/media/Lightbox.svelte';
+  import VideoLightbox from '$lib/components/media/VideoLightbox.svelte';
   import MediaGallery from '$lib/components/media/MediaGallery.svelte';
   import MessageContextMenu from './MessageContextMenu.svelte';
   import InputBar from './InputBar.svelte';
@@ -31,6 +32,11 @@
   let lightboxImages = $state<Array<{url: string; caption?: string}>>([]);
   let lightboxIndex = $state(0);
   let showLightbox = $state(false);
+  let videoLightboxUrl = $state('');
+  let videoLightboxThumb = $state('');
+  let videoLightboxDuration = $state(0);
+  let videoLightboxCaption = $state('');
+  let showVideoLightbox = $state(false);
   let editingMsg: Message | null = $state(null);
   let editText = $state('');
   let triggerEasterEgg = $state(0);
@@ -313,11 +319,19 @@
 
   function handleImageTap(imageUrl: string, caption?: string) {
     lightboxImages = chatStore.messages
-      .filter(m => (m.t === 'image' || m.t === 'video' || m.c === 'GIF') && m.mu)
+      .filter(m => (m.t === 'image' || m.c === 'GIF') && m.mu)
       .map(m => ({ url: m.mu!, caption: m.c === 'GIF' ? 'GIF' : (m.c || undefined), isGif: m.c === 'GIF' }));
     lightboxIndex = lightboxImages.findIndex(i => i.url === imageUrl);
     if (lightboxIndex < 0) lightboxIndex = 0;
     showLightbox = true;
+  }
+
+  function handleVideoTap(url: string, thumbUrl?: string | null, dur?: number, caption?: string) {
+    videoLightboxUrl = url;
+    videoLightboxThumb = thumbUrl || '';
+    videoLightboxDuration = dur || 0;
+    videoLightboxCaption = caption || '';
+    showVideoLightbox = true;
   }
 
   function handleReaction(msg: Message, emoji: string) {
@@ -545,6 +559,7 @@
             onReply={handleReply}
             onLongPress={handleLongPress}
             onImageTap={handleImageTap}
+            onVideoTap={handleVideoTap}
             onReaction={handleReaction}
             onSwipeReply={handleSwipeReply}
             onReplyTap={scrollToMessage}
@@ -634,6 +649,17 @@
   <!-- Lightbox -->
   {#if showLightbox && lightboxImages.length > 0}
     <Lightbox images={lightboxImages} initialIndex={lightboxIndex} onClose={() => (showLightbox = false)} />
+  {/if}
+
+  <!-- Video Lightbox -->
+  {#if showVideoLightbox}
+    <VideoLightbox
+      url={videoLightboxUrl}
+      thumbnailUrl={videoLightboxThumb || null}
+      duration={videoLightboxDuration}
+      caption={videoLightboxCaption || undefined}
+      onClose={() => (showVideoLightbox = false)}
+    />
   {/if}
 
   <!-- Context Menu -->

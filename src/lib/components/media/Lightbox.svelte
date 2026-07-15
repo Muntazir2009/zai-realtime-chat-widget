@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { X, ChevronLeft, ChevronRight, Download, ZoomIn, ZoomOut, RotateCw, Info } from 'lucide-svelte';
+  import { X, ChevronLeft, ChevronRight, Download, ZoomIn, ZoomOut } from 'lucide-svelte';
 
   interface Props {
     images: Array<{ url: string; caption?: string; isGif?: boolean }>;
@@ -14,65 +14,54 @@
   let scale = $state(1);
   let translateX = $state(0);
   let translateY = $state(0);
-  let containerEl: HTMLDivElement | undefined = $state();
   let showInfo = $state(false);
 
   let currentImage = $derived(images[currentIndex] ?? images[0]);
   let hasMultiple = $derived(images.length > 1);
   let isZoomed = $derived(scale > 1.05);
 
-  function goNext() {
-    if (currentIndex < images.length - 1) {
-      currentIndex++;
-      resetZoom();
-    }
-  }
+  function goNext() { if (currentIndex < images.length - 1) { currentIndex++; resetZoom(); } }
+  function goPrev() { if (currentIndex > 0) { currentIndex--; resetZoom(); } }
 
-  function goPrev() {
-    if (currentIndex > 0) {
-      currentIndex--;
-      resetZoom();
-    }
-  }
-
-  function resetZoom() {
-    scale = 1;
-    translateX = 0;
-    translateY = 0;
-  }
-
-  function zoomIn() {
-    scale = Math.min(scale + 0.5, 5);
-  }
-
+  function resetZoom() { scale = 1; translateX = 0; translateY = 0; }
+  function zoomIn() { scale = Math.min(scale + 0.5, 5); }
   function zoomOut() {
-    scale = Math.max(scale - 0.5, 0.5);
+    if (scale <= 1) return;
+    scale = Math.max(scale - 0.5, 1);
+    if (scale <= 1) { translateX = 0; translateY = 0; }
   }
 
   function toggleZoom() {
-    if (isZoomed) {
-      resetZoom();
-    } else {
-      scale = 2.5;
-    }
+    if (isZoomed) { resetZoom(); }
+    else { scale = 2.5; }
   }
 
-  // Double-tap to zoom
-  let lastTap = 0;
-  function handleContainerClick(e: MouseEvent | TouchEvent) {
-    const now = Date.now();
-    if (now - lastTap < 300) {
-      toggleZoom();
-    }
-    lastTap = now;
-  }
-
-  // Pinch zoom
+  // ── Touch: pan + pinch + swipe ──
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let touchStartTime = 0;
+  let lastTapTime = 0;
+  let panStartX = 0;
+  let panStartY = 0;
+  let panStartTx = 0;
+  let panStartTy = 0;
+  let isPanning = $state(false);
+  let isPinching = false;
   let pinchStartDist = 0;
   let pinchStartScale = 1;
 
   function handleTouchStart(e: TouchEvent) {
-    if (e.touches.length === 2) {
+    if (e.touches.length === 1) {
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+      touchStartTime = Date.now();
+      panStartX = e.touches[0].clientX;
+      panStartY = e.touches[0].clientY;
+      panStartTx = translateX;
+      panStartTy = translateY;
+    } else if (e.touches.length === 2) {
+      isPinching = true;
+      isPanning = false;
       pinchStartDist = Math.hypot(
         e.touches[0].clientX - e.touches[1].clientX,
         e.touches[0].clientY - e.touches[1].clientY
@@ -82,58 +71,103 @@
   }
 
   function handleTouchMove(e: TouchEvent) {
-    if (e.touches.length === 2 && pinchStartDist > 0) {
+    if (e.touches.length === 2 && isPinching) {
       e.preventDefault();
       const dist = Math.hypot(
         e.touches[0].clientX - e.touches[1].clientX,
         e.touches[0].clientY - e.touches[1].clientY
       );
-      scale = Math.max(0.5, Math.min(5, pinchStartScale * (dist / pinchStartDist)));
-    } else if (e.touches.length === 1 && isZoomed) {
-      // Pan when zoomed
+      const newScale = Math.max(0.5, Math.min(5, pinchStartScale * (dist / pinchStartDist)));
+      // Zoom towards center of two fingers
+      const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      const containerRect = containerEl?.getBoundingClientRect();
+      if (containerRect) {
+        const px = (cx - containerRect.left - containerRect.width / 2) / containerRect.width;
+        const py = (cy - containerRect.top - containerRect.height / 2) / containerRect.height;
+        const ratio = newScale / scale;
+        translateX = px * containerRect.width * (1 - ratio);
+        translateY = py * containerRect.height * (1 - ratio);
+      }
+      scale = newScale;
+    } else if (e.touches.length === 1 && isZoomed && !isPinching) {
       e.preventDefault();
-      // Handled by CSS touch-action
+      isPanning = true;
+      const dx = e.touches[0].clientX - panStartX;
+      const dy = e.touches[0].clientY - panStartY;
+      translateX = panStartTx + dx;
+      translateY = panStartTy + dy;
     }
   }
 
   function handleTouchEnd(e: TouchEvent) {
-    if (e.touches.length === 0 && pinchStartDist > 0) {
+    if (e.touches.length === 0) {
+      // Double-tap detection
+      const now = Date.now();
+      if (now - lastTapTime < 300 && !isPanning && !isPinching) {
+        toggleZoom();
+      }
+      lastTapTime = now;
+
+      // Swipe detection (only when not zoomed and didn't pan)
+      if (!isZoomed && !isPanning && !isPinching) {
+        const dx = e.changedTouches[0].clientX - touchStartX;
+        const dt = Date.now() - touchStartTime;
+        if (Math.abs(dx) > 50 && dt < 400) {
+          if (dx < 0) goNext();
+          else goPrev();
+        }
+      }
+
+      // If we were panning, snap back if over-panned
+      if (isPanning) {
+        const maxPan = (scale - 1) * 150;
+        translateX = Math.max(-maxPan, Math.min(maxPan, translateX));
+        translateY = Math.max(-maxPan, Math.min(maxPan, translateY));
+      }
+
+      isPanning = false;
+      isPinching = false;
       pinchStartDist = 0;
-      return;
-    }
-    // Swipe to navigate (only when not zoomed)
-    if (!isZoomed && e.changedTouches.length === 1) {
-      const dx = e.changedTouches[0].clientX - (e.touches[0]?.clientX ?? 0);
-      // This is a simplified check; real swipe needs touchstart X stored
     }
   }
 
-  // Track touch start X for swipe
-  let touchStartX = 0;
-  function handleSwipeTouchStart(e: TouchEvent) {
-    touchStartX = e.touches[0].clientX;
-    if (e.touches.length === 2) {
-      handleTouchStart(e);
+  // ── Mouse drag for desktop ──
+  let mouseDown = false;
+  let mouseStartX = 0;
+  let mouseStartY = 0;
+  let mousePanStartTx = 0;
+  let mousePanStartTy = 0;
+
+  function handleMouseDown(e: MouseEvent) {
+    if (!isZoomed) return;
+    mouseDown = true;
+    mouseStartX = e.clientX;
+    mouseStartY = e.clientY;
+    mousePanStartTx = translateX;
+    mousePanStartTy = translateY;
+  }
+  function handleMouseMove(e: MouseEvent) {
+    if (!mouseDown || !isZoomed) return;
+    translateX = mousePanStartTx + (e.clientX - mouseStartX);
+    translateY = mousePanStartTy + (e.clientY - mouseStartY);
+  }
+  function handleMouseUp() {
+    if (!mouseDown) return;
+    mouseDown = false;
+    if (isZoomed) {
+      const maxPan = (scale - 1) * 150;
+      translateX = Math.max(-maxPan, Math.min(maxPan, translateX));
+      translateY = Math.max(-maxPan, Math.min(maxPan, translateY));
     }
   }
-  function handleSwipeTouchMove(e: TouchEvent) {
-    if (e.touches.length === 2) {
-      handleTouchMove(e);
-    }
+
+  function handleContainerClick(e: MouseEvent) {
+    if (isZoomed) return; // Don't toggle zoom if we were dragging
+    // handled by touch double-tap on mobile
   }
-  function handleSwipeTouchEnd(e: TouchEvent) {
-    if (pinchStartDist > 0) {
-      handleTouchEnd(e);
-      return;
-    }
-    if (!isZoomed && e.changedTouches.length === 1) {
-      const dx = e.changedTouches[0].clientX - touchStartX;
-      if (Math.abs(dx) > 60) {
-        if (dx < 0) goNext();
-        else goPrev();
-      }
-    }
-  }
+
+  let containerEl: HTMLDivElement | undefined = $state();
 
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') onClose();
@@ -142,7 +176,6 @@
     if (e.key === '+' || e.key === '=') zoomIn();
     if (e.key === '-') zoomOut();
     if (e.key === '0') resetZoom();
-    if (e.key === 'i') showInfo = !showInfo;
   }
 
   async function handleDownload() {
@@ -175,6 +208,13 @@
   }
 
   let shareCopied = $state(false);
+
+  // Global mouse up
+  $effect(() => {
+    const onUp = () => handleMouseUp();
+    window.addEventListener('mouseup', onUp);
+    return () => window.removeEventListener('mouseup', onUp);
+  });
 
   $effect(() => {
     document.addEventListener('keydown', handleKeydown);
@@ -226,10 +266,13 @@
     class="lb-img-area"
     class:lb-img-area-zoomed={isZoomed}
     bind:this={containerEl}
+    ontouchstart={handleTouchStart}
+    ontouchmove={handleTouchMove}
+    ontouchend={handleTouchEnd}
+    onmousedown={handleMouseDown}
+    onmousemove={handleMouseMove}
     onclick={handleContainerClick}
-    ontouchstart={handleSwipeTouchStart}
-    ontouchmove={handleSwipeTouchMove}
-    ontouchend={handleSwipeTouchEnd}
+    ondblclick={toggleZoom}
     role="button"
     tabindex="0"
     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') toggleZoom(); }}
@@ -252,37 +295,24 @@
       </button>
     {/if}
 
-    {#if currentImage?.isGif}
-      <img
-        src={currentImage.url}
-        alt={currentImage.caption || 'GIF'}
-        class="lb-media"
-        style="transform: scale({scale}) translate({translateX}px, {translateY}px);"
-        draggable="false"
-      />
-    {:else}
-      <img
-        src={currentImage.url}
-        alt={currentImage.caption || 'Chat image'}
-        class="lb-media"
-        style="transform: scale({scale}) translate({translateX}px, {translateY}px);"
-        draggable="false"
-        loading="eager"
-      />
-    {/if}
+    <img
+      src={currentImage.url}
+      alt={currentImage.caption || (currentImage.isGif ? 'GIF' : 'Chat image')}
+      class="lb-media"
+      style="transform: scale({scale}) translate({translateX / scale}px, {translateY / scale}px); transition: {isPanning || mouseDown ? 'none' : 'transform 250ms cubic-bezier(0.22, 1, 0.36, 1)'};"
+      draggable="false"
+    />
   </div>
 
   <!-- Bottom controls -->
   <div class="lb-bottom safe-bottom">
-    <!-- Caption -->
     {#if currentImage?.caption}
       <p class="lb-caption">{currentImage.caption}</p>
     {/if}
 
-    <!-- Zoom controls + info -->
     <div class="lb-controls">
       <div class="lb-zoom-controls">
-        <button class="lb-ctrl-btn" onclick={zoomOut} aria-label="Zoom out" class:lb-ctrl-disabled={scale <= 0.5}>
+        <button class="lb-ctrl-btn" onclick={zoomOut} aria-label="Zoom out" class:lb-ctrl-disabled={scale <= 1}>
           <ZoomOut size={18} />
         </button>
         <span class="lb-zoom-label">{Math.round(scale * 100)}%</span>
@@ -297,7 +327,6 @@
       </div>
 
       {#if hasMultiple}
-        <!-- Dot indicators -->
         <div class="lb-dots">
           {#each images as _, i}
             <span class="lb-dot" class:lb-dot-active={i === currentIndex}></span>
@@ -321,12 +350,8 @@
     -webkit-user-select: none;
   }
 
-  @keyframes lbFadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
+  @keyframes lbFadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-  /* Top bar */
   .lb-top {
     display: flex;
     align-items: center;
@@ -353,10 +378,7 @@
   }
   .lb-btn:active { transform: scale(0.88); background: rgba(255,255,255,0.2); }
 
-  .lb-top-center {
-    display: flex;
-    align-items: center;
-  }
+  .lb-top-center { display: flex; align-items: center; }
 
   .lb-counter {
     color: rgba(255,255,255,0.7);
@@ -365,11 +387,7 @@
     font-variant-numeric: tabular-nums;
   }
 
-  .lb-top-actions {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
+  .lb-top-actions { display: flex; align-items: center; gap: 6px; }
 
   .lb-gif-badge {
     display: inline-flex;
@@ -383,13 +401,8 @@
     letter-spacing: 0.05em;
   }
 
-  .lb-copied {
-    font-size: 12px;
-    font-weight: 600;
-    color: white;
-  }
+  .lb-copied { font-size: 12px; font-weight: 600; color: white; }
 
-  /* Image area */
   .lb-img-area {
     flex: 1;
     display: flex;
@@ -397,23 +410,20 @@
     justify-content: center;
     overflow: hidden;
     position: relative;
-    touch-action: pan-x pan-y pinch-zoom;
+    touch-action: none;
     cursor: zoom-in;
   }
 
-  .lb-img-area-zoomed {
-    cursor: grab;
-  }
+  .lb-img-area-zoomed { cursor: grab; }
 
   .lb-media {
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
-    transition: transform 250ms cubic-bezier(0.22, 1, 0.36, 1);
     pointer-events: none;
+    will-change: transform;
   }
 
-  /* Nav arrows */
   .lb-nav {
     position: absolute;
     top: 50%;
@@ -421,15 +431,10 @@
     z-index: 10;
     display: none;
   }
-
-  @media (min-width: 768px) {
-    .lb-nav { display: flex; }
-  }
-
+  @media (min-width: 768px) { .lb-nav { display: flex; } }
   .lb-nav-left { left: 12px; }
   .lb-nav-right { right: 12px; }
 
-  /* Bottom */
   .lb-bottom {
     padding: 8px 16px 12px;
     flex-shrink: 0;
@@ -490,11 +495,7 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* Dots */
-  .lb-dots {
-    display: flex;
-    gap: 6px;
-  }
+  .lb-dots { display: flex; gap: 6px; }
 
   .lb-dot {
     width: 6px;
@@ -503,9 +504,5 @@
     background: rgba(255,255,255,0.3);
     transition: background 200ms ease, transform 200ms ease;
   }
-
-  .lb-dot-active {
-    background: white;
-    transform: scale(1.3);
-  }
+  .lb-dot-active { background: white; transform: scale(1.3); }
 </style>
