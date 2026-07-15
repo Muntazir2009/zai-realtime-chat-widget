@@ -5,8 +5,6 @@ import { getEnv } from '$lib/server/firebase-rest';
 
 export const POST: RequestHandler = async ({ request }) => {
   try {
-    const env = getEnv(request);
-
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
     const folder = (formData.get('folder') as string) || 'media';
@@ -15,19 +13,18 @@ export const POST: RequestHandler = async ({ request }) => {
       return json({ error: 'No file provided' }, { status: 400 });
     }
 
-    // Validate file size (50MB max)
-    const MAX_SIZE = 50 * 1024 * 1024;
+    // Size limit: 100MB
+    const MAX_SIZE = 100 * 1024 * 1024;
     if (file.size > MAX_SIZE) {
-      return json({ error: 'File too large (max 50MB)' }, { status: 413 });
+      return json({ error: `File too large (${(file.size / 1024 / 1024).toFixed(1)}MB, max 100MB)` }, { status: 413 });
     }
 
-    const contentType = file.type || 'application/octet-stream';
-    const result = await uploadToR2(env, file, file.name, contentType, folder);
+    const env = getEnv();
+    const result = await uploadToR2(env, file, file.name, file.type, folder);
 
-    return json({ publicUrl: result.publicUrl, key: result.key });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Upload failed';
-    console.error('[upload/file]', msg);
-    return json({ error: msg }, { status: 500 });
+    return json(result);
+  } catch (err: any) {
+    console.error('[upload/file]', err);
+    return json({ error: err.message || 'Upload failed' }, { status: 500 });
   }
 };

@@ -193,7 +193,7 @@
         const videoMeta = await getVideoMeta(file);
         if (onVideoSend) onVideoSend(result.publicUrl, videoMeta.duration, videoMeta.thumbnailUrl);
       } else {
-        if (onImageSend) onImageSend(result.publicUrl);
+        if (onImageSend) onImageSend(result.publicUrl, (result as any).blurhash);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
