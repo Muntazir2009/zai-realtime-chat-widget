@@ -1,6 +1,11 @@
 <script lang="ts">
   import { Globe, MessageCircle, Settings } from 'lucide-svelte';
   import { uiStore, type TabId } from '$lib/stores/ui.svelte';
+  import { chatStore } from '$lib/stores/chat.svelte';
+
+  let totalUnread = $derived(
+    chatStore.sortedInbox.reduce((sum, entry) => sum + (entry.userChat.uc ?? 0), 0)
+  );
 
   const tabs: { id: TabId; label: string; icon: typeof Globe }[] = [
     { id: 'global', label: 'Global', icon: Globe },
@@ -32,6 +37,9 @@
       >
         <tab.icon size={18} class="nav-pill-icon" />
         <span class="nav-pill-label">{tab.label}</span>
+        {#if tab.id === 'dms' && totalUnread > 0}
+          <span class="unread-badge">{totalUnread > 9 ? '9+' : totalUnread}</span>
+        {/if}
       </button>
     {/each}
   </div>
@@ -47,13 +55,13 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 6px 16px;
-    padding-bottom: max(6px, env(safe-area-inset-bottom, 0px) + 4px);
+    padding: 4px 16px;
+    padding-bottom: max(4px, env(safe-area-inset-bottom, 0px) + 2px);
     background: var(--glass-bg);
-    backdrop-filter: blur(24px) saturate(200%);
-    -webkit-backdrop-filter: blur(24px) saturate(200%);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
     border-top: 1px solid var(--border-subtle);
-    box-shadow: 0 -2px 16px rgba(0, 0, 0, 0.04);
+    box-shadow: 0 -1px 8px rgba(0, 0, 0, 0.03);
   }
 
   .nav-pill-track {
@@ -119,6 +127,35 @@
     }
     50% {
       transform: scale(1.06);
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  .unread-badge {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: var(--color-primary);
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+    animation: badgeScaleIn 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    pointer-events: none;
+  }
+
+  @keyframes badgeScaleIn {
+    0% {
+      transform: scale(0);
+      opacity: 0;
     }
     100% {
       transform: scale(1);

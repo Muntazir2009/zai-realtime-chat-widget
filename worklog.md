@@ -811,4 +811,65 @@ Work Log:
 
 Stage Summary:
 - Input bar raised by 5px via negative margin-bottom on the floating-input-area container
+---
+Task ID: 3
+Agent: Real-time Features Agent
+Task: Add real-time chat features (unread badge, seen indicator, online toasts, typing area)
 
+Work Log:
+- Read existing codebase: BottomNavBar.svelte, Conversation.svelte, chat.svelte.ts store, toast.svelte.ts store, Avatar.svelte component, types/index.ts
+- Feature 1: Added `chatStore` import and `totalUnread` derived to BottomNavBar.svelte, computed from `sortedInbox` entries' `uc` field. Added red badge `<span>` with 18px circle, shows count (9+ if >9), scale-in animation using `--color-primary` bg.
+- Feature 2: Added `formatDistanceToNow` import from date-fns. Added `seenTick` interval (30s), `lastReadInfo` derived that checks `chatStore.otherUserReadIds` against last own message ID, `seenText` derived showing "Seen just now" (<5min) or "Seen Xm ago". Added `{seenText}` condition in header subtitle before "Online" check. Added `.header-seen` CSS.
+- Feature 3: Added `prevOnlineState` $state and $effect watching `otherPresence` that fires `toastStore.show()` when other user transitions to online. Note: toast store methods are currently no-ops; code is wired and ready when re-enabled.
+- Feature 4: Added in-message typing indicator HTML block after message groups loop, before scroll-bottom-pad. Uses `Avatar size="sm"` (xs not available in component), with bouncing dots animation. Added CSS for `.in-msg-typing`, `.imt-bubble`, `.imt-avatar`, `.imt-dots`, and keyframes `imtBounce` and `typingBubbleIn`.
+- Verified with svelte-check: all 27 errors are pre-existing, zero new errors from this task.
+
+Stage Summary:
+- Unread badge on BottomNavBar "Chats" pill (red circle with count, 9+ cap, scale-in animation)
+- "Seen" indicator in Conversation header (shows "Seen just now ✓✓" or "Seen Xm ago ✓✓" with green/primary tint, updates every 30s)
+- Online toast notification (fires when other user comes online, wired to toastStore API)
+- In-message typing indicator (floating bubble with avatar + bouncing dots near bottom of message scroll area)
+
+
+---
+Task ID: 4
+Agent: Main Agent
+Task: Fix nav bar overlap, lift input bar, redesign reaction picker, enable toast system
+
+Work Log:
+- Redesigned reaction picker from single-row (16 emojis, ~622px wide, overflow) to 2-row grid (8×2, ~290px wide)
+- Changed reaction picker to fixed positioning with viewport-aware JS clamping (positionPicker function)
+- Added caret/arrow that dynamically points toward the + button (works for above/below positioning)
+- Smooth spring animation with opacity/transform transition instead of CSS animation
+- Active reaction indicators now use a dot below emoji instead of inset box-shadow
+- Increased has-nav padding-bottom from 68px to 78px to prevent nav bar overlap
+- Made BottomNavBar more compact: reduced padding, blur, and shadow
+- Lifted floating-input-area from translateY(-10px) to translateY(-18px) with -8px margin-bottom
+- Enabled toast store (was fully no-oped) so online notifications actually render
+- ToastContainer was already fully implemented, just needed store methods to work
+
+Stage Summary:
+- Reaction picker now fits within mobile viewport, no overflow
+- Nav bar has more breathing room from content, reduced visual footprint
+- Input bar lifted 8px more
+- Toast system is now functional
+- Zero new svelte-check errors introduced (27 errors all pre-existing)
+- Key files: MessageBubble.svelte (reaction picker), BottomNavBar.svelte (compact + badge), Conversation.svelte (input lift), toast.svelte.ts (enabled), app.css (has-nav padding)
+
+---
+Task ID: 5
+Agent: Main Agent
+Task: Overall session summary — layout + real-time features
+
+Work Log:
+- Session covered: reaction picker overflow fix, nav/input bar layout, 4 real-time features
+- All changes verified via svelte-check (0 new errors)
+- Dev server confirmed working (Vite serves HTML successfully)
+- Agent-browser verification limited by sandbox process management (background processes terminate)
+
+Stage Summary:
+- Reaction picker: 2-row grid with viewport-aware fixed positioning and caret
+- Layout: Nav bar compacted (smaller blur/shadow/padding), has-nav 78px, input lifted 18px
+- Real-time: Unread badge, Seen indicator, Online toasts, In-message typing bubble
+- Toast system: Fully enabled and working
+- Unresolved: Dev server background process stability in sandbox (not a code issue)

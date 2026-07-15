@@ -15,7 +15,7 @@
   import { authStore } from '$lib/stores/auth.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
   import type { Message } from '$lib/types/index';
-  import { format, isToday, isYesterday, startOfDay } from 'date-fns';
+  import { format, formatDistanceToNow, isToday, isYesterday, startOfDay } from 'date-fns';
   import EasterEggFx from './EasterEggFx.svelte';
   import WallpaperPicker from './WallpaperPicker.svelte';
 
@@ -102,6 +102,46 @@
     if (!otherPresence || !otherPresence.lastSeen) return null;
     if (otherPresence.status === 'online') return null;
     return formatLastSeen(otherPresence.lastSeen);
+  });
+
+  // "Seen" indicator — shows when the other user's lastReadMessageId matches our last sent message
+  let seenTick = $state(0);
+  $effect(() => {
+    const t = setInterval(() => { seenTick++; }, 30_000);
+    return () => clearInterval(t);
+  });
+
+  let lastReadInfo = $derived.by(() => {
+    void seenTick; // re-evaluate on tick for "Seen Xm ago" updates
+    if (!chatStore.activeChatId || !authStore.user) return null;
+    const otherReadId = chatStore.otherUserReadIds.get(chatStore.activeChatId);
+    if (!otherReadId) return null;
+    const lastOwnMsg = [...chatStore.messages].reverse().find(m => m.sid === authStore.user?.id);
+    if (!lastOwnMsg || lastOwnMsg.id !== otherReadId) return null;
+    return { readMsgId: otherReadId, ts: lastOwnMsg.ts };
+  });
+
+  let seenText = $derived.by(() => {
+    if (!lastReadInfo) return null;
+    if (!lastReadInfo.ts) return 'Seen';
+    const now = Date.now();
+    const diffMs = now - lastReadInfo.ts;
+    if (diffMs < 5 * 60 * 1000) return 'Seen just now';
+    return `Seen ${formatDistanceToNow(lastReadInfo.ts, { addSuffix: true })}`;
+  });
+
+  // Online/offline toast notification
+  let prevOnlineState = $state(false);
+  $effect(() => {
+    const p = otherPresence;
+    if (!p) return;
+    const isOnline = p.status === 'online';
+    if (isOnline !== prevOnlineState) {
+      prevOnlineState = isOnline;
+      if (isOnline) {
+        toastStore.show(`${otherUser?.displayName ?? 'User'} is now online`, 'info', 2500);
+      }
+    }
   });
 
   let typingNames = $derived.by(() => {
@@ -473,6 +513,8 @@
                 <span class="htd"></span><span class="htd"></span><span class="htd"></span>
               </span>
             </div>
+          {:else if seenText}
+            <p class="header-sub header-seen">{seenText} ✓✓</p>
           {:else if otherPresence?.status === 'online'}
             <p class="header-sub header-online">Online</p>
           {:else if otherPresence}
@@ -571,6 +613,20 @@
           </div>
         {/each}
       {/each}
+    {/if}
+
+    <!-- In-message typing indicator -->
+    {#if typingNames.length > 0}
+      <div class="in-msg-typing">
+        <div class="imt-bubble">
+          <div class="imt-avatar">
+            <Avatar username={otherUser?.username ?? '?'} size="sm" avatarUrl={otherUser?.avatarUrl} accentColor={otherUser?.accentColor} />
+          </div>
+          <div class="imt-dots">
+            <span></span><span></span><span></span>
+          </div>
+        </div>
+      </div>
     {/if}
 
     <!-- Scroll padding at bottom for nav bar -->
@@ -1232,7 +1288,8 @@
     flex-shrink: 0;
     position: relative;
     z-index: 30;
-    transform: translateY(-10px);
+    transform: translateY(-18px);
+    margin-bottom: -8px;
   }
 
   /* === TYPING AREA === */
@@ -1685,5 +1742,57 @@
     align-items: center;
     justify-content: center;
     padding: 48px 24px;
+  }
+
+  .header-seen {
+    color: var(--color-primary) !important;
+    font-weight: 500;
+  }
+
+  .in-msg-typing {
+    padding: 4px 16px;
+    animation: typingBubbleIn 250ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .imt-bubble {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 18px 18px 18px 4px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    max-width: 140px;
+  }
+
+  .imt-avatar {
+    flex-shrink: 0;
+  }
+
+  .imt-dots {
+    display: flex;
+    gap: 3px;
+    align-items: center;
+  }
+
+  .imt-dots span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-tertiary);
+    animation: imtBounce 1.2s ease-in-out infinite;
+  }
+
+  .imt-dots span:nth-child(2) { animation-delay: 0.15s; }
+  .imt-dots span:nth-child(3) { animation-delay: 0.3s; }
+
+  @keyframes imtBounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+    30% { transform: translateY(-4px); opacity: 1; }
+  }
+
+  @keyframes typingBubbleIn {
+    from { opacity: 0; transform: translateY(8px) scale(0.95); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
   }
 </style>
