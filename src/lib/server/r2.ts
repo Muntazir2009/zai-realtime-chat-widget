@@ -1,12 +1,12 @@
 // ============================================================
-// Cloudflare R2 Presigned Upload URL Generator.
-// Works on Cloudflare Workers — no Node.js deps.
+// Cloudflare R2 Storage — presigned URLs, direct uploads, CORS.
 // Uses AWS SDK v3 (compatible with Workers runtime).
 // ============================================================
 
 import {
   S3Client,
   PutObjectCommand,
+  PutBucketCorsCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { EnvVars } from './firebase-rest';
@@ -19,7 +19,7 @@ export interface PresignedUploadResult {
 
 let _s3: S3Client | null = null;
 
-function getS3Client(env: EnvVars): S3Client {
+export function getS3Client(env: EnvVars): S3Client {
   if (!_s3) {
     const accountId = env.R2_ACCOUNT_ID;
     const accessKeyId = env.R2_ACCESS_KEY_ID;
@@ -104,4 +104,42 @@ export async function generatePresignedUploadUrl(
   const publicUrl = `${publicBase}/${key}`;
 
   return { uploadUrl, publicUrl, key };
+}
+
+// ── CORS Configuration ─────────────────────────────────────
+
+let corsConfigured = false;
+
+/**
+ * Configure CORS on the R2 bucket to allow direct browser uploads.
+ * Safe: presigned URLs already contain auth credentials, so allowing
+ * all origins just lets the browser make the PUT request.
+ * Called once on first upload; subsequent calls are no-ops.
+ */
+export async function ensureR2Cors(env: EnvVars): Promise<void> {
+  if (corsConfigured) return;
+  const client = getS3Client(env);
+  const bucket = env.R2_BUCKET_NAME || 'chat-media';
+
+  try {
+    await client.send(new PutBucketCorsCommand({
+      Bucket: bucket,
+      CORSConfiguration: {
+        CORSRules: [
+          {
+            AllowedHeaders: ['*'],
+            AllowedMethods: ['PUT', 'GET', 'HEAD'],
+            AllowedOrigins: ['*'],
+            ExposeHeaders: ['ETag'],
+            MaxAgeSeconds: 86400,
+          },
+        ],
+      },
+    }));
+    corsConfigured = true;
+    console.log('[R2] CORS configured successfully');
+  } catch (err) {
+    console.warn('[R2] Failed to configure CORS (non-critical):', err);
+    // Don't throw — uploads will fall back to streaming proxy
+  }
 }
