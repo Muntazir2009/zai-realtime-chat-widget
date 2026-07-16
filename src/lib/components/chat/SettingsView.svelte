@@ -81,26 +81,6 @@
     { label: 'Pink', value: '#ec4899' },
   ];
 
-  // ── Enter-to-send preference (localStorage) ──
-  let enterSend = $state(true);
-
-  function loadNotifPrefs() {
-    try {
-      const raw = localStorage.getItem('chat-notif-prefs');
-      if (raw) {
-        const p = JSON.parse(raw);
-        enterSend = p.enterSend ?? true;
-      }
-    } catch {}
-  }
-
-  function saveNotifPrefs() {
-    localStorage.setItem('chat-notif-prefs', JSON.stringify({ enterSend }));
-  }
-
-  $effect(() => { saveNotifPrefs(); });
-  loadNotifPrefs();
-
   // ── Connection & stats ──
   let connState = $derived(networkManager.connectionState);
   let lastSync = $derived(networkManager.lastSyncTimestamp);
@@ -311,7 +291,7 @@
       () => {
         localStorage.removeItem('chat-prefs');
         localStorage.removeItem('chat-theme');
-        localStorage.removeItem('chat-notif-prefs');
+        localStorage.removeItem('chat-drafts');
         localStorage.removeItem('chat-wallpaper');
         window.location.reload();
       }
@@ -573,6 +553,29 @@
             role="switch"
             aria-checked={prefsStore.compactMode}
             aria-label="Toggle compact mode"
+          >
+            <div class="toggle-thumb"></div>
+          </button>
+        </div>
+
+        <!-- Enter to Send -->
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="toggle-icon" style="background: color-mix(in srgb, var(--color-accent) 12%, transparent);">
+              <Type size={15} style="color: var(--color-accent);" />
+            </div>
+            <div>
+              <p class="toggle-title">Enter to Send</p>
+              <p class="toggle-desc">Press Enter to send messages</p>
+            </div>
+          </div>
+          <button
+            class="toggle-track"
+            class:toggle-on={prefsStore.enterSend}
+            onclick={() => prefsStore.setEnterSend(!prefsStore.enterSend)}
+            role="switch"
+            aria-checked={prefsStore.enterSend}
+            aria-label="Toggle enter to send"
           >
             <div class="toggle-thumb"></div>
           </button>

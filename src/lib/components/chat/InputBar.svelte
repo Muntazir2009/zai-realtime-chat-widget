@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { Loader2, Send, ImagePlus, Mic, Sticker } from 'lucide-svelte';
   import VoiceRecorder from '$lib/components/media/VoiceRecorder.svelte';
   import StickerPicker from '$lib/components/pickers/StickerPicker.svelte';
@@ -8,8 +9,11 @@
   import { toastStore } from '$lib/stores/toast.svelte';
   import { uploadFile } from '$lib/firebase/storage';
   import { prefsStore } from '$lib/stores/prefs.svelte';
+  import { draftStore } from '$lib/stores/draft.svelte';
 
   interface Props {
+    /** Initial draft text to restore */
+    initialDraft?: string;
     onSend: (content: string) => void;
     onImageSend?: (imageUrl: string, blurhash?: string) => void;
     onVideoSend?: (videoUrl: string, duration?: number, thumbnailUrl?: string) => void;
@@ -17,9 +21,9 @@
     onGifSelect?: (gifUrl: string) => void;
   }
 
-  let { onSend, onImageSend, onVideoSend, onStickerSelect, onGifSelect }: Props = $props();
+  let { onSend, onImageSend, onVideoSend, onStickerSelect, onGifSelect, initialDraft = '' }: Props = $props();
 
-  let message = $state('');
+  let message = $state(initialDraft);
   let isRecording = $state(false);
   let isTrayOpen = $state(false);
   let isGifOpen = $state(false);
@@ -42,11 +46,32 @@
     }
   });
 
+  // ── Save draft immediately on component destroy (quick navigate) ──
+  onMount(() => {
+    return () => {
+      if (chatStore.activeChatId && message.trim().length > 0) {
+        draftStore.setDraft(chatStore.activeChatId, message);
+      }
+    };
+  });
+
+  // ── Draft auto-save (debounced) ──
+  let draftTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function saveDraft() {
+    if (!chatStore.activeChatId) return;
+    if (draftTimer) clearTimeout(draftTimer);
+    draftTimer = setTimeout(() => {
+      draftStore.setDraft(chatStore.activeChatId, message);
+    }, 500);
+  }
+
   // ── Typing presence — dual trigger: oninput + $effect fallback ──
   let lastEmittedTyping = 0;
 
   function emitTyping() {
     if (!chatStore.activeChatId) return;
+    saveDraft();
     if (!prefsStore.sendTypingIndicators) return;
     presenceManager.setTyping(chatStore.activeChatId);
     if (typingTimer) clearTimeout(typingTimer);
@@ -90,10 +115,12 @@
     message = '';
     if (textareaEl) textareaEl.style.height = 'auto';
     clearTyping();
+    // Clear draft after successful send
+    if (chatStore.activeChatId) draftStore.clearDraft(chatStore.activeChatId);
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && prefsStore.enterSend) {
       e.preventDefault();
       handleSend();
     }

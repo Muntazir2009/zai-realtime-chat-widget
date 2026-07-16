@@ -2,7 +2,7 @@
 // Prefs Store — Svelte 5 runes class
 // User preferences persisted to localStorage.
 // Covers: online visibility, read receipts, typing indicators,
-// font size, bubble style, compact mode.
+// font size, bubble style, compact mode, enter-to-send.
 // ============================================================
 
 const STORAGE_KEY = 'chat-prefs';
@@ -11,18 +11,13 @@ export type FontSize = 'small' | 'medium' | 'large';
 export type BubbleStyle = 'round' | 'squircle' | 'minimal';
 
 interface Prefs {
-  /** Show your online status to others */
   showOnline: boolean;
-  /** Send read receipts when you read messages */
   sendReadReceipts: boolean;
-  /** Broadcast typing indicators */
   sendTypingIndicators: boolean;
-  /** Message font size */
   fontSize: FontSize;
-  /** Message bubble corner style */
   bubbleStyle: BubbleStyle;
-  /** Compact mode — smaller avatars & spacing */
   compactMode: boolean;
+  enterSend: boolean;
 }
 
 const DEFAULT_PREFS: Prefs = {
@@ -32,6 +27,7 @@ const DEFAULT_PREFS: Prefs = {
   fontSize: 'medium',
   bubbleStyle: 'round',
   compactMode: false,
+  enterSend: true,
 };
 
 function readPrefs(): Prefs {
@@ -58,8 +54,8 @@ class PrefsStore {
   fontSize = $state(readPrefs().fontSize);
   bubbleStyle = $state(readPrefs().bubbleStyle);
   compactMode = $state(readPrefs().compactMode);
+  enterSend = $state(readPrefs().enterSend);
 
-  /** Apply font size CSS variable */
   constructor() {
     if (typeof document !== 'undefined') {
       this.applyFontSize(this.fontSize);
@@ -75,6 +71,7 @@ class PrefsStore {
       fontSize: this.fontSize,
       bubbleStyle: this.bubbleStyle,
       compactMode: this.compactMode,
+      enterSend: this.enterSend,
     });
   }
 
@@ -92,37 +89,14 @@ class PrefsStore {
     document.documentElement.style.setProperty('--bubble-radius', map[style]);
   }
 
-  setShowOnline(val: boolean): void {
-    this.showOnline = val;
-    this.persist();
-  }
+  setShowOnline(val: boolean): void { this.showOnline = val; this.persist(); }
+  setSendReadReceipts(val: boolean): void { this.sendReadReceipts = val; this.persist(); }
+  setSendTypingIndicators(val: boolean): void { this.sendTypingIndicators = val; this.persist(); }
+  setEnterSend(val: boolean): void { this.enterSend = val; this.persist(); }
 
-  setSendReadReceipts(val: boolean): void {
-    this.sendReadReceipts = val;
-    this.persist();
-  }
-
-  setSendTypingIndicators(val: boolean): void {
-    this.sendTypingIndicators = val;
-    this.persist();
-  }
-
-  setFontSize(size: FontSize): void {
-    this.fontSize = size;
-    this.applyFontSize(size);
-    this.persist();
-  }
-
-  setBubbleStyle(style: BubbleStyle): void {
-    this.bubbleStyle = style;
-    this.applyBubbleStyle(style);
-    this.persist();
-  }
-
-  setCompactMode(val: boolean): void {
-    this.compactMode = val;
-    this.persist();
-  }
+  setFontSize(size: FontSize): void { this.fontSize = size; this.applyFontSize(size); this.persist(); }
+  setBubbleStyle(style: BubbleStyle): void { this.bubbleStyle = style; this.applyBubbleStyle(style); this.persist(); }
+  setCompactMode(val: boolean): void { this.compactMode = val; this.persist(); }
 }
 
 export const prefsStore = new PrefsStore();

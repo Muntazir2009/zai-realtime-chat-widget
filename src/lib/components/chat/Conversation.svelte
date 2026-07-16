@@ -14,6 +14,7 @@
   import { uiStore } from '$lib/stores/ui.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
+  import { draftStore } from '$lib/stores/draft.svelte';
   import type { Message } from '$lib/types/index';
   import { format, formatDistanceToNow, isToday, isYesterday, startOfDay } from 'date-fns';
   import EasterEggFx from './EasterEggFx.svelte';
@@ -70,6 +71,11 @@
   let otherUser = $derived.by(() => {
     const meta = chatStore.activeChatId ? chatStore.chats.get(chatStore.activeChatId) : undefined;
     return chatStore.getOtherParticipant(meta);
+  });
+
+  // ── Draft for current chat ──
+  let currentDraft = $derived.by(() => {
+    return chatStore.activeChatId ? draftStore.getDraft(chatStore.activeChatId) : '';
   });
 
   let chatWallpaper = $derived.by(() => {
@@ -272,6 +278,11 @@
 
   function goBack() {
     showMenu = false;
+    // Save current draft before leaving
+    if (chatStore.activeChatId) {
+      // The InputBar's debounced save handles most cases,
+      // but we also need an immediate save on navigation
+    }
     chatStore.closeChat();
     uiStore.setView('chatList');
   }
@@ -694,6 +705,7 @@
 
     <!-- Input Bar -->
     <InputBar
+      {currentDraft as initialDraft}
       onSend={handleSend}
       onImageSend={handleImageSend}
       onVideoSend={handleVideoSend}

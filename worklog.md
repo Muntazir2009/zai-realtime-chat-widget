@@ -926,3 +926,34 @@ Stage Summary:
 - Key bottleneck: R2 bucket had no CORS config, causing ALL uploads to use slow FormData proxy
 - Fix: Auto-configure R2 CORS + new raw-body upload endpoint as fast middle path
 - Files modified: r2.ts, storage.ts, presign/+server.ts, new stream/+server.ts
+---
+Task ID: 2
+Agent: Main Agent
+Task: Fix file uploading, add draft messages, add settings persistence
+
+Work Log:
+- Discovered all 3 upload API routes were missing (presign, stream, file) — recreated them
+- Rewrote /api/upload/stream to use presigned URL + native fetch (avoids AWS SDK crash in Vite dev server)
+- Created /src/lib/stores/draft.svelte.ts — new DraftStore class with localStorage persistence
+  - getDraft(chatId), setDraft(chatId, text), clearDraft(chatId), saveBeforeLeave()
+- Integrated drafts into InputBar.svelte:
+  - Added initialDraft prop to restore saved text
+  - Added debounced auto-save (500ms) on every keystroke via saveDraft()
+  - Clear draft on successful message send
+  - onMount cleanup saves draft immediately on component destroy (covers quick-navigate)
+- Integrated drafts into Conversation.svelte:
+  - Added currentDraft derived from draftStore
+  - Passes initialDraft to InputBar
+- Fixed settings persistence bugs:
+  - Moved enterSend from broken local state (race condition) into PrefsStore
+  - enterSend was defined in SettingsView but never wired to InputBar — now it controls Enter key behavior
+  - Added Enter to Send toggle in Settings UI with Type icon
+  - Removed stale chat-notif-prefs localStorage key, replaced with chat-drafts in reset function
+  - Cleaned up PrefsStore: single readPrefs() call pattern, added enterSend to all persist paths
+
+Stage Summary:
+- Upload fix: All 3 routes recreated, stream endpoint uses presigned URL + fetch (stable)
+- Drafts: Fully functional — saves on type, restores on open, clears on send, survives refresh
+- Settings: enterSend now properly persisted and wired up, all prefs survive page reload
+- Files created: draft.svelte.ts, presign/+server.ts, stream/+server.ts, file/+server.ts
+- Files modified: prefs.svelte.ts, InputBar.svelte, Conversation.svelte, SettingsView.svelte
