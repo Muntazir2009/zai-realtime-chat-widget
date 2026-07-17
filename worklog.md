@@ -1096,3 +1096,163 @@ Stage Summary:
 - 3-tier upload strategy preserved: direct R2 presigned URL → streaming proxy → FormData fallback
 - Image compression runs in parallel with blurhash and presign URL fetch
 - Zero new TypeScript errors from the changes
+
+---
+Task ID: 2-a
+Agent: Main Agent (parallel subagent)
+Task: Redesign TypingIndicator with glass bubble, breathing dots, smooth exit
+
+Work Log:
+- Rewrote /src/lib/components/indicators/TypingIndicator.svelte with Svelte 5 runes
+- Added frosted glass bubble with backdrop-filter using design system tokens
+- Implemented breathing dot animation (scale + opacity, 1.8s cycle, staggered 0.25s)
+- Added 200ms show debounce and 600ms hide debounce to prevent flickering with noisy Firebase typing indicators
+- Implemented smooth enter (translateY + scale + opacity) and exit animations (280ms)
+- Component stays mounted even when hidden (debounce timers survive rapid state changes)
+- Added optional avatar (image or initial dot with accent color)
+- Multi-user label: "X is typing", "X and Y are typing", "X and N others are typing"
+- Updated Conversation.svelte to always mount the component (removed {#if} guard)
+
+Stage Summary:
+- Modern glass typing bubble with organic breathing animation
+- No flickering with rapid Firebase typing state toggles
+- GPU-composited animations only (transform + opacity)
+
+---
+Task ID: 2-b
+Agent: Main Agent (parallel subagent)
+Task: Redesign toast notification system with frosted glass, swipe dismiss, progress
+
+Work Log:
+- Rewrote /src/lib/stores/toast.svelte.ts with full-featured store
+  - Progress tracking (0-1) via single requestAnimationFrame loop
+  - Deduplication within 2s window (resets timer instead of creating duplicate)
+  - Optional icon, action button, pause-on-hover support
+  - Max 4 visible toasts, queue system for overflow
+  - Animated exit (280ms) before removal
+- Rewrote /src/lib/components/ui/ToastContainer.svelte
+  - Frosted glass cards (no colored left border)
+  - Inline SVG animated icons per type (scale-in, shake, pulse, fade-in)
+  - Slide-down enter / slide-up exit with spring cubic-bezier
+  - 2px progress bar with type-colored fill
+  - Swipe-to-dismiss on touch (100px threshold, spring-back)
+  - Tap to dismiss, hover pause on desktop
+  - Responsive: top-center on mobile, top-right on desktop
+  - Safe-area-inset-top awareness
+  - Staggered entry (50ms per toast)
+- Moved ToastContainer to +layout.svelte (persists across all pages)
+
+Stage Summary:
+- Premium toast system with glassmorphism matching the app design
+- Full backward compatibility with all 20+ existing toastStore.*() call sites
+- rAF-based progress bar (no setInterval)
+
+---
+Task ID: 2-c
+Agent: Main Agent (parallel subagent)
+Task: Enhance EasterEggFx with canvas-confetti for diverse reaction effects
+
+Work Log:
+- Rewrote /src/lib/components/chat/EasterEggFx.svelte with dual-layer system
+- Preserved existing SVG particle system (hearts, sparkles, glows)
+- Added canvas-confetti layer for 11 effect types: heart, kiss, laugh, fire, celebration, sparkle, thumbsup, applause, tears, hearteyes, hundred
+- Each effect type has tailored confetti config (colors, shapes, origin, spread, gravity)
+- Added new SVG particle types: droplet, flame, burst, hundred-text
+- Updated Conversation.svelte: expanded checkEasterEgg() for 11 text triggers, emojiToEffectType() mapping for 7 reaction emojis, passed effectType prop to EasterEggFx
+
+Stage Summary:
+- Rich, diverse reaction effects using canvas-confetti
+- Backward compatible (defaults to 'heart' if no effectType)
+- GPU-accelerated, pointer-events: none
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: Improve Conversation.svelte - bottom spacing, scroll-to-latest pill, typing area
+
+Work Log:
+- Removed old inline in-message typing indicator (imt-bubble, imt-dots CSS)
+- Redesigned scroll FAB as "Jump to Latest" pill (centered, glassmorphism, shows unread count)
+- Increased scroll-bottom-pad from 12px to 24px for more breathing room
+- Adjusted floating-input-area transform from -18px to -14px, margin from -8px to -6px
+- Updated typing-area padding for better alignment
+- Added arrow bounce animation on jump pill
+
+Stage Summary:
+- Premium "New Messages (3)" pill replaces old circle FAB
+- More breathing room between messages and input
+- Cleaner conversation flow
+
+---
+Task ID: 4
+Agent: Main Agent
+Task: Redesign reaction picker with glassmorphism
+
+Work Log:
+- Replaced flat picker background with frosted glass (glass-bg, backdrop-filter, glass-border)
+- Increased padding from 8px to 10px/12px
+- Increased border-radius to 24px for pill shape
+- Increased touch targets from 34px to 40px
+- Increased emoji size from 19px to 22px
+- Added inset box-shadow for depth
+- Improved spring animation (scale 0.88→1, 320ms cubic-bezier)
+- Added will-change: transform, opacity for GPU compositing
+- Improved viewport-aware positioning (checks spaceAbove vs spaceBelow, falls back gracefully)
+- Caret matches glass background
+
+Stage Summary:
+- Premium glassmorphism reaction picker that stays inside viewport
+- Larger touch targets (40px) for mobile
+- Smooth spring open/close animation
+
+---
+Task ID: 5
+Agent: Main Agent
+Task: Change message interactions: tap=menu, long-press=reactions
+
+Work Log:
+- Modified MessageBubble.svelte touch handling
+- Single tap (250ms delay, cancelled by double-tap) → opens context menu (message options)
+- Long press (350ms) → opens reaction picker directly on that message
+- Right-click on desktop → opens reaction picker (equivalent to long press)
+- Double tap → quick ❤️ reaction (preserved from before)
+- Added didLongPress flag to prevent context menu from firing after long press
+- Added singleTapTimer for 250ms delay (allows double-tap detection)
+
+Stage Summary:
+- Tap opens options menu, long press opens reactions (swapped from before)
+- Double tap still does quick ❤️
+- Desktop right-click opens reaction picker
+
+---
+Task ID: 8
+Agent: Main Agent
+Task: Performance audit
+
+Work Log:
+- Optimized getReplyMessage() from O(n) per-message to O(1) using pre-computed msgLookup Map
+- Optimized lastReadInfo derived to avoid [...messages].reverse() array copy (reverse loop instead)
+- Preserved all existing functionality
+
+Stage Summary:
+- Eliminated O(n²) reply lookup pattern
+- Reduced unnecessary array allocations
+
+---
+Task ID: 9
+Agent: Main Agent
+Task: Final UX polish pass
+
+Work Log:
+- Improved message row spacing: default 6px, non-grouped 10px top/6px bottom
+- Tightened grouped message spacing to 1px top/1px bottom
+- Increased horizontal padding from 10px to 12px for both own/other messages
+- Enhanced reaction chips with hover states, spring transitions, active glow shadows
+- Improved reaction add button with hover color change and spring press effect
+- Added color-mix for reaction chip active border (30% primary blend)
+- Improved reaction bar margin-top from 2px to 3px
+
+Stage Summary:
+- Tighter, more polished message spacing
+- Better reaction chip and add-button interactions
+- Hover/active states throughout

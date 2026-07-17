@@ -5,7 +5,6 @@
   import { chatStore } from '$lib/stores/chat.svelte';
   import { uiStore } from '$lib/stores/ui.svelte';
   import { presenceManager } from '$lib/managers/PresenceManager.svelte';
-  import ToastContainer from '$lib/components/ui/ToastContainer.svelte';
   import ConnectionStatus from '$lib/components/indicators/ConnectionStatus.svelte';
 
   // Component references — dynamic imports for code splitting
@@ -136,4 +135,3 @@
 {/if}
 
 <ConnectionStatus />
-<ToastContainer />

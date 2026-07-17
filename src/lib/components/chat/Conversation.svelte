@@ -43,6 +43,7 @@
   let editingMsg: Message | null = $state(null);
   let editText = $state('');
   let triggerEasterEgg = $state(0);
+  let currentEffectType = $state<'heart' | 'kiss' | 'laugh' | 'fire' | 'celebration' | 'sparkle' | 'thumbsup' | 'applause' | 'tears' | 'hearteyes' | 'hundred'>('heart');
   let isNearBottom = $state(true);
   let prevMsgCount = 0;
   let showScrollFab = $state(false);
@@ -84,6 +85,8 @@
       const m = chatStore.messages[i];
       if (m?.sid !== userId && m.md?.egg) {
         // Delay slightly so the message appears first, then the effect plays
+        const eggType = m.md.egg as EggType;
+        if (eggType) currentEffectType = eggType;
         setTimeout(() => { triggerEasterEgg++; }, 200);
         break;
       }
@@ -145,9 +148,15 @@
     if (!chatStore.activeChatId || !authStore.user) return null;
     const otherReadId = chatStore.otherUserReadIds.get(chatStore.activeChatId);
     if (!otherReadId) return null;
-    const lastOwnMsg = [...chatStore.messages].reverse().find(m => m.sid === authStore.user?.id);
-    if (!lastOwnMsg || lastOwnMsg.id !== otherReadId) return null;
-    return { readMsgId: otherReadId, ts: lastOwnMsg.ts };
+    const msgs = chatStore.messages;
+    // Search from end for last own message (avoid reverse copy)
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i]!.sid === authStore.user!.id) {
+        if (msgs[i]!.id !== otherReadId) return null;
+        return { readMsgId: otherReadId, ts: msgs[i]!.ts };
+      }
+    }
+    return null;
   });
 
   let seenText = $derived.by(() => {
@@ -233,9 +242,16 @@
     return format(new Date(date), 'MMM d, yyyy');
   }
 
+  // Pre-computed message lookup for O(1) reply resolution
+  let msgLookup = $derived.by(() => {
+    const map = new Map<string, Message>();
+    for (const m of chatStore.messages) map.set(m.id, m);
+    return map;
+  });
+
   function getReplyMessage(msg: Message): Message | null {
     if (!msg.rid) return null;
-    return chatStore.messages.find(m => m.id === msg.rid) ?? null;
+    return msgLookup.get(msg.rid) ?? null;
   }
 
   // Scroll to a specific message and highlight it
@@ -310,18 +326,45 @@
     uiStore.setView('chatList');
   }
 
-  function checkEasterEgg(content: string): 'heart' | 'kiss' | null {
+  type EggType = 'heart' | 'kiss' | 'laugh' | 'fire' | 'celebration' | 'sparkle' | 'thumbsup' | 'applause' | 'tears' | 'hearteyes' | 'hundred';
+
+  function checkEasterEgg(content: string): EggType | null {
     const lower = content.toLowerCase().trim();
     if (['❤️', 'i love you', 'love you', 'love u'].includes(lower)) return 'heart';
     if (['💋', 'mwah', 'muah', 'muahh', 'mwahh', 'kiss'].includes(lower)) return 'kiss';
+    if (['😂', 'lmao', 'lol', 'haha', 'hahaha'].includes(lower)) return 'laugh';
+    if (['🔥', 'lit', 'fire', 'on fire'].includes(lower)) return 'fire';
+    if (['🎉', 'congrats', 'congratulations', 'yay', 'woohoo', 'celebrate'].includes(lower)) return 'celebration';
+    if (['✨', 'sparkle', 'sparkles', 'amazing', 'beautiful'].includes(lower)) return 'sparkle';
+    if (['👍', 'nice', 'great job', 'well done'].includes(lower)) return 'thumbsup';
+    if (['👏', 'bravo', 'clap', 'applause'].includes(lower)) return 'applause';
+    if (['😭', '😢', 'crying', 'tears', 'sad'].includes(lower)) return 'tears';
+    if (['😍', 'heart eyes', 'hearts for you', 'so cute'].includes(lower)) return 'hearteyes';
+    if (['💯', '100', 'hundred', 'perfect', 'nailed it'].includes(lower)) return 'hundred';
     return null;
+  }
+
+  function emojiToEffectType(emoji: string): EggType | null {
+    const map: Record<string, EggType> = {
+      '❤️': 'heart',
+      '💋': 'kiss',
+      '🔥': 'fire',
+      '😂': 'laugh',
+      '😍': 'hearteyes',
+      '👍': 'thumbsup',
+      '😢': 'tears',
+    };
+    return map[emoji] ?? null;
   }
 
   function handleSend(content: string) {
     if (!chatStore.activeChatId) return;
     const easter = checkEasterEgg(content);
     const meta = easter ? { egg: easter } : undefined;
-    if (easter === 'heart' || easter === 'kiss') triggerEasterEgg++;
+    if (easter) {
+      currentEffectType = easter;
+      triggerEasterEgg++;
+    }
     const replyToId = uiStore.replyTo?.id;
     chatStore.sendMessage(chatStore.activeChatId, content, replyToId, meta);
     uiStore.setReplyTo(null);
@@ -697,7 +740,11 @@
 
   function handleReaction(msg: Message, emoji: string) {
     if (!chatStore.activeChatId) return;
-    if (emoji === '❤️' || emoji === '💋') triggerEasterEgg++;
+    const effect = emojiToEffectType(emoji);
+    if (effect) {
+      currentEffectType = effect;
+      triggerEasterEgg++;
+    }
     chatStore.toggleReaction(chatStore.activeChatId, msg.id, emoji);
   }
 
@@ -799,7 +846,7 @@
 
 <div class="conv-shell" style="background: var(--bg-page); {wallpaperStyle}">
   {#if triggerEasterEgg > 0}
-    <EasterEggFx trigger={triggerEasterEgg} />
+    <EasterEggFx trigger={triggerEasterEgg} effectType={currentEffectType} />
   {/if}
 
   <!-- Premium Glass Header -->
@@ -940,31 +987,15 @@
       {/each}
     {/if}
 
-    <!-- In-message typing indicator -->
-    {#if typingNames.length > 0}
-      <div class="in-msg-typing">
-        <div class="imt-bubble">
-          <div class="imt-avatar">
-            <Avatar username={otherUser?.username ?? '?'} size="sm" avatarUrl={otherUser?.avatarUrl} accentColor={otherUser?.accentColor} />
-          </div>
-          <div class="imt-dots">
-            <span></span><span></span><span></span>
-          </div>
-        </div>
-      </div>
-    {/if}
-
-    <!-- Scroll padding at bottom for nav bar -->
+    <!-- Scroll padding at bottom for nav bar + input area -->
     <div class="scroll-bottom-pad"></div>
   </div>
 
-  <!-- Scroll to Bottom FAB -->
+  <!-- Jump to Latest pill -->
   {#if showScrollFab}
-    <button class="scroll-fab" onclick={scrollToBottom} aria-label="Scroll to bottom">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-      {#if newMsgWhileScrolled > 0}
-        <span class="fab-count">{newMsgWhileScrolled > 9 ? '9+' : newMsgWhileScrolled}</span>
-      {/if}
+    <button class="jump-pill" onclick={scrollToBottom} aria-label="Jump to latest messages">
+      <span class="jump-pill-text">{newMsgWhileScrolled > 0 ? `New messages (${newMsgWhileScrolled > 9 ? '9+' : newMsgWhileScrolled})` : 'Jump to latest'}</span>
+      <svg class="jump-pill-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
     </button>
   {/if}
 
@@ -1484,7 +1515,7 @@
   }
 
   .scroll-bottom-pad {
-    height: 12px;
+    height: 24px;
     flex-shrink: 0;
   }
 
@@ -1509,63 +1540,54 @@
     box-shadow: 0 1px 3px rgba(0,0,0,0.04);
   }
 
-  /* === SCROLL FAB === */
-  .scroll-fab {
+  /* === JUMP TO LATEST PILL === */
+  .jump-pill {
     position: absolute;
-    bottom: 80px;
-    right: 12px;
-    border-radius: 50%;
-    border: none;
-    cursor: pointer;
+    bottom: 90px;
+    left: 50%;
+    transform: translateX(-50%);
     z-index: 20;
-    padding: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: var(--radius-pill);
+    border: var(--glass-border);
+    cursor: pointer;
     background: var(--glass-bg);
     backdrop-filter: blur(20px) saturate(200%);
     -webkit-backdrop-filter: blur(20px) saturate(200%);
-    border: var(--glass-border);
-    box-shadow: 0 4px 20px rgba(0,0,0,0.1), 0 2px 8px color-mix(in srgb, var(--color-primary) 15%, transparent);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.1), 0 2px 8px color-mix(in srgb, var(--color-primary) 12%, transparent);
     color: var(--color-primary);
-    min-width: 40px;
-    min-height: 40px;
-    width: 40px;
-    height: 40px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    animation: fabIn 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
-    transition: transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 200ms ease, opacity 200ms ease;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    animation: pillIn 400ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    transition: transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 200ms ease, background 200ms ease;
     -webkit-tap-highlight-color: transparent;
   }
-  .scroll-fab:active { transform: scale(0.88); }
+  .jump-pill:active { transform: translateX(-50%) scale(0.93); }
+  .jump-pill:hover { box-shadow: 0 6px 28px rgba(0,0,0,0.14), 0 2px 12px color-mix(in srgb, var(--color-primary) 18%, transparent); }
 
-  @keyframes fabIn {
-    from { opacity: 0; transform: scale(0.5) translateY(16px); }
-    to { opacity: 1; transform: scale(1) translateY(0); }
+  .jump-pill-text {
+    color: var(--text-primary);
   }
 
-  .fab-count {
-    position: absolute;
-    top: -5px;
-    right: -7px;
-    min-width: 16px;
-    height: 16px;
-    padding: 0 4px;
-    border-radius: 8px;
-    background: var(--color-primary);
-    color: var(--color-primary-foreground);
-    font-size: 10px;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 2px 6px color-mix(in srgb, var(--color-primary) 40%, transparent);
-    animation: badgePulse 2s ease-in-out infinite;
-    line-height: 1;
+  .jump-pill-arrow {
+    color: var(--color-primary);
+    animation: arrowBounce 1.5s ease-in-out infinite;
+    flex-shrink: 0;
   }
 
-  @keyframes badgePulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.08); }
+  @keyframes pillIn {
+    from { opacity: 0; transform: translateX(-50%) translateY(12px) scale(0.9); }
+    to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  }
+
+  @keyframes arrowBounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(2px); }
   }
 
   /* === EMPTY STATE === */
@@ -1633,14 +1655,13 @@
     flex-shrink: 0;
     position: relative;
     z-index: 30;
-    transform: translateY(-18px);
-    margin-bottom: -8px;
+    transform: translateY(-14px);
+    margin-bottom: -6px;
   }
 
   /* === TYPING AREA === */
   .typing-area {
-    padding: 0 12px 2px;
-    animation: typingFadeIn 250ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    padding: 0 16px 4px;
     flex-shrink: 0;
   }
 
@@ -2094,50 +2115,4 @@
     font-weight: 500;
   }
 
-  .in-msg-typing {
-    padding: 4px 16px;
-    animation: typingBubbleIn 250ms cubic-bezier(0.22, 1, 0.36, 1) both;
-  }
-
-  .imt-bubble {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 14px;
-    border-radius: 18px 18px 18px 4px;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border-subtle);
-    max-width: 140px;
-  }
-
-  .imt-avatar {
-    flex-shrink: 0;
-  }
-
-  .imt-dots {
-    display: flex;
-    gap: 3px;
-    align-items: center;
-  }
-
-  .imt-dots span {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--text-tertiary);
-    animation: imtBounce 1.2s ease-in-out infinite;
-  }
-
-  .imt-dots span:nth-child(2) { animation-delay: 0.15s; }
-  .imt-dots span:nth-child(3) { animation-delay: 0.3s; }
-
-  @keyframes imtBounce {
-    0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
-    30% { transform: translateY(-4px); opacity: 1; }
-  }
-
-  @keyframes typingBubbleIn {
-    from { opacity: 0; transform: translateY(8px) scale(0.95); }
-    to { opacity: 1; transform: translateY(0) scale(1); }
-  }
 </style>

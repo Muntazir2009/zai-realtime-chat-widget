@@ -119,6 +119,8 @@
   let lastTouchTime = 0;
   let isSwiping = false;
   let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  let singleTapTimer: ReturnType<typeof setTimeout> | null = null;
+  let didLongPress = false;
   let lastTapTime = 0;
   let rowEl: HTMLDivElement | undefined;
   let swipeFlash = $state(false);
@@ -133,16 +135,19 @@
     lastTouchX = touchStartX;
     lastTouchTime = Date.now();
     isSwiping = false;
+    didLongPress = false;
     showSwipeIndicator = false;
 
     if (rowEl) rowEl.style.animation = 'none';
 
+    // Long press now opens reaction picker directly
     longPressTimer = setTimeout(() => {
       if (!isSwiping) {
-        navigator.vibrate?.(50);
-        onLongPress?.(msg);
+        didLongPress = true;
+        navigator.vibrate?.(30);
+        showReactionPicker = true;
       }
-    }, 400);
+    }, 350);
   }
 
   function handleTouchMove(e: TouchEvent) {
@@ -190,7 +195,16 @@
 
   function handleTouchEnd() {
     if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
-    if (!isSwiping) return;
+    if (didLongPress) { didLongPress = false; isSwiping = false; return; }
+    if (!isSwiping) {
+      // Schedule single-tap action (context menu), but allow double-tap to cancel it
+      if (singleTapTimer) { clearTimeout(singleTapTimer); singleTapTimer = null; }
+      singleTapTimer = setTimeout(() => {
+        singleTapTimer = null;
+        onLongPress?.(msg);
+      }, 250);
+      return;
+    }
 
     // Calculate velocity from last two touch points
     const dt = Date.now() - lastTouchTime;
@@ -238,17 +252,22 @@
 
   function handleContextMenu(e: MouseEvent) {
     e.preventDefault();
-    onLongPress?.(msg);
+    // Right-click on desktop opens reaction picker (equivalent to long press)
+    showReactionPicker = true;
   }
 
-  function handleDoubleTap() {
+  function handleBubbleClick() {
     const now = Date.now();
-    if (now - lastTapTime < 300) onReaction?.(msg, '❤️');
+    if (now - lastTapTime < 300) {
+      // Double tap → quick ❤️ reaction
+      if (singleTapTimer) { clearTimeout(singleTapTimer); singleTapTimer = null; }
+      onReaction?.(msg, '❤️');
+    }
     lastTapTime = now;
   }
 
   function handleBubbleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter') handleDoubleTap();
+    if (e.key === 'Enter') handleBubbleClick();
   }
 
   function handleImageClick(e: MouseEvent) {
@@ -339,34 +358,50 @@
     const vw = window.innerWidth;
     const vh = window.innerHeight;
 
-    const gap = 6;
-    const caretH = 6;
+    const gap = 8;
+    const caretH = 8;
     const vPad = 12;
+    const hPad = 12;
 
-    // Horizontal: center picker above the + button, clamped to viewport
+    // Horizontal: clamp to viewport with padding
     let left = btnRect.left + btnRect.width / 2 - pickerRect.width / 2;
-    left = Math.max(vPad, Math.min(left, vw - pickerRect.width - vPad));
+    left = Math.max(hPad, Math.min(left, vw - pickerRect.width - hPad));
 
-    // Vertical: position above button, clamped to top of viewport
-    let top = btnRect.top - pickerRect.height - gap - caretH;
-    if (top < vPad) {
-      // Not enough space above, put it below
+    // Vertical: try above first, then below
+    const spaceAbove = btnRect.top - gap - caretH;
+    const spaceBelow = vh - btnRect.bottom - gap - caretH;
+    let top: number;
+    let showAbove: boolean;
+
+    if (spaceAbove >= pickerRect.height) {
+      // Fits above
+      top = btnRect.top - pickerRect.height - gap - caretH;
+      showAbove = true;
+    } else if (spaceBelow >= pickerRect.height) {
+      // Fits below
       top = btnRect.bottom + gap + caretH;
+      showAbove = false;
+    } else if (spaceAbove > spaceBelow) {
+      // Prefer above even if it clips slightly (at least show the picker)
+      top = Math.max(vPad, btnRect.top - pickerRect.height - gap - caretH);
+      showAbove = true;
+    } else {
+      top = vh - vPad - pickerRect.height;
+      showAbove = false;
     }
 
-    // Compute caret offset (relative to picker center)
+    // Compute caret position
     const caretCenter = btnRect.left + btnRect.width / 2;
     const pickerCenter = left + pickerRect.width / 2;
-    const caretLeft = Math.max(12, Math.min(pickerCenter - caretCenter + pickerRect.width / 2, pickerRect.width - 12));
-    const showAbove = top < btnRect.top;
+    const caretLeft = Math.max(16, Math.min(caretCenter - left, pickerRect.width - 16));
 
     pickerStyle = {
       position: 'fixed',
       top: `${top}px`,
       left: `${left}px`,
       '--caret-left': `${caretLeft}px`,
-      '--caret-bottom': showAbove ? '-7px' : 'auto',
-      '--caret-top': showAbove ? 'auto' : '-7px',
+      '--caret-bottom': showAbove ? '-9px' : 'auto',
+      '--caret-top': showAbove ? 'auto' : '-9px',
       '--caret-rotate': showAbove ? '45deg' : '-135deg',
       zIndex: '101',
     };
@@ -428,7 +463,7 @@
     <div
       class="msg-bubble {isOwn ? 'bbl-sent' : 'bbl-recv'} {isGrouped ? 'bbl-grouped' : ''} {isPinned ? 'bbl-pinned' : ''} {isEmojiOnly ? 'bbl-emoji' : ''}"
       style={!isOwn && senderAccentColor ? `border-left: 3px solid ${senderAccentColor};` : ''}
-      onclick={handleDoubleTap}
+      onclick={handleBubbleClick}
       role="button"
       tabindex="0"
       onkeydown={handleBubbleKeydown}
@@ -635,7 +670,7 @@
     -webkit-user-select: none;
     user-select: none;
     will-change: transform;
-    padding: 8px 0;
+    padding: 6px 0;
     align-items: flex-end;
     animation: msgBubbleIn 250ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
@@ -647,23 +682,23 @@
   .msg-own {
     justify-content: flex-end;
     padding-left: 64px;
-    padding-right: 10px;
+    padding-right: 12px;
   }
 
   .msg-other {
     justify-content: flex-start;
-    padding-left: 10px;
+    padding-left: 12px;
     padding-right: 64px;
   }
 
   .msg-grouped {
-    padding-top: 2px;
-    padding-bottom: 2px;
+    padding-top: 1px;
+    padding-bottom: 1px;
   }
 
   .msg-row:not(.msg-grouped) {
-    padding-top: 8px;
-    padding-bottom: 8px;
+    padding-top: 10px;
+    padding-bottom: 6px;
   }
 
   /* === BUBBLE + REACTIONS WRAPPER === */
@@ -1072,7 +1107,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
-    margin-top: 2px;
+    margin-top: 3px;
     padding: 0;
     z-index: 2;
   }
@@ -1085,7 +1120,7 @@
     display: inline-flex;
     align-items: center;
     gap: 3px;
-    padding: 2px 6px;
+    padding: 2px 7px;
     border-radius: 12px;
     border: 1px solid var(--border-subtle);
     background: var(--bg-elevated);
@@ -1093,15 +1128,22 @@
     font-size: 12px;
     line-height: 1.2;
     cursor: pointer;
-    transition: background 120ms ease, transform 120ms ease, border-color 120ms ease;
+    transition: background 150ms ease, transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1), border-color 150ms ease, box-shadow 150ms ease;
     -webkit-tap-highlight-color: transparent;
     min-height: 26px;
   }
-  .rxn-chip:active { transform: scale(0.9); }
+  .rxn-chip:active { transform: scale(0.88); }
+  @media (hover: hover) {
+    .rxn-chip:hover {
+      background: color-mix(in srgb, var(--color-primary) 8%, var(--bg-elevated));
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+  }
 
   .rxn-chip-active {
-    border-color: var(--color-primary);
+    border-color: color-mix(in srgb, var(--color-primary) 30%, transparent);
     background: color-mix(in srgb, var(--color-primary) 12%, var(--bg-elevated));
+    box-shadow: 0 1px 4px color-mix(in srgb, var(--color-primary) 15%, transparent);
   }
 
   .rxn-emoji { font-size: 13px; line-height: 1; }
@@ -1123,16 +1165,19 @@
     width: 26px;
     height: 26px;
     border-radius: 50%;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--border-subtle);
     background: transparent;
     color: var(--text-tertiary);
     cursor: pointer;
-    transition: background 120ms ease, transform 120ms ease;
+    transition: background 150ms ease, transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1), color 150ms ease;
     -webkit-tap-highlight-color: transparent;
   }
-  .rxn-add-btn:active { transform: scale(0.85); background: var(--input-bg); }
+  .rxn-add-btn:active { transform: scale(0.82); background: color-mix(in srgb, var(--color-primary) 10%, transparent); color: var(--color-primary); }
+  @media (hover: hover) {
+    .rxn-add-btn:hover { background: var(--input-bg); color: var(--text-secondary); }
+  }
 
-  /* === REACTION PICKER === */
+  /* === REACTION PICKER (Glassmorphism) === */
   .rxn-picker-backdrop {
     position: fixed;
     inset: 0;
@@ -1142,18 +1187,24 @@
   .rxn-picker {
     display: grid;
     grid-template-columns: repeat(8, 1fr);
-    gap: 0px;
-    padding: 8px 10px;
-    border-radius: 20px;
-    background: var(--bg-surface);
-    border: 1px solid var(--border-subtle);
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.08);
+    gap: 2px;
+    padding: 10px 12px;
+    border-radius: 24px;
+    background: var(--glass-bg, rgba(255, 255, 255, 0.78));
+    backdrop-filter: blur(24px) saturate(200%);
+    -webkit-backdrop-filter: blur(24px) saturate(200%);
+    border: var(--glass-border, 1px solid rgba(5, 150, 105, 0.08));
+    box-shadow:
+      0 16px 48px rgba(0, 0, 0, 0.14),
+      0 4px 12px rgba(0, 0, 0, 0.06),
+      inset 0 1px 0 rgba(255, 255, 255, 0.15);
     opacity: 0;
-    transform: scale(0.92) translateY(4px);
-    transition: opacity 180ms ease, transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    transform: scale(0.88) translateY(6px);
+    transition: opacity 200ms ease, transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
     pointer-events: none;
     position: relative;
     width: max-content;
+    will-change: transform, opacity;
   }
 
   .rxn-picker-visible {
@@ -1162,14 +1213,14 @@
     pointer-events: auto;
   }
 
-  /* Caret / arrow pointing toward the + button */
+  /* Caret / arrow pointing toward the trigger */
   .rxn-picker-caret {
     position: absolute;
     left: var(--caret-left, 50%);
     bottom: var(--caret-bottom, -7px);
     top: var(--caret-top, auto);
-    width: 12px;
-    height: 8px;
+    width: 14px;
+    height: 10px;
     overflow: hidden;
     pointer-events: none;
     transform: translateX(-50%);
@@ -1177,10 +1228,10 @@
   .rxn-picker-caret::after {
     content: '';
     position: absolute;
-    width: 10px;
-    height: 10px;
-    background: var(--bg-surface);
-    border: 1px solid var(--border-subtle);
+    width: 12px;
+    height: 12px;
+    background: var(--glass-bg, rgba(255, 255, 255, 0.78));
+    border: 1px solid var(--glass-border, 1px solid rgba(5, 150, 105, 0.08));
     border-top: none;
     border-left: none;
     left: 1px;
@@ -1190,36 +1241,37 @@
   }
 
   .rxn-picker-btn {
-    width: 34px;
-    height: 34px;
+    width: 40px;
+    height: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 10px;
+    border-radius: 12px;
     border: none;
     background: transparent;
-    font-size: 19px;
+    font-size: 22px;
     cursor: pointer;
-    transition: transform 120ms ease, background 120ms ease;
+    transition: transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1), background 150ms ease;
     -webkit-tap-highlight-color: transparent;
     position: relative;
   }
-  .rxn-picker-btn:hover { background: var(--input-bg); }
-  .rxn-picker-btn:active { transform: scale(0.8); }
+  .rxn-picker-btn:hover { background: color-mix(in srgb, var(--color-primary) 10%, transparent); }
+  .rxn-picker-btn:active { transform: scale(0.78); }
 
   .rxn-picker-btn-active {
-    background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+    background: color-mix(in srgb, var(--color-primary) 16%, transparent);
   }
   .rxn-picker-btn-active::after {
     content: '';
     position: absolute;
-    bottom: 3px;
+    bottom: 4px;
     left: 50%;
     transform: translateX(-50%);
-    width: 4px;
-    height: 4px;
+    width: 5px;
+    height: 5px;
     border-radius: 50%;
     background: var(--color-primary);
+    box-shadow: 0 0 6px color-mix(in srgb, var(--color-primary) 40%, transparent);
   }
 
   @keyframes msgBubbleIn {

@@ -132,12 +132,10 @@
     {/if}
   </div>
 
-  <!-- Typing indicator -->
-  {#if typingNames.length > 0}
-    <div class="px-4 pb-1">
-      <TypingIndicator {typingNames} />
-    </div>
-  {/if}
+  <!-- Typing indicator (always mounted for debounce) -->
+  <div class="px-4 pb-1">
+    <TypingIndicator usernames={typingNames} />
+  </div>
 
   <!-- Reply Preview -->
   {#if uiStore.replyTo}
