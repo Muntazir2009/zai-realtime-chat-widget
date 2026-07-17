@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Loader2, Send, ImagePlus, Mic, Sticker } from 'lucide-svelte';
+  import { Send, ImagePlus, Mic, Sticker } from 'lucide-svelte';
   import VoiceRecorder from '$lib/components/media/VoiceRecorder.svelte';
   import StickerPicker from '$lib/components/pickers/StickerPicker.svelte';
   import GIFPicker from '$lib/components/pickers/GIFPicker.svelte';
@@ -15,13 +15,13 @@
     /** Initial draft text to restore */
     initialDraft?: string;
     onSend: (content: string) => void;
-    onImageSend?: (imageUrl: string, blurhash?: string) => void;
-    onVideoSend?: (videoUrl: string, duration?: number, thumbnailUrl?: string) => void;
+    /** When user selects media files — parent opens MediaComposer */
+    onMediaSelect?: (files: File[]) => void;
     onStickerSelect?: (sticker: string) => void;
     onGifSelect?: (gifUrl: string) => void;
   }
 
-  let { onSend, onImageSend, onVideoSend, onStickerSelect, onGifSelect, initialDraft = '' }: Props = $props();
+  let { onSend, onMediaSelect, onStickerSelect, onGifSelect, initialDraft = '' }: Props = $props();
 
   let message = $state(initialDraft);
   let isRecording = $state(false);
@@ -29,7 +29,6 @@
   let isGifOpen = $state(false);
   let isUploading = $state(false);
   let uploadProgress = $state(0);
-  let uploadLabel = $state('Uploading...');
   let textareaEl: HTMLTextAreaElement | null = $state(null);
   let typingTimer: ReturnType<typeof setTimeout> | null = null;
   let fileInputEl: HTMLInputElement | null = $state(null);
@@ -168,7 +167,6 @@
     if (!chatStore.activeChatId || duration < 1) return;
     isUploading = true;
     uploadProgress = 0;
-    uploadLabel = 'Sending voice...';
     try {
       const result = await uploadFile(blob, 'voice', `voice-${Date.now()}.webm`, (pct) => { uploadProgress = pct; });
       await chatStore.sendVoiceMessage(chatStore.activeChatId, result.publicUrl, duration);
@@ -182,96 +180,38 @@
     }
   }
 
-  // ── Gallery upload (R2) ──
+  // ── Media selection (opens MediaComposer in parent) ──
   function handleMediaUpload() {
     fileInputEl?.click();
   }
 
-  async function handleFileSelect(e: Event) {
+  function handleFileSelect(e: Event) {
     const input = e.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file || !chatStore.activeChatId) return;
+    const fileList = input.files;
+    if (!fileList || fileList.length === 0) return;
     input.value = '';
 
-    // Determine type
-    const isImage = file.type.startsWith('image/');
-    const isVideo = file.type.startsWith('video/');
-    if (!isImage && !isVideo) {
-      toastStore.info('Only images and videos are supported');
-      return;
-    }
-
-    // 100MB limit for videos, 20MB for images
-    const maxSize = isVideo ? 100 * 1024 * 1024 : 20 * 1024 * 1024;
-    if (file.size > maxSize) {
-      toastStore.info(isVideo ? 'Video too large (max 100MB)' : 'Image too large (max 20MB)');
-      return;
-    }
-
-    isUploading = true;
-    uploadProgress = 0;
-    uploadLabel = isVideo ? 'Sending video...' : 'Sending image...';
-    try {
-      const folder = isVideo ? 'videos' : 'images';
-      const result = await uploadFile(file, folder, file.name, (pct) => { uploadProgress = pct; });
-
-      if (isVideo) {
-        // Get video duration + generate thumbnail
-        const videoMeta = await getVideoMeta(file);
-        if (onVideoSend) onVideoSend(result.publicUrl, videoMeta.duration, videoMeta.thumbnailUrl);
-      } else {
-        if (onImageSend) onImageSend(result.publicUrl, (result as any).blurhash);
+    // Filter and validate files
+    const validFiles: File[] = [];
+    for (let i = 0; i < fileList.length; i++) {
+      const file = fileList[i]!;
+      const isImage = file.type.startsWith('image/');
+      const isVideo = file.type.startsWith('video/');
+      if (!isImage && !isVideo) {
+        toastStore.info('Only images and videos are supported');
+        continue;
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(`${isVideo ? 'Video' : 'Image'} upload failed:`, msg);
-      toastStore.error(`Upload failed: ${msg.slice(0, 120)}`);
-    } finally {
-      isUploading = false;
-      uploadProgress = 0;
+      const maxSize = isVideo ? 100 * 1024 * 1024 : 20 * 1024 * 1024;
+      if (file.size > maxSize) {
+        toastStore.info(isVideo ? 'Video too large (max 100MB)' : 'Image too large (max 20MB)');
+        continue;
+      }
+      validFiles.push(file);
     }
-  }
 
-  async function getVideoMeta(file: File): Promise<{ duration: number; thumbnailUrl: string | null }> {
-    return new Promise((resolve) => {
-      const video = document.createElement('video');
-      video.preload = 'metadata';
-      video.muted = true;
-      const url = URL.createObjectURL(file);
-
-      video.onloadedmetadata = () => {
-        const duration = video.duration;
-        // Seek to 1s (or 10% of duration) for thumbnail
-        const seekTime = Math.min(1, duration * 0.1);
-        video.currentTime = seekTime;
-      };
-
-      video.onseeked = () => {
-        try {
-          const canvas = document.createElement('canvas');
-          const scale = 360 / Math.max(video.videoWidth, 1);
-          canvas.width = 360;
-          canvas.height = Math.round(video.videoHeight * scale);
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const thumbnailUrl = canvas.toDataURL('image/jpeg', 0.7);
-            URL.revokeObjectURL(url);
-            resolve({ duration: video.duration, thumbnailUrl });
-            return;
-          }
-        } catch { /* fallback */ }
-        URL.revokeObjectURL(url);
-        resolve({ duration: video.duration, thumbnailUrl: null });
-      };
-
-      video.onerror = () => {
-        URL.revokeObjectURL(url);
-        resolve({ duration: 0, thumbnailUrl: null });
-      };
-
-      video.src = url;
-    });
+    if (validFiles.length > 0) {
+      onMediaSelect?.(validFiles);
+    }
   }
 </script>
 
@@ -280,10 +220,10 @@
 {:else}
   <div class="input-shell safe-bottom" style="padding: 0 24px 2px;">
 
-    <!-- Upload progress -->
+    <!-- Voice upload progress (only for voice) -->
     {#if isUploading}
       <div class="upload-progress">
-        <Loader2 size={12} class="animate-spin" style="color: var(--color-primary);" />
+        <div class="upload-spinner"></div>
         <div class="upload-bar">
           <div class="upload-bar-fill" style="width: {uploadProgress}%;"></div>
         </div>
@@ -303,11 +243,12 @@
       </div>
     </div>
 
-    <!-- Hidden file input -->
+    <!-- Hidden file input (supports multi-select) -->
     <input
       bind:this={fileInputEl}
       type="file"
       accept="image/*,video/*"
+      multiple
       class="hidden"
       onchange={handleFileSelect}
     />
@@ -315,7 +256,7 @@
     <!-- Input Row -->
     <div class="input-row" class:input-row-focused={isFocused} class:input-row-active={hasText} class:input-row-picker-open={!!activePicker}>
 
-      <!-- Left: Image upload -->
+      <!-- Left: Media picker -->
       <button onclick={handleMediaUpload} aria-label="Add media"
         class="input-action-btn">
         <ImagePlus size={20} />
@@ -392,13 +333,26 @@
     to { opacity: 1; transform: translateY(0); }
   }
 
-  /* Upload progress */
+  /* Upload progress (voice only) */
   .upload-progress {
     display: flex;
     align-items: center;
     gap: 8px;
     padding: 0 12px 6px;
     animation: fadeIn 200ms ease both;
+  }
+
+  .upload-spinner {
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--color-primary);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 
   .upload-bar {

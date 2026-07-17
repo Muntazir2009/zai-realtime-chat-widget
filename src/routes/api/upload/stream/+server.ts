@@ -1,59 +1,50 @@
 import { json } from '@sveltejs/kit';
-import type { RequestHandler } from './$types';
-import { generatePresignedUploadUrl } from '$lib/server/r2';
 import { getEnv } from '$lib/server/firebase-rest';
+import { uploadToR2 } from '$lib/server/r2';
 
-/**
- * Fast upload endpoint — receives raw file body (not FormData).
- * Uses presigned URL via native fetch (avoids AWS SDK in hot path).
- * Client sends raw file bytes with metadata in headers.
- */
-export const PUT: RequestHandler = async ({ request }) => {
+const ALLOWED_PREFIXES = ['image/', 'video/', 'audio/'];
+const MAX_SIZE = 100 * 1024 * 1024; // 100 MB
+
+export async function PUT({ request, platform }: { request: Request; platform: any }) {
   try {
-    const filename = request.headers.get('x-file-name') || `upload-${Date.now()}.bin`;
-    const contentType = request.headers.get('x-file-content-type') || 'application/octet-stream';
-    const folder = request.headers.get('x-file-folder') || 'media';
-    const contentLength = parseInt(request.headers.get('content-length') || '0', 10);
+    const filename = request.headers.get('x-file-name')?.trim();
+    const contentType = request.headers.get('x-file-content-type')?.trim() ?? '';
+    const folder = request.headers.get('x-file-folder')?.trim() || 'media';
 
-    const allowedTypes = /^image\/|video\/|audio\//;
-    if (!allowedTypes.test(contentType)) {
-      return json({ error: 'Unsupported file type' }, { status: 400 });
+    if (!filename) {
+      return json({ error: 'Missing x-file-name header' }, { status: 400 });
     }
 
-    const MAX_SIZE = 100 * 1024 * 1024;
-    if (contentLength > MAX_SIZE) {
-      return json(
-        { error: `File too large (${(contentLength / 1024 / 1024).toFixed(1)}MB, max 100MB)` },
-        { status: 413 },
-      );
+    if (!contentType || !ALLOWED_PREFIXES.some((p) => contentType.startsWith(p))) {
+      return json({ error: 'Invalid content type — only image/*, video/*, audio/* allowed' }, { status: 400 });
     }
 
-    const env = getEnv();
-    const sanitized = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
-
-    // Generate presigned URL server-side
-    const { uploadUrl, publicUrl, key } = await generatePresignedUploadUrl(
-      env, sanitized, contentType, folder,
-    );
-
-    // Read body as buffer
-    const body = await request.arrayBuffer();
-
-    // Upload to R2 via presigned URL using native fetch
-    const r2Res = await fetch(uploadUrl, {
-      method: 'PUT',
-      headers: { 'Content-Type': contentType, 'Content-Length': String(body.byteLength) },
-      body,
-    });
-
-    if (!r2Res.ok) {
-      const text = await r2Res.text().catch(() => '');
-      throw new Error(`R2 upload failed (HTTP ${r2Res.status}): ${text.slice(0, 200)}`);
+    // Validate size via Content-Length header (if available)
+    const contentLength = request.headers.get('content-length');
+    if (contentLength) {
+      const size = parseInt(contentLength, 10);
+      if (size > MAX_SIZE) {
+        return json({ error: 'File too large — maximum 100 MB' }, { status: 413 });
+      }
     }
 
-    return json({ publicUrl, key });
-  } catch (err: any) {
+    const buffer = await request.arrayBuffer();
+
+    if (buffer.byteLength > MAX_SIZE) {
+      return json({ error: 'File too large — maximum 100 MB' }, { status: 413 });
+    }
+
+    if (buffer.byteLength === 0) {
+      return json({ error: 'Empty file body' }, { status: 400 });
+    }
+
+    const env = getEnv(platform);
+    const result = await uploadToR2(env, buffer, filename, contentType, folder);
+
+    return json(result);
+  } catch (err) {
     console.error('[upload/stream]', err);
-    return json({ error: err.message || 'Upload failed' }, { status: 500 });
+    const msg = err instanceof Error ? err.message : String(err);
+    return json({ error: `Upload failed: ${msg}` }, { status: 500 });
   }
-};
+}

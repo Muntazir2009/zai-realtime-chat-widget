@@ -957,3 +957,142 @@ Stage Summary:
 - Settings: enterSend now properly persisted and wired up, all prefs survive page reload
 - Files created: draft.svelte.ts, presign/+server.ts, stream/+server.ts, file/+server.ts
 - Files modified: prefs.svelte.ts, InputBar.svelte, Conversation.svelte, SettingsView.svelte
+---
+Task ID: 2
+Agent: Sub Agent
+Task: Create 3 missing upload API route endpoints
+
+Work Log:
+- Read r2.ts, firebase-rest.ts, and storage.ts for full context on upload architecture
+- Studied existing route patterns (login, messages) to match `{ request, platform }` destructuring and `getEnv(platform)` usage
+- Created `/api/upload/presign/+server.ts`:
+  - POST handler accepting `{ filename, contentType, folder }` JSON body
+  - Validates content type against image/*, video/*, audio/* whitelist
+  - Calls `generatePresignedUploadUrl()` and fires `ensureR2Cors()` as fire-and-forget
+  - Returns `{ uploadUrl, publicUrl, key }`
+- Created `/api/upload/stream/+server.ts`:
+  - PUT handler reading raw binary body via `request.arrayBuffer()`
+  - Reads metadata from custom headers: `x-file-name`, `x-file-content-type`, `x-file-folder`
+  - Validates content type and 100MB size limit (checks Content-Length header first, then actual buffer)
+  - Calls `uploadToR2()` and returns `{ publicUrl, key }`
+- Created `/api/upload/file/+server.ts`:
+  - POST handler accepting FormData with `file` and `folder` fields
+  - Extracts File object, validates type and 100MB size, reads as ArrayBuffer
+  - Calls `uploadToR2()` and returns `{ publicUrl, key }`
+- All 3 routes use consistent error handling pattern with proper HTTP status codes (400, 413, 500)
+
+Stage Summary:
+- Created 3 upload API routes matching the 3-tier upload strategy in client-side storage.ts
+- presign: generates presigned PUT URLs for direct client-to-R2 uploads (fastest path)
+- stream: raw binary proxy upload (fast middle path, no FormData overhead)
+- file: FormData proxy upload (slow fallback path)
+- All routes enforce image/video/audio-only and 100MB max size limits
+---
+Task ID: 4
+Agent: Sub Agent
+Task: Enhance storage.ts with image compression, cancellation, rich progress, metadata extraction
+
+Work Log:
+- Read existing storage.ts (303 lines) to understand 3-tier upload architecture
+- Added `UploadProgress` interface with percentage, loaded, total, speed, eta, phase fields
+- Added `UploadOptions` interface with signal, onDetailedProgress, skipCompression, compressMaxWidth, compressQuality
+- Implemented `ProgressTracker` class for rolling-window speed calculation (last 5 samples)
+- Implemented `compressImage()` function:
+  - Uses OffscreenCanvas when available, falls back to regular canvas
+  - Respects EXIF orientation via `img.style.imageOrientation = 'from-image'`
+  - Scales to maxWidth (default 1920) maintaining aspect ratio
+  - Exports as WebP at 82% quality, falls back to JPEG at 85%
+  - Skips if image already small (width <= maxWidth AND < 500KB)
+  - Returns original if compressed version isn't smaller, null on failure
+- Implemented `getImageMetadata()`: loads image and returns { width, height }
+- Implemented `getVideoMetadata()`:
+  - Loads video via `<video>` element, reads duration/width/height
+  - Seeks to 1s (or 10% of duration) for thumbnail
+  - Generates 360px-wide JPEG thumbnail at 70% quality
+  - Returns all metadata + thumbnailDataUrl
+- Added AbortSignal support to all upload methods (uploadDirectToR2, uploadViaStreamProxy, uploadViaFormDataProxy, getPresignedUrl):
+  - Checks signal.aborted before starting
+  - Wires signal to XHR via `xhr.signal = signal` with fallback to `signal.addEventListener('abort', () => xhr.abort())`
+  - Throws `new DOMException('Upload cancelled', 'AbortError')` on abort
+  - Re-throws AbortError immediately in uploadFile fallback chain
+- Added `createProgressReporter()` helper for unified progress handling across methods
+- Rewrote `uploadFile()` with:
+  - Parallel optimization: blurhash + compression + presign URL fetch all via `Promise.all()`
+  - Phase transitions: preparing → uploading → processing → done
+  - Backward compatible: old `(pct: number) => void` signature still works, new `UploadOptions` is optional 5th param
+- Updated `uploadImage()` to accept and forward `UploadOptions`
+
+Stage Summary:
+- Image compression: WebP-first with JPEG fallback, EXIF-aware, size-aware skip logic
+- Cancellation: full AbortController support across all 3 upload methods + presign fetch
+- Rich progress: speed via rolling 5-sample window, ETA calculation, phase tracking
+- Metadata: getImageMetadata() and getVideoMetadata() with thumbnail generation
+- Parallel optimization: blurhash + compression + presign all run concurrently before upload
+- Backward compatibility: existing callers unaffected, new features opt-in via UploadOptions
+- File modified: src/lib/firebase/storage.ts
+---
+Task ID: 3
+Agent: Sub Agent
+Task: Build MediaComposer component — full-screen media preview overlay
+
+Work Log:
+- Read app.css for design tokens (CSS variables: --bg-surface, --glass-bg, --color-primary, etc.)
+- Read InputBar.svelte for integration context (current file upload flow, Svelte 5 rune patterns)
+- Read Conversation.svelte for parent component patterns
+- Read types/index.ts for existing type definitions
+- Read Lightbox.svelte for touch gesture/pinch-zoom reference implementation
+- Created /src/lib/components/media/MediaComposer.svelte (~1040 lines) with:
+  - Exported MediaComposerFile interface (file, objectUrl, type, width, height, duration, thumbnailUrl)
+  - Props: files, onClose, onSend, onAddMore, onRemoveFile
+  - Full-screen overlay with backdrop-filter: blur(24px)
+  - Slide-up entrance (300ms spring easing) and slide-down exit (250ms) animations
+  - Glassmorphism bottom panel matching app design tokens
+  - Large image preview: object-fit contain, swipe between files (touch + visual drag), dot indicators
+  - Pinch-to-zoom on images (2-finger gesture with focal point zoom)
+  - Double-tap to toggle zoom (2.5x)
+  - Pan when zoomed (touch + mouse drag on desktop)
+  - Zoom resets when swiping to next file
+  - Video preview: playable <video> with poster thumbnail
+  - Play/pause overlay button, mute/unmute toggle, seek bar with custom styling
+  - Time display (current / total duration) with tabular-nums
+  - File info bar: filename (truncated), file size (B/KB/MB/GB), resolution, duration
+  - Auto-resizing caption textarea (max 80px)
+  - Bottom action bar: + Add More, Cancel (danger color), Send (primary gradient with icon)
+  - Horizontal scrollable thumbnail strip with active indicator, duration badges for video, remove (X) buttons
+  - File counter "2/5" in top bar for multiple files
+  - Desktop responsive: centered panel with rounded corners and shadow at 640px+
+  - Body scroll lock while open, Escape key to close
+  - All a11y: ARIA roles, keyboard handlers, focus-visible states
+  - 0 pre-existing errors introduced (all svelte-check warnings resolved)
+
+Stage Summary:
+- Created premium MediaComposer component at src/lib/components/media/MediaComposer.svelte
+- Full-featured: image swipe/zoom, video playback with controls, caption input, thumbnail strip
+- Mobile-first with desktop responsive breakpoint
+- Dark mode / AMOLED / Crimson themes supported via CSS variables
+- Zero new svelte-check errors or warnings
+- Exported MediaComposerFile type for parent component integration
+- File created: src/lib/components/media/MediaComposer.svelte
+---
+
+---
+Task ID: 2
+Agent: Main Agent (parallel subagents)
+Task: Audit and redesign the entire media attachment workflow
+
+Work Log:
+- Created 3 missing upload API routes: presign (+server.ts), stream (+server.ts), file (+server.ts)
+- Built MediaComposer.svelte (~1176 lines) — full-screen media preview overlay with glassmorphism
+- Enhanced storage.ts with image compression (WebP/JPEG, max 1920px, 82% quality), AbortSignal cancellation, rich progress (speed, ETA, phase tracking), parallel blurhash+compression+presign
+- Rewrote InputBar.svelte to emit files to parent instead of uploading directly, support multi-select
+- Updated Conversation.svelte with full MediaComposer integration, optimistic message insertion, upload tracking per message, cancel/retry support
+- Updated MessageBubble.svelte with upload progress ring (SVG circular), speed/ETA display, error retry button overlay for both images and videos
+- Updated chatStore.sendImageMessage to accept optional blurhash parameter
+
+Stage Summary:
+- New files: MediaComposer.svelte, presign/+server.ts, stream/+server.ts, file/+server.ts
+- Modified files: storage.ts, InputBar.svelte, Conversation.svelte, MessageBubble.svelte, chat.svelte.ts
+- Upload workflow: Select files → Preview in MediaComposer (zoom, swipe, video playback, caption) → Send → Optimistic message appears instantly → Upload runs in background with progress ring → Message updates with real URL
+- 3-tier upload strategy preserved: direct R2 presigned URL → streaming proxy → FormData fallback
+- Image compression runs in parallel with blurhash and presign URL fetch
+- Zero new TypeScript errors from the changes

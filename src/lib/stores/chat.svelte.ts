@@ -472,7 +472,7 @@ class ChatStore {
   }
 
   /** Send an image message */
-  async sendImageMessage(chatId: string, imageUrl: string, caption?: string): Promise<void> {
+  async sendImageMessage(chatId: string, imageUrl: string, caption?: string, blurhash?: string): Promise<void> {
     const user = authStore.user;
     if (!user) return;
 
@@ -484,10 +484,10 @@ class ChatStore {
 
     const message: Message = {
       id: messageId, c: caption ?? '📷 Photo', sid: user.id, t: 'image', ts: Date.now(),
-      rk: idempotencyKey, rid: null, mu: imageUrl, mh: null, md: null, edited: false,
+      rk: idempotencyKey, rid: null, mu: imageUrl, mh: blurhash ?? null, md: null, edited: false,
     };
 
-    const updates = this.buildFanOutUpdates(chatId, messageId, message, '📷 Photo');
+    const updates = this.buildFanOutUpdates(chatId, messageId, message, caption ?? '📷 Photo');
     // Optimistic: add to local array immediately
     this.messages = [...this.messages, message].sort((a, b) => a.ts - b.ts);
     await rtdb.update(await rtdb.ref('/'), updates).catch((err) => {

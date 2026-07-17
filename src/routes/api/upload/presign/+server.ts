@@ -1,33 +1,39 @@
 import { json } from '@sveltejs/kit';
-import type { RequestHandler } from './$types';
-import { generatePresignedUploadUrl } from '$lib/server/r2';
 import { getEnv } from '$lib/server/firebase-rest';
+import { generatePresignedUploadUrl, ensureR2Cors } from '$lib/server/r2';
 
-export const POST: RequestHandler = async ({ request }) => {
+const ALLOWED_PREFIXES = ['image/', 'video/', 'audio/'];
+
+export async function POST({ request, platform }: { request: Request; platform: any }) {
   try {
-    const body = await request.json();
-    const { filename, contentType, folder } = body as {
-      filename: string;
-      contentType: string;
+    const body = (await request.json()) as {
+      filename?: string;
+      contentType?: string;
       folder?: string;
     };
 
-    if (!filename || !contentType) {
-      return json({ error: 'Missing filename or contentType' }, { status: 400 });
+    const filename = body.filename?.trim();
+    const contentType = body.contentType?.trim() ?? '';
+    const folder = body.folder?.trim() || 'media';
+
+    if (!filename) {
+      return json({ error: 'Missing filename' }, { status: 400 });
     }
 
-    const allowedTypes = /^image\/|video\/|audio\//;
-    if (!allowedTypes.test(contentType)) {
-      return json({ error: 'Unsupported file type' }, { status: 400 });
+    if (!contentType || !ALLOWED_PREFIXES.some((p) => contentType.startsWith(p))) {
+      return json({ error: 'Invalid content type — only image/*, video/*, audio/* allowed' }, { status: 400 });
     }
 
-    const sanitized = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const env = getEnv();
+    const env = getEnv(platform);
+    const result = await generatePresignedUploadUrl(env, filename, contentType, folder);
 
-    const result = await generatePresignedUploadUrl(env, sanitized, contentType, folder || 'media');
+    // Fire-and-forget: configure CORS on first upload (don't await)
+    ensureR2Cors(env).catch(() => {});
+
     return json(result);
-  } catch (err: any) {
+  } catch (err) {
     console.error('[presign]', err);
-    return json({ error: err.message || 'Failed to generate presigned URL' }, { status: 500 });
+    const msg = err instanceof Error ? err.message : String(err);
+    return json({ error: `Presign failed: ${msg}` }, { status: 500 });
   }
-};
+}

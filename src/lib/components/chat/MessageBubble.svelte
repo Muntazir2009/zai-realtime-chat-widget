@@ -7,6 +7,7 @@
   import { Reply as ReplyIcon } from 'lucide-svelte';
   import { chatStore } from '$lib/stores/chat.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
+  import type { UploadProgress } from '$lib/firebase/storage';
 
   // Svelte action: non-passive touchmove so preventDefault works for swipe
   // Also clears the entrance animation after it plays so inline transforms
@@ -72,6 +73,10 @@
     senderAccentColor?: string | null;
     senderEmojiStatus?: string | null;
     senderAvatarUrl?: string | null;
+    uploadProgress?: UploadProgress;
+    uploadStatus?: 'uploading' | 'done' | 'error' | 'cancelled';
+    onCancelUpload?: () => void;
+    onRetryUpload?: () => void;
   }
 
   let {
@@ -79,7 +84,33 @@
     isPinned = false, isStarred = false, replyPreviewMsg,
     onReply, onLongPress, onImageTap, onVideoTap, onReaction, onSwipeReply, onReplyTap,
     openReactionPicker = false, senderAccentColor = null, senderEmojiStatus = null, senderAvatarUrl = null,
+    uploadProgress, uploadStatus, onCancelUpload, onRetryUpload,
   }: Props = $props();
+
+  // ── Upload state ──
+  let isUploading = $derived(uploadStatus === 'uploading');
+  let isUploadError = $derived(uploadStatus === 'error');
+  let uploadPct = $derived(uploadProgress?.percentage ?? 0);
+  let uploadSpeed = $derived(uploadProgress?.speed ?? 0);
+  let uploadEta = $derived(uploadProgress?.eta ?? -1);
+  let uploadPhase = $derived(uploadProgress?.phase ?? 'preparing');
+
+  function formatUploadSpeed(bytesPerSec: number): string {
+    if (bytesPerSec < 1024) return '';
+    if (bytesPerSec < 1024 * 1024) return `${(bytesPerSec / 1024).toFixed(0)} KB/s`;
+    return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`;
+  }
+
+  function formatUploadEta(seconds: number): string {
+    if (seconds < 0 || seconds > 3600) return '';
+    if (seconds < 1) return '';
+    if (seconds < 60) return `${Math.round(seconds)}s left`;
+    return `${Math.floor(seconds / 60)}:${Math.round(seconds % 60).toString().padStart(2, '0')} left`;
+  }
+
+  // Circumference for progress ring (r=16, C=2πr≈100.53)
+  const PROGRESS_RING_R = 16;
+  const PROGRESS_RING_C = 2 * Math.PI * PROGRESS_RING_R;
 
   // --- Swipe physics state ---
   let touchStartX = 0;
@@ -442,12 +473,44 @@
     {:else if msg.t === 'voice' && msg.mu}
       <AudioPlayer url={msg.mu} duration={(msg.md?.duration as number) || 0} />
     {:else if msg.t === 'video' && msg.mu}
-      <VideoPlayer
-        url={msg.mu}
-        thumbnailUrl={(msg.md?.thumbnailUrl as string) || msg.mh || null}
-        duration={(msg.md?.duration as number) || 0}
-        onVideoTap={() => onVideoTap?.(msg.mu!, (msg.md?.thumbnailUrl as string) || msg.mh || null, (msg.md?.duration as number) || 0, msg.c)}
-      />
+      <div class="bbl-img-wrap">
+        <VideoPlayer
+          url={msg.mu}
+          thumbnailUrl={(msg.md?.thumbnailUrl as string) || msg.mh || null}
+          duration={(msg.md?.duration as number) || 0}
+          onVideoTap={() => onVideoTap?.(msg.mu!, (msg.md?.thumbnailUrl as string) || msg.mh || null, (msg.md?.duration as number) || 0, msg.c)}
+        />
+        {#if isUploading}
+          <div class="upload-overlay">
+            <svg class="upload-ring" viewBox="0 0 36 36" width="42" height="42">
+              <circle cx="18" cy="18" r="{PROGRESS_RING_R}" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="3" />
+              <circle
+                cx="18" cy="18" r="{PROGRESS_RING_R}"
+                fill="none"
+                stroke="white"
+                stroke-width="3"
+                stroke-linecap="round"
+                stroke-dasharray="{PROGRESS_RING_C}"
+                stroke-dashoffset="{PROGRESS_RING_C * (1 - uploadPct / 100)}"
+                style="transition: stroke-dashoffset 200ms ease; transform: rotate(-90deg); transform-origin: center;"
+              />
+              <text x="18" y="18" text-anchor="middle" dominant-baseline="central" fill="white" font-size="8" font-weight="700">{Math.round(uploadPct)}%</text>
+            </svg>
+            <div class="upload-meta-text">
+              <span class="upload-speed-text">{formatUploadSpeed(uploadSpeed)}</span>
+              <span class="upload-eta-text">{formatUploadEta(uploadEta)}</span>
+            </div>
+          </div>
+        {/if}
+        {#if isUploadError}
+          <div class="upload-overlay upload-error-overlay">
+            <button class="upload-retry-btn" onclick={(e) => { e.stopPropagation(); onRetryUpload?.(); }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6"/><path d="M2.5 22v-6h6"/><path d="M2.5 11.5a10 10 0 0 1 18.8-4.3"/><path d="M21.5 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+            </button>
+            <span class="upload-error-label">Tap to retry</span>
+          </div>
+        {/if}
+      </div>
     {:else if msg.t === 'image' && msg.mu}
       <div class="bbl-img-wrap">
         <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
@@ -458,6 +521,36 @@
           loading="lazy"
           onclick={handleImageClick}
         />
+        {#if isUploading}
+          <div class="upload-overlay">
+            <svg class="upload-ring" viewBox="0 0 36 36" width="42" height="42">
+              <circle cx="18" cy="18" r="{PROGRESS_RING_R}" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="3" />
+              <circle
+                cx="18" cy="18" r="{PROGRESS_RING_R}"
+                fill="none"
+                stroke="white"
+                stroke-width="3"
+                stroke-linecap="round"
+                stroke-dasharray="{PROGRESS_RING_C}"
+                stroke-dashoffset="{PROGRESS_RING_C * (1 - uploadPct / 100)}"
+                style="transition: stroke-dashoffset 200ms ease; transform: rotate(-90deg); transform-origin: center;"
+              />
+              <text x="18" y="18" text-anchor="middle" dominant-baseline="central" fill="white" font-size="8" font-weight="700">{Math.round(uploadPct)}%</text>
+            </svg>
+            <div class="upload-meta-text">
+              <span class="upload-speed-text">{formatUploadSpeed(uploadSpeed)}</span>
+              <span class="upload-eta-text">{formatUploadEta(uploadEta)}</span>
+            </div>
+          </div>
+        {/if}
+        {#if isUploadError}
+          <div class="upload-overlay upload-error-overlay">
+            <button class="upload-retry-btn" onclick={(e) => { e.stopPropagation(); onRetryUpload?.(); }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6"/><path d="M2.5 22v-6h6"/><path d="M2.5 11.5a10 10 0 0 1 18.8-4.3"/><path d="M21.5 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+            </button>
+            <span class="upload-error-label">Tap to retry</span>
+          </div>
+        {/if}
       </div>
       {#if msg.c}
         <p class="bbl-text bbl-caption">{msg.c}</p>
@@ -1137,5 +1230,80 @@
   @keyframes msgBubbleInGrouped {
     from { opacity: 0.7; transform: translateY(4px); }
     to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── Upload Overlay ── */
+  .upload-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    border-radius: var(--radius-lg, 16px);
+    z-index: 5;
+    animation: uploadOverlayIn 200ms ease both;
+  }
+
+  @keyframes uploadOverlayIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .upload-ring {
+    filter: drop-shadow(0 2px 8px rgba(0,0,0,0.3));
+  }
+
+  .upload-meta-text {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+  }
+
+  .upload-speed-text,
+  .upload-eta-text {
+    font-size: 10px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.3;
+  }
+
+  .upload-error-overlay {
+    background: rgba(0, 0, 0, 0.55);
+    gap: 4px;
+  }
+
+  .upload-retry-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.8);
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1), background 150ms ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .upload-retry-btn:active {
+    transform: scale(0.85);
+    background: rgba(255, 255, 255, 0.3);
+  }
+
+  .upload-error-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.85);
+    text-shadow: 0 1px 3px rgba(0,0,0,0.5);
   }
 </style>

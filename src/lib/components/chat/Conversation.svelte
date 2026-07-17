@@ -4,6 +4,7 @@
   import Lightbox from '$lib/components/media/Lightbox.svelte';
   import VideoLightbox from '$lib/components/media/VideoLightbox.svelte';
   import MediaGallery from '$lib/components/media/MediaGallery.svelte';
+  import MediaComposer, { type MediaComposerFile } from '$lib/components/media/MediaComposer.svelte';
   import MessageContextMenu from './MessageContextMenu.svelte';
   import InputBar from './InputBar.svelte';
   import ReplyPreview from './ReplyPreview.svelte';
@@ -15,6 +16,7 @@
   import { authStore } from '$lib/stores/auth.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
   import { draftStore } from '$lib/stores/draft.svelte';
+  import { uploadFile, getVideoMetadata, getImageMetadata, type UploadProgress } from '$lib/firebase/storage';
   import type { Message } from '$lib/types/index';
   import { format, formatDistanceToNow, isToday, isYesterday, startOfDay } from 'date-fns';
   import EasterEggFx from './EasterEggFx.svelte';
@@ -47,6 +49,27 @@
   let newMsgWhileScrolled = $state(0);
   let prevScrollHeight = 0;
   let lastSeenMsgCount = $state(0);
+
+  // ── Media Composer state ──
+  let showComposer = $state(false);
+  let composerFiles = $state<MediaComposerFile[]>([]);
+  let addMoreInputEl: HTMLInputElement | null = $state(null);
+
+  // Upload tracking: messageId → { progress, signal, abort, status }
+  interface UploadTracker {
+    progress: UploadProgress;
+    signal: AbortController;
+    status: 'uploading' | 'done' | 'error' | 'cancelled';
+    localUrl: string;
+    retry?: () => void;
+    files: MediaComposerFile[];
+    caption: string;
+  }
+  let uploadTrackers = $state(new Map<string, UploadTracker>());
+
+  function getUploadTracker(msgId: string): UploadTracker | undefined {
+    return uploadTrackers.get(msgId);
+  }
 
   // Watch for incoming messages with easter egg metadata (from other user)
   $effect(() => {
@@ -304,14 +327,301 @@
     uiStore.setReplyTo(null);
   }
 
-  async function handleImageSend(imageUrl: string) {
+  // ── Media Composer handlers ──
+  async function handleMediaSelect(files: File[]) {
     if (!chatStore.activeChatId) return;
-    await chatStore.sendImageMessage(chatStore.activeChatId, imageUrl);
+
+    // Build MediaComposerFile objects with metadata
+    const composerFileList: MediaComposerFile[] = [];
+    for (const file of files) {
+      const isImage = file.type.startsWith('image/');
+      const isVideo = file.type.startsWith('video/');
+      const objectUrl = URL.createObjectURL(file);
+      const entry: MediaComposerFile = {
+        file,
+        objectUrl,
+        type: isImage ? 'image' : 'video',
+      };
+
+      // Extract metadata in parallel for all files
+      if (isImage) {
+        try {
+          const meta = await getImageMetadata(file);
+          entry.width = meta.width;
+          entry.height = meta.height;
+        } catch { /* best-effort */ }
+      } else if (isVideo) {
+        try {
+          const meta = await getVideoMetadata(file);
+          entry.width = meta.width;
+          entry.height = meta.height;
+          entry.duration = meta.duration;
+          entry.thumbnailUrl = meta.thumbnailDataUrl ?? undefined;
+        } catch { /* best-effort */ }
+      }
+
+      composerFileList.push(entry);
+    }
+
+    composerFiles = composerFileList;
+    showComposer = true;
   }
 
-  async function handleVideoSend(videoUrl: string, duration?: number, thumbnailUrl?: string) {
+  function handleComposerClose() {
+    showComposer = false;
+    // Revoke object URLs to free memory
+    for (const f of composerFiles) {
+      URL.revokeObjectURL(f.objectUrl);
+    }
+    composerFiles = [];
+  }
+
+  function handleComposerRemoveFile(index: number) {
+    const removed = composerFiles[index];
+    if (removed) URL.revokeObjectURL(removed.objectUrl);
+    composerFiles = composerFiles.filter((_, i) => i !== index);
+    if (composerFiles.length === 0) {
+      handleComposerClose();
+    }
+  }
+
+  function handleComposerAddMore() {
+    addMoreInputEl?.click();
+  }
+
+  function handleComposerAddMoreSelect(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const fileList = input.files;
+    if (!fileList) return;
+    input.value = '';
+
+    const newFiles: MediaComposerFile[] = [];
+    for (let i = 0; i < fileList.length; i++) {
+      const file = fileList[i]!;
+      if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) continue;
+      const maxSize = file.type.startsWith('video/') ? 100 * 1024 * 1024 : 20 * 1024 * 1024;
+      if (file.size > maxSize) continue;
+      newFiles.push({
+        file,
+        objectUrl: URL.createObjectURL(file),
+        type: file.type.startsWith('image/') ? 'image' : 'video',
+      });
+    }
+
+    if (newFiles.length > 0) {
+      // Extract metadata for new files
+      (async () => {
+        for (const entry of newFiles) {
+          if (entry.type === 'image') {
+            try {
+              const meta = await getImageMetadata(entry.file);
+              entry.width = meta.width;
+              entry.height = meta.height;
+            } catch { /* */ }
+          } else {
+            try {
+              const meta = await getVideoMetadata(entry.file);
+              entry.width = meta.width;
+              entry.height = meta.height;
+              entry.duration = meta.duration;
+              entry.thumbnailUrl = meta.thumbnailDataUrl ?? undefined;
+            } catch { /* */ }
+          }
+        }
+        composerFiles = [...composerFiles, ...newFiles];
+      })();
+    }
+  }
+
+  // Called when user presses Send in the MediaComposer
+  async function handleComposerSend(files: MediaComposerFile[], caption: string) {
     if (!chatStore.activeChatId) return;
-    await chatStore.sendVideoMessage(chatStore.activeChatId, videoUrl, duration ?? 0, thumbnailUrl);
+    showComposer = false;
+
+    // Process each file: create optimistic message, then upload
+    for (const mediaFile of files) {
+      const isImage = mediaFile.type === 'image';
+      const isVideo = mediaFile.type === 'video';
+      const user = authStore.user;
+      if (!user) return;
+
+      // Create a temporary message ID
+      const tempMsgId = `upload_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const localUrl = mediaFile.objectUrl;
+
+      // Build the optimistic message
+      const tempMsg: Message = {
+        id: tempMsgId,
+        c: caption || (isImage ? '📷 Photo' : '🎬 Video'),
+        sid: user.id,
+        t: isImage ? 'image' : 'video',
+        ts: Date.now(),
+        rk: '',
+        rid: null,
+        mu: localUrl, // local preview URL
+        mh: isVideo ? (mediaFile.thumbnailUrl ?? null) : null,
+        md: isVideo
+          ? { duration: mediaFile.duration ?? 0, thumbnailUrl: mediaFile.thumbnailUrl, isUploading: true }
+          : { isUploading: true },
+        edited: false,
+      };
+
+      // Insert optimistic message
+      chatStore.messages = [...chatStore.messages, tempMsg].sort((a, b) => a.ts - b.ts);
+
+      // Scroll to bottom to show the new message
+      requestAnimationFrame(() => {
+        if (messagesContainer) {
+          messagesContainer.scrollTo({ top: messagesContainer.scrollHeight, behavior: 'smooth' });
+        }
+      });
+
+      // Create abort controller for this upload
+      const abortController = new AbortController();
+
+      // Track upload state
+      const tracker: UploadTracker = {
+        progress: { percentage: 0, loaded: 0, total: mediaFile.file.size, speed: 0, eta: -1, phase: 'preparing' },
+        signal: abortController,
+        status: 'uploading',
+        localUrl,
+        files: [mediaFile],
+        caption,
+      };
+      uploadTrackers.set(tempMsgId, tracker);
+
+      // Start upload in background
+      uploadMediaFile(tempMsgId, mediaFile, caption, abortController).catch((err) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        console.error('[Composer] Upload failed:', err);
+        tracker.status = 'error';
+        // Create retry function
+        tracker.retry = () => {
+          const newAbort = new AbortController();
+          tracker.signal = newAbort;
+          tracker.status = 'uploading';
+          tracker.progress = { percentage: 0, loaded: 0, total: mediaFile.file.size, speed: 0, eta: -1, phase: 'preparing' };
+          uploadMediaFile(tempMsgId, mediaFile, caption, newAbort).catch((retryErr) => {
+            if (retryErr instanceof DOMException && retryErr.name === 'AbortError') return;
+            tracker.status = 'error';
+          });
+        };
+      });
+    }
+
+    // Revoke composer file URLs
+    for (const f of files) {
+      URL.revokeObjectURL(f.objectUrl);
+    }
+    composerFiles = [];
+  }
+
+  async function uploadMediaFile(
+    msgId: string,
+    mediaFile: MediaComposerFile,
+    caption: string,
+    abortController: AbortController,
+  ) {
+    const tracker = uploadTrackers.get(msgId);
+    if (!tracker) return;
+
+    const isImage = mediaFile.type === 'image';
+    const isVideo = mediaFile.type === 'video';
+    const folder = isVideo ? 'videos' : 'images';
+
+    try {
+      const result = await uploadFile(
+        mediaFile.file,
+        folder,
+        mediaFile.file.name,
+        (pct) => {
+          // Simple progress callback — update tracker
+          if (tracker) {
+            tracker.progress.percentage = pct;
+            // Force reactivity by reassigning the map
+            uploadTrackers = new Map(uploadTrackers);
+          }
+        },
+        {
+          signal: abortController.signal,
+          onDetailedProgress: (info) => {
+            if (tracker) {
+              tracker.progress = info;
+              uploadTrackers = new Map(uploadTrackers);
+            }
+          },
+        },
+      );
+
+      // Upload succeeded — update the message with real URL
+      const msgs = chatStore.messages;
+      const idx = msgs.findIndex((m) => m.id === msgId);
+      if (idx !== -1) {
+        const updatedMsg = { ...msgs[idx]! };
+        updatedMsg.mu = result.publicUrl;
+        if (result.blurhash) updatedMsg.mh = result.blurhash;
+
+        if (isImage) {
+          updatedMsg.c = caption || '📷 Photo';
+          updatedMsg.md = { width: mediaFile.width, height: mediaFile.height };
+        } else {
+          updatedMsg.c = caption || '🎬 Video';
+          updatedMsg.md = {
+            duration: mediaFile.duration ?? 0,
+            thumbnailUrl: mediaFile.thumbnailUrl,
+            width: mediaFile.width,
+            height: mediaFile.height,
+          };
+        }
+        updatedMsg.rk = ''; // Will be set by sendXxxMessage
+
+        // Now write to RTDB via chatStore
+        if (isImage) {
+          await chatStore.sendImageMessage(chatStore.activeChatId!, result.publicUrl, caption, result.blurhash);
+        } else {
+          await chatStore.sendVideoMessage(
+            chatStore.activeChatId!,
+            result.publicUrl,
+            mediaFile.duration ?? 0,
+            mediaFile.thumbnailUrl,
+          );
+        }
+
+        // Remove the optimistic temp message (the RTDB write will add the real one)
+        chatStore.messages = chatStore.messages.filter((m) => m.id !== msgId);
+        tracker.status = 'done';
+        // Clean up tracker after a short delay
+        setTimeout(() => {
+          uploadTrackers.delete(msgId);
+          uploadTrackers = new Map(uploadTrackers);
+        }, 2000);
+      }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        tracker.status = 'cancelled';
+        // Remove the optimistic message on cancel
+        chatStore.messages = chatStore.messages.filter((m) => m.id !== msgId);
+        uploadTrackers.delete(msgId);
+        uploadTrackers = new Map(uploadTrackers);
+        return;
+      }
+      throw err;
+    }
+  }
+
+  function cancelUpload(msgId: string) {
+    const tracker = uploadTrackers.get(msgId);
+    if (tracker && tracker.status === 'uploading') {
+      tracker.signal.abort();
+    }
+  }
+
+  function retryUpload(msgId: string) {
+    const tracker = uploadTrackers.get(msgId);
+    if (tracker?.retry) {
+      tracker.retry();
+      uploadTrackers = new Map(uploadTrackers);
+    }
   }
 
   function handleReply(msg: Message) { uiStore.setReplyTo(msg); }
@@ -620,6 +930,10 @@
             senderAccentColor={msg.sid === authStore.user?.id ? null : (chatStore.userDict.get(msg.sid)?.accentColor ?? null)}
             senderEmojiStatus={msg.sid === authStore.user?.id ? null : (chatStore.userDict.get(msg.sid)?.emojiStatus ?? null)}
             senderAvatarUrl={chatStore.userDict.get(msg.sid)?.avatarUrl ?? null}
+            uploadProgress={getUploadTracker(msg.id)?.progress}
+            uploadStatus={getUploadTracker(msg.id)?.status}
+            onCancelUpload={() => cancelUpload(msg.id)}
+            onRetryUpload={() => retryUpload(msg.id)}
           />
           </div>
         {/each}
@@ -707,8 +1021,7 @@
     <InputBar
       {currentDraft as initialDraft}
       onSend={handleSend}
-      onImageSend={handleImageSend}
-      onVideoSend={handleVideoSend}
+      onMediaSelect={handleMediaSelect}
       onStickerSelect={handleStickerSelect}
       onGifSelect={handleGifSelect}
     />
@@ -727,6 +1040,26 @@
       duration={videoLightboxDuration}
       caption={videoLightboxCaption || undefined}
       onClose={() => (showVideoLightbox = false)}
+    />
+  {/if}
+
+  <!-- Media Composer Overlay -->
+  {#if showComposer && composerFiles.length > 0}
+    <MediaComposer
+      files={composerFiles}
+      onClose={handleComposerClose}
+      onSend={handleComposerSend}
+      onAddMore={handleComposerAddMore}
+      onRemoveFile={handleComposerRemoveFile}
+    />
+    <!-- Hidden input for adding more files -->
+    <input
+      bind:this={addMoreInputEl}
+      type="file"
+      accept="image/*,video/*"
+      multiple
+      class="hidden"
+      onchange={handleComposerAddMoreSelect}
     />
   {/if}
 
