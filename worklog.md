@@ -1508,3 +1508,26 @@ Stage Summary:
 - Context menu now a compact floating popup (not full-screen BottomSheet)
 - Draft previews visible in conversation list with accent-colored label
 - No new files created, no architecture changes, no upload system modifications
+
+---
+Task ID: 1
+Agent: Main
+Task: Fix broken options menu and reaction panel
+
+Work Log:
+- Diagnosed root cause: `.animate-conv-enter` in app.css had `will-change: transform, opacity` which creates a new containing block for all `position: fixed` descendants, breaking the context menu and reaction picker positioning
+- Also found `.msg-row` in MessageBubble.svelte had `will-change: transform` causing a second layer of breakage for the inline reaction picker
+- Removed `will-change: transform, opacity` from `.animate-conv-enter` and `.animate-conv-exit` in app.css
+- Removed `will-change: transform` from `.msg-row` in MessageBubble.svelte
+- Created new `ReactionPicker.svelte` as a screen-level component (rendered at Conversation level, same pattern as MessageContextMenu)
+- Moved reaction picker state from MessageBubble to Conversation.svelte
+- Updated MessageBubble to emit `onTapReaction(msg, x, y)` on single tap instead of showing inline picker
+- Fixed MessageContextMenu with `e.stopPropagation()` on all menu item handlers and backdrop click guard
+- Removed ~100 lines of inline reaction picker code (positioning, effects, template, CSS) from MessageBubble.svelte
+
+Stage Summary:
+- Root cause: CSS `will-change: transform` on ancestor elements breaks `position: fixed` for all descendants
+- Created: `/src/lib/components/chat/ReactionPicker.svelte` (screen-level glassmorphism reaction picker)
+- Modified: `app.css`, `MessageBubble.svelte`, `Conversation.svelte`, `MessageContextMenu.svelte`
+- Reaction picker now appears as a screen-level floating panel (like the options menu), positioned correctly at the tap point
+- Context menu items now properly execute their actions (stopPropagation + will-change fix)

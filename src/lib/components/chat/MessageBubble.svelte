@@ -67,9 +67,9 @@
     onImageTap?: (imageUrl: string, caption?: string) => void;
     onVideoTap?: (url: string, thumbUrl?: string | null, duration?: number, caption?: string) => void;
     onReaction?: (msg: Message, emoji: string) => void;
+    onTapReaction?: (msg: Message, x?: number, y?: number) => void;
     onSwipeReply?: (msg: Message) => void;
     onReplyTap?: (messageId: string) => void;
-    openReactionPicker?: boolean;
     senderAccentColor?: string | null;
     senderEmojiStatus?: string | null;
     senderAvatarUrl?: string | null;
@@ -82,8 +82,8 @@
   let {
     msg, isOwn, showAvatar = false, senderName, isGrouped = false,
     isPinned = false, isStarred = false, replyPreviewMsg,
-    onReply, onLongPress, onImageTap, onVideoTap, onReaction, onSwipeReply, onReplyTap,
-    openReactionPicker = false, senderAccentColor = null, senderEmojiStatus = null, senderAvatarUrl = null,
+    onReply, onLongPress, onImageTap, onVideoTap, onReaction, onTapReaction, onSwipeReply, onReplyTap,
+    senderAccentColor = null, senderEmojiStatus = null, senderAvatarUrl = null,
     uploadProgress, uploadStatus, onCancelUpload, onRetryUpload,
   }: Props = $props();
 
@@ -231,7 +231,7 @@
       if (singleTapTimer) clearTimeout(singleTapTimer);
       singleTapTimer = setTimeout(() => {
         singleTapTimer = null;
-        showReactionPicker = true;
+        onTapReaction?.(msg, touchStartX, touchStartY);
       }, SINGLE_TAP_DELAY);
       return;
     }
@@ -307,13 +307,13 @@
       if (singleTapTimer) clearTimeout(singleTapTimer);
       singleTapTimer = setTimeout(() => {
         singleTapTimer = null;
-        showReactionPicker = true;
+        onTapReaction?.(msg, e.clientX, e.clientY);
       }, 300);
     }
   }
 
   function handleBubbleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter') showReactionPicker = true;
+    if (e.key === 'Enter') onTapReaction?.(msg);
     if (e.key === ' ' || e.key === 'ContextMenu') {
       e.preventDefault();
       onLongPress?.(msg);
@@ -374,105 +374,16 @@
 
   // --- Reactions ---
   let msgReactions = $derived(chatStore.getReactions(msg.id));
-  let showReactionPicker = $state(false);
   let rxnAddBtn: HTMLButtonElement | undefined;
-  let rxnPickerEl: HTMLDivElement | undefined;
-  let pickerStyle = $state<Record<string, string>>({});
-  let pickerReady = $state(false);
 
-  // Watch for external trigger to open reaction picker (from context menu)
-  $effect(() => {
-    if (openReactionPicker) {
-      showReactionPicker = true;
-    }
-  });
-
-  // Calculate picker position whenever it opens
-  $effect(() => {
-    if (showReactionPicker) {
-      pickerReady = false;
-      // Wait one tick for the picker element to exist in DOM
-      requestAnimationFrame(() => {
-        positionPicker();
-        // Delay ready state for animation timing
-        setTimeout(() => { pickerReady = true; }, 30);
-      });
-    } else {
-      pickerReady = false;
-    }
-  });
-
-  function positionPicker() {
-    // Prefer positioning relative to the bubble for visual attachment
-    const anchor = bubbleEl || rxnAddBtn;
-    if (!anchor || !rxnPickerEl) return;
-    const anchorRect = anchor.getBoundingClientRect();
-    const pickerRect = rxnPickerEl.getBoundingClientRect();
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-
-    const gap = 10;
-    const caretH = 10;
-    const vPad = 16;
-    const hPad = 12;
-    const safeBottom = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sab') || '0');
-
-    // Horizontal: clamp to viewport with padding
-    let left = anchorRect.left + anchorRect.width / 2 - pickerRect.width / 2;
-    left = Math.max(hPad, Math.min(left, vw - pickerRect.width - hPad));
-
-    // Vertical: try above first, then below
-    const spaceAbove = anchorRect.top - gap - caretH;
-    const spaceBelow = vh - anchorRect.bottom - gap - caretH - safeBottom;
-    let top: number;
-    let showAbove: boolean;
-
-    if (spaceAbove >= pickerRect.height) {
-      top = anchorRect.top - pickerRect.height - gap - caretH;
-      showAbove = true;
-    } else if (spaceBelow >= pickerRect.height) {
-      top = anchorRect.bottom + gap + caretH;
-      showAbove = false;
-    } else if (spaceAbove > spaceBelow) {
-      top = Math.max(vPad, anchorRect.top - pickerRect.height - gap - caretH);
-      showAbove = true;
-    } else {
-      top = Math.min(vh - vPad - safeBottom - pickerRect.height, anchorRect.bottom + gap + caretH);
-      showAbove = false;
-    }
-
-    // Compute caret position (point toward bubble center)
-    const caretCenter = anchorRect.left + anchorRect.width / 2;
-    const pickerCenter = left + pickerRect.width / 2;
-    const caretLeft = Math.max(20, Math.min(caretCenter - left, pickerRect.width - 20));
-
-    pickerStyle = {
-      position: 'fixed',
-      top: `${top}px`,
-      left: `${left}px`,
-      '--caret-left': `${caretLeft}px`,
-      '--caret-bottom': showAbove ? '-10px' : 'auto',
-      '--caret-top': showAbove ? 'auto' : '-10px',
-      '--caret-rotate': showAbove ? '45deg' : '-135deg',
-      zIndex: '101',
-    };
-  }
-
-  function toggleReactionPicker(e?: Event) {
-    if (e) e.stopPropagation();
-    showReactionPicker = !showReactionPicker;
-  }
-
-  function handleReactionSelect(emoji: string) {
-    justReacted = true;
-    setTimeout(() => { justReacted = false; }, 600);
-    showReactionPicker = false;
-    onReaction?.(msg, emoji);
-  }
-
-  function handleReactionTap(reaction: Reaction) {
-    // Toggle: if already reacted remove it, otherwise add it
+  function handleReactionTap(e: MouseEvent, reaction: Reaction) {
+    e.stopPropagation();
     onReaction?.(msg, reaction.emoji);
+  }
+
+  function handleAddReactionTap(e: MouseEvent) {
+    e.stopPropagation();
+    onTapReaction?.(msg, e.clientX, e.clientY);
   }
 </script>
 
@@ -666,13 +577,12 @@
   </div>
 
   <!-- Reactions bar -->
-  {#if msgReactions.length > 0 || showReactionPicker}
+  {#if msgReactions.length > 0}
     <div class="rxn-bar" class:rxn-bar-own={isOwn}>
       {#each msgReactions as rxn (rxn.emoji)}
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <button
           class="rxn-chip {chatStore.hasReacted(msg.id, rxn.emoji) ? 'rxn-chip-active' : ''}"
-          onclick={(e) => { e.stopPropagation(); handleReactionTap(rxn); }}
+          onclick={(e) => handleReactionTap(e, rxn)}
           ondblclick={(e) => e.stopPropagation()}
         >
           <span class="rxn-emoji">{rxn.emoji}</span>
@@ -682,34 +592,12 @@
       <button
         class="rxn-add-btn"
         bind:this={rxnAddBtn}
-        onclick={(e) => toggleReactionPicker(e)}
+        onclick={handleAddReactionTap}
         ondblclick={(e) => e.stopPropagation()}
         aria-label="Add reaction"
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
       </button>
-    </div>
-  {/if}
-
-  <!-- Reaction picker popup -->
-  {#if showReactionPicker}
-    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-    <div class="rxn-picker-backdrop" onclick={(e) => { if ((e.target as HTMLElement).classList.contains('rxn-picker-backdrop')) toggleReactionPicker(e); }}>
-      <div
-        class="rxn-picker {pickerReady ? 'rxn-picker-visible' : ''}"
-        style={Object.entries(pickerStyle).map(([k, v]) => `${k.startsWith('--') ? k : k.replace(/([A-Z])/g, '-$1').toLowerCase()}: ${v}`).join('; ')}
-        bind:this={rxnPickerEl}
-      >
-        <div class="rxn-picker-caret"></div>
-        {#each ['❤️', '🔥', '😂', '😍', '👍', '😮', '😢', '🙏', '💀', '🥺', '🎉', '✨', '😤', '💯', '🫶', '🤝'] as emoji}
-          <button
-            class="rxn-picker-btn {chatStore.hasReacted(msg.id, emoji) ? 'rxn-picker-btn-active' : ''}"
-            onclick={() => handleReactionSelect(emoji)}
-          >
-            {emoji}
-          </button>
-        {/each}
-      </div>
     </div>
   {/if}
   </div><!-- /msg-content -->
@@ -722,7 +610,6 @@
     position: relative;
     -webkit-user-select: none;
     user-select: none;
-    will-change: transform;
     padding: 6px 0;
     align-items: flex-end;
     animation: msgBubbleIn 250ms cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -1254,108 +1141,6 @@
   .rxn-add-btn:active { transform: scale(0.82); background: color-mix(in srgb, var(--color-primary) 10%, transparent); color: var(--color-primary); }
   @media (hover: hover) {
     .rxn-add-btn:hover { background: var(--input-bg); color: var(--text-secondary); }
-  }
-
-  /* === REACTION PICKER (Glassmorphism) === */
-  .rxn-picker-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 100;
-  }
-
-  .rxn-picker {
-    display: grid;
-    grid-template-columns: repeat(8, 1fr);
-    gap: 4px;
-    padding: 12px 14px;
-    border-radius: 26px;
-    background: var(--glass-bg, rgba(255, 255, 255, 0.78));
-    backdrop-filter: blur(24px) saturate(200%);
-    -webkit-backdrop-filter: blur(24px) saturate(200%);
-    border: var(--glass-border, 1px solid rgba(5, 150, 105, 0.08));
-    box-shadow:
-      0 16px 48px rgba(0, 0, 0, 0.14),
-      0 4px 12px rgba(0, 0, 0, 0.06),
-      inset 0 1px 0 rgba(255, 255, 255, 0.15);
-    opacity: 0;
-    transform: scale(0.85) translateY(8px);
-    transition: opacity 150ms ease, transform 350ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    pointer-events: none;
-    position: relative;
-    width: max-content;
-    will-change: transform, opacity;
-  }
-
-  .rxn-picker-visible {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-    pointer-events: auto;
-  }
-
-  /* Caret / arrow pointing toward the trigger */
-  .rxn-picker-caret {
-    position: absolute;
-    left: var(--caret-left, 50%);
-    bottom: var(--caret-bottom, -7px);
-    top: var(--caret-top, auto);
-    width: 14px;
-    height: 10px;
-    overflow: hidden;
-    pointer-events: none;
-    transform: translateX(-50%);
-  }
-  .rxn-picker-caret::after {
-    content: '';
-    position: absolute;
-    width: 12px;
-    height: 12px;
-    background: var(--glass-bg, rgba(255, 255, 255, 0.78));
-    border: 1px solid var(--glass-border, 1px solid rgba(5, 150, 105, 0.08));
-    border-top: none;
-    border-left: none;
-    left: 1px;
-    top: 0;
-    transform: rotate(var(--caret-rotate, 45deg));
-    transform-origin: top left;
-  }
-
-  .rxn-picker-btn {
-    width: 44px;
-    height: 44px;
-    font-size: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 12px;
-    border: none;
-    background: transparent;
-    font-size: 22px;
-    cursor: pointer;
-    transition: transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1), background 150ms ease;
-    -webkit-tap-highlight-color: transparent;
-    position: relative;
-  }
-  .rxn-picker-btn:hover { background: color-mix(in srgb, var(--color-primary) 10%, transparent); }
-  .rxn-picker-btn:active { transform: scale(0.72); }
-  @media (hover: hover) {
-    .rxn-picker-btn:hover { transform: scale(1.08); }
-    .rxn-picker-btn:active { transform: scale(0.72); }
-  }
-
-  .rxn-picker-btn-active {
-    background: color-mix(in srgb, var(--color-primary) 16%, transparent);
-  }
-  .rxn-picker-btn-active::after {
-    content: '';
-    position: absolute;
-    bottom: 4px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    background: var(--color-primary);
-    box-shadow: 0 0 6px color-mix(in srgb, var(--color-primary) 40%, transparent);
   }
 
   @keyframes msgBubbleIn {

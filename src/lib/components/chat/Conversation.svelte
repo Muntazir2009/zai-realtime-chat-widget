@@ -6,6 +6,7 @@
   import MediaGallery from '$lib/components/media/MediaGallery.svelte';
   import MediaComposer, { type MediaComposerFile } from '$lib/components/media/MediaComposer.svelte';
   import MessageContextMenu from './MessageContextMenu.svelte';
+  import ReactionPicker from './ReactionPicker.svelte';
   import InputBar from './InputBar.svelte';
   import ReplyPreview from './ReplyPreview.svelte';
   import ScrollToBottom from './ScrollToBottom.svelte';
@@ -725,7 +726,8 @@
 
   function handleLongPress(msg: Message, x?: number, y?: number) {
     // Close any open reaction picker
-    reactionPickerTargetId = null;
+    showReactionPicker = false;
+    reactionPickerMsg = null;
     contextMenuMsg = msg;
     contextMenuX = x ?? 0;
     contextMenuY = y ?? 0;
@@ -753,16 +755,27 @@
 
   function handleEditMessage(msg: Message) { editingMsg = msg; editText = msg.c; }
 
-  // Track which message should show its reaction picker (triggered from context menu)
-  let reactionPickerTargetId: string | null = $state(null);
+  // Screen-level reaction picker state
+  let reactionPickerMsg: Message | null = $state(null);
+  let showReactionPicker = $state(false);
+  let reactionPickerX = $state(0);
+  let reactionPickerY = $state(0);
 
-  function handleReactFromMenu(msg: Message) {
-    // Set the target so MessageBubble can pick it up.
-    // Use setTimeout instead of rAF — rAF fires before Svelte's $effect
-    // has a chance to propagate the openReactionPicker=true update to
-    // MessageBubble, causing the picker to never open.
-    reactionPickerTargetId = msg.id;
-    setTimeout(() => { reactionPickerTargetId = null; }, 300);
+  function handleTapReaction(msg: Message, x?: number, y?: number) {
+    reactionPickerMsg = msg;
+    reactionPickerX = x ?? 0;
+    reactionPickerY = y ?? 0;
+    showReactionPicker = true;
+  }
+
+  function handleReactFromPicker(emoji: string) {
+    if (!reactionPickerMsg || !chatStore.activeChatId) return;
+    const effect = emojiToEffectType(emoji);
+    if (effect) {
+      currentEffectType = effect;
+      triggerEasterEgg++;
+    }
+    chatStore.toggleReaction(chatStore.activeChatId, reactionPickerMsg.id, emoji);
   }
 
   async function saveEdit() {
@@ -1024,9 +1037,9 @@
             onImageTap={handleImageTap}
             onVideoTap={handleVideoTap}
             onReaction={handleReaction}
+            onTapReaction={handleTapReaction}
             onSwipeReply={handleSwipeReply}
             onReplyTap={scrollToMessage}
-            openReactionPicker={reactionPickerTargetId === msg.id}
             senderAccentColor={msg.sid === authStore.user?.id ? null : (chatStore.userDict.get(msg.sid)?.accentColor ?? null)}
             senderEmojiStatus={msg.sid === authStore.user?.id ? null : (chatStore.userDict.get(msg.sid)?.emojiStatus ?? null)}
             senderAvatarUrl={chatStore.userDict.get(msg.sid)?.avatarUrl ?? null}
@@ -1164,7 +1177,20 @@
       onPin={handlePinMessage}
       onStar={handleStarMessage}
       onEdit={handleEditMessage}
-      onReact={handleReactFromMenu}
+      onReact={(m) => { showContextMenu = false; contextMenuMsg = null; handleTapReaction(m, contextMenuX, contextMenuY); }}
+    />
+  {/if}
+
+  <!-- Reaction Picker (screen-level) -->
+  {#if reactionPickerMsg}
+    <ReactionPicker
+      open={showReactionPicker}
+      onClose={() => { showReactionPicker = false; reactionPickerMsg = null; }}
+      msg={reactionPickerMsg}
+      x={reactionPickerX}
+      y={reactionPickerY}
+      existingReactions={chatStore.getReactions(reactionPickerMsg.id).map(r => r.emoji)}
+      onReact={handleReactFromPicker}
     />
   {/if}
 </div>

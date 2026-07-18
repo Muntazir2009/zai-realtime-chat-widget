@@ -69,27 +69,39 @@
       position: 'fixed',
       top: `${top}px`,
       left: `${left}px`,
-      zIndex: '102',
+      zIndex: '105',
     };
   }
 
-  function handleReply() { if (!msg) return; onReply(msg); onClose(); }
-  function handleCopy() { if (!msg) return; onCopy(msg.c); onClose(); }
-  function handleDelete() { if (!msg) return; onDelete(msg); onClose(); }
-  function handlePin() { if (!msg) return; onPin?.(msg); onClose(); }
-  function handleStar() { if (!msg) return; onStar?.(msg); onClose(); }
-  function handleEdit() { if (!msg) return; onEdit?.(msg); onClose(); }
-  function handleReact() { if (!msg) return; onReact?.(msg); onClose(); }
+  function handleBackdropClick(e: MouseEvent) {
+    // Only close if clicking directly on the backdrop
+    if ((e.target as HTMLElement).classList.contains('ctx-backdrop')) {
+      onClose();
+    }
+  }
+
+  function handleMenuClick(e: MouseEvent) {
+    e.stopPropagation();
+  }
+
+  function handleReply(e: MouseEvent) { e.stopPropagation(); if (!msg) return; onReply(msg); onClose(); }
+  function handleCopy(e: MouseEvent) { e.stopPropagation(); if (!msg) return; onCopy(msg.c); onClose(); }
+  function handleDelete(e: MouseEvent) { e.stopPropagation(); if (!msg) return; onDelete(msg); onClose(); }
+  function handlePin(e: MouseEvent) { e.stopPropagation(); if (!msg) return; onPin?.(msg); onClose(); }
+  function handleStar(e: MouseEvent) { e.stopPropagation(); if (!msg) return; onStar?.(msg); onClose(); }
+  function handleEdit(e: MouseEvent) { e.stopPropagation(); if (!msg) return; onEdit?.(msg); onClose(); }
+  function handleReact(e: MouseEvent) { e.stopPropagation(); if (!msg) return; onReact?.(msg); onClose(); }
 </script>
 
 {#if open}
-  <div class="ctx-backdrop" onclick={onClose}></div>
+  <div class="ctx-backdrop" onclick={handleBackdropClick}></div>
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div
     class="ctx-menu {ready ? 'ctx-menu-visible' : ''}"
     style={Object.entries(menuStyle).map(([k, v]) => `${k}: ${v}`).join('; ')}
     bind:this={menuEl}
     role="menu"
+    onclick={handleMenuClick}
   >
     <button class="ctx-item" onclick={handleReply} role="menuitem">
       <Reply size={16} />
@@ -148,7 +160,7 @@
   .ctx-backdrop {
     position: fixed;
     inset: 0;
-    z-index: 101;
+    z-index: 104;
   }
 
   .ctx-menu {
