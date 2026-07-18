@@ -1,24 +1,24 @@
 // ============================================================
-// Storage — Fast uploads to R2.
+// Storage — Uploads to R2 via Cloudflare Worker.
 //
-// Upload strategy (tried in order):
-//   1. Direct upload to R2 via presigned URL (fastest, requires CORS)
-//   2. Raw-body proxy via /api/upload/stream (fast, no FormData overhead)
-//   3. FormData proxy via /api/upload/file (slow fallback)
+// All files (images, videos, voice, avatars, wallpapers) are
+// uploaded as FormData POST to the Cloudflare Worker, which
+// stores them in R2 and returns the public URL.
 //
-// The raw-body proxy skips multipart encoding/decoding, making
-// video uploads significantly faster than the old FormData approach.
-// R2 CORS is auto-configured on first upload to enable path #1.
-//
-// Features:
+// Client-side features preserved:
 //   - Image compression (WebP/JPEG with max-width scaling)
 //   - Upload cancellation via AbortSignal
 //   - Rich progress reporting (speed, ETA, phases)
 //   - Video/image metadata extraction
-//   - Parallel blurhash + compression + presign URL fetch
+//   - Parallel blurhash + compression
 // ============================================================
 
 import { browser } from '$app/environment';
+
+// ── Worker Configuration ─────────────────────────────────
+
+const WORKER_URL = 'https://chatfolder.killermunu.workers.dev/';
+const R2_PUBLIC_URL = 'https://pub-5015d5428b174f55a02bb5e740d63919.r2.dev';
 
 // ── Types ─────────────────────────────────────────────────
 
@@ -181,9 +181,6 @@ export async function compressImage(
     URL.revokeObjectURL(url);
 
     // Determine format: prefer WebP, fallback to JPEG
-    const supportsWebP = typeof HTMLCanvasElement !== 'undefined'
-      && typeof (HTMLCanvasElement.prototype as any).toBlob === 'function';
-
     const mimeType = 'image/webp'; // Modern browsers all support WebP
     const fallbackMime = 'image/jpeg';
     const jpegQuality = 0.85;
@@ -321,49 +318,6 @@ export async function getVideoMetadata(file: File): Promise<{
   return { duration, width, height, thumbnailDataUrl };
 }
 
-// ── Presigned URL Fetch ───────────────────────────────────
-
-interface PresignResponse {
-  uploadUrl: string;
-  publicUrl: string;
-  key: string;
-}
-
-async function getPresignedUrl(
-  filename: string,
-  contentType: string,
-  folder: string,
-  signal?: AbortSignal,
-): Promise<PresignResponse> {
-  const res = await fetch('/api/upload/presign', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ filename, contentType, folder }),
-    signal,
-  });
-
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error((data as any).error || `Presign failed (HTTP ${res.status})`);
-  }
-
-  return res.json();
-}
-
-// ── Helper: wrap simple pct callback into detailed progress ──
-
-function wrapSimpleProgress(
-  onProgress: ((pct: number) => void) | undefined,
-  total: number,
-  phase: UploadProgress['phase'],
-): ((loaded: number) => void) | undefined {
-  if (!onProgress) return undefined;
-  return (loaded: number) => {
-    if (total <= 0) return;
-    onProgress(Math.round((loaded / total) * 100));
-  };
-}
-
 // ── Helper: build detailed progress reporter for XHR ──────
 
 function createProgressReporter(
@@ -413,173 +367,13 @@ function createProgressReporter(
   };
 }
 
-// ── Method 1: Direct Upload to R2 (presigned URL) ─────────
+// ── Worker Upload (single method) ────────────────────────
 
 /**
- * Upload directly to R2 via presigned URL. Single hop — fastest possible.
- * Requires CORS to be configured on the R2 bucket.
+ * Upload a file to R2 via the Cloudflare Worker.
+ * Uses FormData POST with XHR for progress tracking.
  */
-async function uploadDirectToR2(
-  presignedUrl: string,
-  file: Blob,
-  contentType: string,
-  onProgress?: (pct: number) => void,
-  onDetailedProgress?: (info: UploadProgress) => void,
-  signal?: AbortSignal,
-): Promise<void> {
-  // Check if already aborted
-  if (signal?.aborted) {
-    throw new DOMException('Upload cancelled', 'AbortError');
-  }
-
-  const total = file.size;
-  const reporter = createProgressReporter(
-    onProgress,
-    onDetailedProgress,
-    total,
-    'uploading',
-  );
-
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('PUT', presignedUrl);
-    xhr.setRequestHeader('Content-Type', contentType);
-
-    xhr.upload.onprogress = reporter.onXhrProgress;
-
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        reporter.reportDone();
-        resolve();
-      } else {
-        reject(new Error(`R2 direct upload failed (HTTP ${xhr.status})`));
-      }
-    };
-
-    xhr.onerror = () => reject(new Error('R2 direct upload: CORS or network error'));
-    xhr.ontimeout = () => reject(new Error('R2 direct upload timed out'));
-    xhr.timeout = 120_000; // 2 minutes (direct to R2 should be fast)
-
-    // Wire up abort signal via event listener (XHR has no .signal property)
-    if (signal) {
-      signal.addEventListener('abort', () => {
-        xhr.abort();
-      }, { once: true });
-    }
-
-    xhr.onabort = () => {
-      reject(new DOMException('Upload cancelled', 'AbortError'));
-    };
-
-    xhr.send(file);
-  });
-}
-
-// ── Method 2: Streaming Proxy (zero-buffer) ───────────────
-
-/**
- * Upload via streaming proxy. Client → SvelteKit → R2 piped simultaneously.
- * Raw body (no FormData) so the server can stream bytes to R2 without buffering.
- */
-async function uploadViaStreamProxy(
-  file: Blob,
-  filename: string,
-  contentType: string,
-  folder: string,
-  onProgress?: (pct: number) => void,
-  onDetailedProgress?: (info: UploadProgress) => void,
-  signal?: AbortSignal,
-): Promise<{ publicUrl: string; key: string }> {
-  // Check if already aborted
-  if (signal?.aborted) {
-    throw new DOMException('Upload cancelled', 'AbortError');
-  }
-
-  const total = file.size;
-  // Report 0-95% during upload; remaining 5% is server→R2 processing
-  const reporter = createProgressReporter(
-    onProgress,
-    onDetailedProgress,
-    total,
-    'uploading',
-    0.95,
-    0,
-  );
-
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('PUT', '/api/upload/stream');
-    xhr.setRequestHeader('Content-Type', contentType);
-    xhr.setRequestHeader('x-file-name', filename);
-    xhr.setRequestHeader('x-file-content-type', contentType);
-    xhr.setRequestHeader('x-file-folder', folder);
-
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) {
-        reporter.onXhrProgress(e);
-      }
-    };
-
-    // Transition to processing phase at 95%
-    const origOnLoad = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        // Report processing phase
-        if (onDetailedProgress) {
-          onDetailedProgress({
-            percentage: 98,
-            loaded: total,
-            total,
-            speed: 0,
-            eta: -1,
-            phase: 'processing',
-          });
-        }
-        onProgress?.(98);
-
-        try {
-          const data = JSON.parse(xhr.responseText);
-          reporter.reportDone();
-          resolve({ publicUrl: data.publicUrl, key: data.key });
-        } catch {
-          reject(new Error('Invalid response from stream proxy'));
-        }
-      } else {
-        try {
-          const data = JSON.parse(xhr.responseText);
-          reject(new Error(data.error || `Stream proxy failed (HTTP ${xhr.status})`));
-        } catch {
-          reject(new Error(`Stream proxy failed (HTTP ${xhr.status})`));
-        }
-      }
-    };
-
-    xhr.onload = origOnLoad;
-    xhr.onerror = () => reject(new Error('Stream proxy network error'));
-    xhr.ontimeout = () => reject(new Error('Stream proxy timed out'));
-    xhr.timeout = 60_000; // 1 minute
-
-    // Wire up abort signal via event listener
-    if (signal) {
-      signal.addEventListener('abort', () => {
-        xhr.abort();
-      }, { once: true });
-    }
-
-    xhr.onabort = () => {
-      reject(new DOMException('Upload cancelled', 'AbortError'));
-    };
-
-    // Send raw file body — NOT FormData!
-    xhr.send(file);
-  });
-}
-
-// ── Method 3: FormData Proxy (slow fallback) ──────────────
-
-/**
- * Upload via server FormData proxy. Slowest method — used as last resort.
- */
-async function uploadViaFormDataProxy(
+async function uploadViaWorker(
   file: Blob,
   filename: string,
   contentType: string,
@@ -597,9 +391,8 @@ async function uploadViaFormDataProxy(
   formData.append('file', file instanceof File ? file : new File([file], filename, { type: contentType }), filename);
   formData.append('folder', folder);
 
-  // For FormData we can't know the exact byte progress the same way,
-  // but XHR upload progress still works on the FormData payload
   const total = file.size;
+  // Report 0-95% during upload; remaining 5% is Worker→R2 processing
   const reporter = createProgressReporter(
     onProgress,
     onDetailedProgress,
@@ -611,7 +404,7 @@ async function uploadViaFormDataProxy(
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', '/api/upload/file');
+    xhr.open('POST', WORKER_URL);
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) {
@@ -637,20 +430,35 @@ async function uploadViaFormDataProxy(
         try {
           const data = JSON.parse(xhr.responseText);
           reporter.reportDone();
-          resolve({ publicUrl: data.publicUrl, key: data.key });
+
+          // Worker may return: publicUrl, url, key
+          const key = data.key || '';
+          const publicUrl = data.publicUrl || data.url || (key ? `${R2_PUBLIC_URL}/${key}` : '');
+
+          if (!publicUrl) {
+            reject(new Error('Worker returned no URL'));
+            return;
+          }
+
+          resolve({ publicUrl, key });
         } catch {
-          reject(new Error('Invalid response from file proxy'));
+          reject(new Error('Invalid response from upload Worker'));
         }
       } else {
-        reject(new Error(`File proxy failed (HTTP ${xhr.status})`));
+        try {
+          const data = JSON.parse(xhr.responseText);
+          reject(new Error(data.error || `Upload Worker failed (HTTP ${xhr.status})`));
+        } catch {
+          reject(new Error(`Upload Worker failed (HTTP ${xhr.status})`));
+        }
       }
     };
 
-    xhr.onerror = () => reject(new Error('File proxy network error'));
-    xhr.ontimeout = () => reject(new Error('File proxy timed out'));
-    xhr.timeout = 60_000; // 1 minute
+    xhr.onerror = () => reject(new Error('Upload Worker: network error'));
+    xhr.ontimeout = () => reject(new Error('Upload Worker: request timed out'));
+    xhr.timeout = 120_000; // 2 minutes
 
-    // Wire up abort signal via event listener
+    // Wire up abort signal via event listener (XHR has no .signal property)
     if (signal) {
       signal.addEventListener('abort', () => {
         xhr.abort();
@@ -668,15 +476,10 @@ async function uploadViaFormDataProxy(
 // ── Public API ────────────────────────────────────────────
 
 /**
- * Upload a file to R2 with automatic method selection.
+ * Upload a file to R2 via Cloudflare Worker.
  *
- * Strategy:
- *   1. Direct to R2 (presigned URL) — fastest, needs CORS
- *   2. Streaming proxy — fast, no CORS needed (raw body piped through)
- *   3. FormData proxy — slow fallback (full buffer on server)
- *
- * Progress is reported via onProgress callback (0-100 pct).
- * For images, also returns a blurhash string.
+ * Client-side processing (image compression, blurhash) runs in parallel
+ * with the upload preparation. Progress is reported via callbacks.
  *
  * Pass UploadOptions for cancellation, detailed progress, and image compression.
  */
@@ -700,7 +503,6 @@ export async function uploadFile(
   const originalName = filename || (file instanceof File ? file.name : `upload-${Date.now()}.bin`);
   const contentType = (file instanceof File ? file.type : file.type) || 'application/octet-stream';
   const isImage = file instanceof File && file.type.startsWith('image/');
-  const isVideo = file instanceof File && file.type.startsWith('video/');
 
   // Helper to report phase
   const reportPhase = (phase: UploadProgress['phase'], pct: number) => {
@@ -720,9 +522,8 @@ export async function uploadFile(
   // ── Preparing phase ──
   reportPhase('preparing', 0);
 
-  // ── Parallel work: blurhash, compression, presign URL ──
+  // ── Parallel work: blurhash + compression ──
 
-  // Determine which file to actually upload (possibly compressed)
   let fileToUpload: File | Blob = file;
   let finalFilename = originalName;
   let finalContentType = contentType;
@@ -747,56 +548,9 @@ export async function uploadFile(
       })
     : Promise.resolve();
 
-  // For non-image, non-video files (e.g. voice blobs), also try presign + direct upload
-  // This avoids the double-hop through the stream proxy
-  if (!isImage && !isVideo) {
-    reportPhase('preparing', 2);
-    // Try presign + direct upload first (fastest)
-    const presignResult = await getPresignedUrl(originalName, contentType, effectiveFolder, signal)
-      .catch(() => null as PresignResponse | null);
-    if (presignResult) {
-      try {
-        reportPhase('uploading', 5);
-        await uploadDirectToR2(
-          presignResult.uploadUrl,
-          fileToUpload,
-          finalContentType,
-          onProgress,
-          onDetailedProgress,
-          signal,
-        );
-        return { publicUrl: presignResult.publicUrl, key: presignResult.key };
-      } catch (err) {
-        if (err instanceof DOMException && err.name === 'AbortError') throw err;
-        console.warn('[storage] Direct R2 upload failed for non-image, trying stream proxy:', err);
-      }
-    }
-    // Fallback to stream proxy
-    reportPhase('uploading', 5);
-    const result = await uploadViaStreamProxy(
-      fileToUpload,
-      finalFilename,
-      finalContentType,
-      effectiveFolder,
-      onProgress,
-      onDetailedProgress,
-      signal,
-    );
-    return { publicUrl: result.publicUrl, key: result.key };
-  }
-
-  // Image path: parallel blurhash + compression + presign
-  // Start presign URL fetch in parallel
-  const presignPromise = getPresignedUrl(originalName, contentType, effectiveFolder, signal)
-    .catch(() => null as PresignResponse | null);
-
-  // Wait for all parallel work to complete
+  // Wait for parallel work
   reportPhase('preparing', 2);
-  const [blurhash, , presignResult] = await Promise.all([
-    blurhashPromise,
-    compressionPromise,
-    presignPromise,
-  ]);
+  const [blurhash] = await Promise.all([blurhashPromise, compressionPromise]);
 
   // Re-check abort after parallel work
   if (signal?.aborted) {
@@ -805,63 +559,9 @@ export async function uploadFile(
 
   reportPhase('preparing', 10);
 
-  // Helper to build final result
-  const buildResult = (publicUrl: string, key: string): UploadResult => {
-    const out: UploadResult = { publicUrl, key };
-    if (blurhash) out.blurhash = blurhash;
-    return out;
-  };
-
-  // If we have a presigned URL, try direct upload first
-  if (presignResult) {
-    try {
-      await uploadDirectToR2(
-        presignResult.uploadUrl,
-        fileToUpload,
-        finalContentType,
-        onProgress,
-        onDetailedProgress,
-        signal,
-      );
-      return buildResult(presignResult.publicUrl, presignResult.key);
-    } catch (err) {
-      // If it was an abort, re-throw immediately
-      if (err instanceof DOMException && err.name === 'AbortError') throw err;
-      console.warn('[storage] Direct R2 upload failed (likely CORS), trying streaming proxy:', err);
-    }
-  } else {
-    console.warn('[storage] Presign failed, going straight to streaming proxy');
-  }
-
-  // Re-check abort before trying next method
-  if (signal?.aborted) {
-    throw new DOMException('Upload cancelled', 'AbortError');
-  }
-
-  // Streaming proxy (fast fallback — raw body piped to R2)
-  try {
-    const result = await uploadViaStreamProxy(
-      fileToUpload,
-      finalFilename,
-      finalContentType,
-      effectiveFolder,
-      onProgress,
-      onDetailedProgress,
-      signal,
-    );
-    return buildResult(result.publicUrl, result.key);
-  } catch (err) {
-    if (err instanceof DOMException && err.name === 'AbortError') throw err;
-    console.warn('[storage] Streaming proxy failed, trying FormData fallback:', err);
-  }
-
-  // Re-check abort before trying last method
-  if (signal?.aborted) {
-    throw new DOMException('Upload cancelled', 'AbortError');
-  }
-
-  // FormData proxy (slowest fallback)
-  const result = await uploadViaFormDataProxy(
+  // Upload via Worker
+  reportPhase('uploading', 12);
+  const result = await uploadViaWorker(
     fileToUpload,
     finalFilename,
     finalContentType,
@@ -870,7 +570,11 @@ export async function uploadFile(
     onDetailedProgress,
     signal,
   );
-  return buildResult(result.publicUrl, result.key);
+
+  // Build final result
+  const out: UploadResult = { publicUrl: result.publicUrl, key: result.key };
+  if (blurhash) out.blurhash = blurhash;
+  return out;
 }
 
 /**

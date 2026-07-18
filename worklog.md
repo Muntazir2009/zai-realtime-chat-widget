@@ -1462,3 +1462,28 @@ Stage Summary:
 - Stickers: 50% larger (180px), responsive, wider container
 - Build: fixed async callback bug that was crashing esbuild
 - All changes verified: dev server starts, page loads correctly
+
+---
+Task ID: worker-upload-integration
+Agent: Main Agent
+Task: Integrate Cloudflare Worker for all file uploads, replacing server-side proxy
+
+Work Log:
+- Read and analyzed existing 3-tier upload system: presign→direct R2, stream proxy, FormData proxy
+- Read all callers of uploadFile: InputBar (voice), Conversation (media), MediaUploadManager, WallpaperPicker, SettingsView (avatars)
+- Tested Worker API at https://chatfolder.killermunu.workers.dev/ — confirmed POST FormData with file field
+- Rewrote src/lib/firebase/storage.ts: replaced 3-tier strategy with single FormData POST to Worker URL
+- Preserved all client-side processing: image compression, blurhash generation, video/image metadata extraction
+- Preserved all progress tracking (XHR upload progress), abort support, and public API signatures
+- Removed 3 server-side upload routes: /api/upload/presign, /api/upload/stream, /api/upload/file
+- Removed src/lib/server/r2.ts (only used by upload routes)
+- Verified no broken imports remain, no storage-related type errors in svelte-check
+- @aws-sdk packages no longer imported anywhere (were only in removed r2.ts)
+
+Stage Summary:
+- All uploads (images, videos, voice, avatars, wallpapers) now go through Cloudflare Worker at https://chatfolder.killermunu.workers.dev/
+- Worker URL and R2 public URL are hardcoded constants in storage.ts
+- Server no longer proxies uploads — removed ~230 lines of server-side proxy code
+- Firebase RTDB still used for message metadata and attachment URLs (unchanged)
+- MediaComposer, InputBar, Conversation, SettingsView, WallpaperPicker all work unchanged
+- Worker response parsing handles both `publicUrl` and `url` field names, with R2_PUBLIC_URL fallback
