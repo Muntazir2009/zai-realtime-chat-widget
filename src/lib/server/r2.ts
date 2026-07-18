@@ -80,6 +80,35 @@ export async function uploadToR2(
 }
 
 /**
+ * Stream upload to R2 — pipes the request body directly without buffering.
+ * Eliminates the server-side memory bottleneck for large files.
+ */
+export async function uploadToR2Stream(
+  env: EnvVars,
+  body: ReadableStream<Uint8Array>,
+  filename: string,
+  contentType: string,
+  folder: string = 'media',
+): Promise<DirectUploadResult> {
+  const client = getS3Client(env);
+  const bucket = env.R2_BUCKET_NAME || 'chat-media';
+  const publicBase = env.PUBLIC_R2_PUBLIC_URL || '';
+  const key = `${folder}/${Date.now()}-${filename}`;
+
+  const command = new PutObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    ContentType: contentType,
+    Body: body as any, // AWS SDK v3 accepts Web ReadableStream in Node.js runtime
+  });
+
+  await client.send(command);
+  const publicUrl = `${publicBase}/${key}`;
+
+  return { publicUrl, key };
+}
+
+/**
  * Generate a presigned PUT URL for a client-side direct upload to R2.
  */
 export async function generatePresignedUploadUrl(

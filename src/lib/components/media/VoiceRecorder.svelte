@@ -40,7 +40,14 @@
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioChunks = [];
-      mediaRecorder = new MediaRecorder(stream);
+      // Use a widely-supported MIME type. Safari doesn't support webm,
+      // so fall back to mp4/aac if available.
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/mp4')
+          ? 'audio/mp4'
+          : 'audio/webm';
+      mediaRecorder = new MediaRecorder(stream, { mimeType });
       recordingTime = 0;
 
       mediaRecorder.ondataavailable = (e) => {
@@ -48,7 +55,7 @@
       };
 
       mediaRecorder.onstop = () => {
-        const blob = new Blob(audioChunks, { type: 'audio/webm' });
+        const blob = new Blob(audioChunks, { type: mimeType });
         onSend(blob, recordingTime);
         stream.getTracks().forEach((t) => t.stop());
       };

@@ -185,15 +185,7 @@
   let typingNames = $derived.by(() => {
     if (!chatStore.activeChatId || !authStore.user) return [];
     const chatId = chatStore.activeChatId;
-    // Access _typingTick to ensure reactivity triggers on every typing change
-    const _tick = (chatStore as any)._typingTick;
-    void _tick;
-    const uids = chatStore.typingUsers.get(chatId);
-    if (!uids) return [];
-    // Only show OTHER users typing, not yourself
-    return Array.from(uids)
-      .filter(uid => uid !== authStore.user!.id)
-      .map(uid => chatStore.userDict.get(uid)?.displayName ?? 'Someone');
+    return chatStore.typingDisplayNames.get(chatId) ?? [];
   });
 
   let sortedPinned = $derived.by(() => {
@@ -289,26 +281,68 @@
     prevScrollHeight = scrollHeight;
   }
 
+  function scrollToBottom() {
+    if (!messagesContainer) return;
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    newMsgWhileScrolled = 0;
+    isNearBottom = true;
+    prevScrollHeight = messagesContainer.scrollHeight;
+  }
+
   // Smart auto-scroll: only if user was already near bottom
   $effect(() => {
     const len = chatStore.messages.length;
     if (len === 0 || !messagesContainer) return;
+    // Scroll down whenever new messages arrive and user is near bottom
     if (len > prevMsgCount && isNearBottom) {
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
-      newMsgWhileScrolled = 0;
+      // Use rAF to ensure the DOM has rendered the new message
+      requestAnimationFrame(() => {
+        if (messagesContainer) {
+          messagesContainer.scrollTop = messagesContainer.scrollHeight;
+          newMsgWhileScrolled = 0;
+          prevScrollHeight = messagesContainer.scrollHeight;
+        }
+      });
     }
     prevMsgCount = len;
   });
 
-  // Initial scroll to bottom on chat open
+  // Initial scroll to bottom on chat open or when chat changes
   $effect(() => {
-    if (chatStore.activeChatId && messagesContainer) {
-      requestAnimationFrame(() => {
-        if (messagesContainer) {
+    const chatId = chatStore.activeChatId;
+    if (chatId && messagesContainer) {
+      // Wait for messages to render, then scroll
+      const check = () => {
+        if (messagesContainer && chatStore.activeChatId === chatId) {
           messagesContainer.scrollTop = messagesContainer.scrollHeight;
-          isNearBottom = true; // Force near-bottom after initial scroll
+          isNearBottom = true;
+          prevMsgCount = chatStore.messages.length;
+          prevScrollHeight = messagesContainer.scrollHeight;
         }
-      });
+      };
+      // Try multiple times to catch async message loading
+      requestAnimationFrame(check);
+      setTimeout(check, 100);
+      setTimeout(check, 500);
+    }
+  });
+
+  // Keyboard-aware: when virtual keyboard opens, scroll to keep input visible
+  $effect(() => {
+    const chatId = chatStore.activeChatId;
+    if (!chatId || !messagesContainer) return;
+    const onResize = () => {
+      if (isNearBottom && messagesContainer) {
+        requestAnimationFrame(() => {
+          if (messagesContainer) {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+          }
+        });
+      }
+    };
+    if (typeof window !== 'undefined') {
+      window.visualViewport?.addEventListener('resize', onResize);
+      return () => window.visualViewport?.removeEventListener('resize', onResize);
     }
   });
 
@@ -777,11 +811,7 @@
     if (chatStore.activeChatId) chatStore.sendImageMessage(chatStore.activeChatId, gifUrl, 'GIF');
   }
 
-  function scrollToBottom() {
-    if (!messagesContainer) return;
-    newMsgWhileScrolled = 0;
-    messagesContainer.scrollTo({ top: messagesContainer.scrollHeight, behavior: 'smooth' });
-  }
+  // scrollToBottom defined above in scroll section
 
   function formatLastSeen(ts: number): string {
     const now = Date.now();

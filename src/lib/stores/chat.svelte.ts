@@ -57,9 +57,10 @@ class ChatStore {
 
   // ---- Presence & typing ----
   presence: Map<string, PresenceState> = $state(new Map());
-  typingUsers: Map<string, Set<string>> = $state(new Map());
-  // Reactive tick to force UI updates for typing indicator
-  private _typingTick: number = $state(0);
+  // Typing: simple reactive array per chat — reassigned on every change
+  // to guarantee Svelte 5 $derived triggers.
+  typingDisplayNames: Map<string, string[]> = $state(new Map()); // chatId → [displayNames]
+  private _typingUids: Map<string, Set<string>> = new Map(); // internal tracking (non-reactive)
 
   // ---- Read receipts: track other user's lastReadMessageId per chat ----
   otherUserReadIds: Map<string, string> = $state(new Map()); // chatId → lrid
@@ -78,6 +79,7 @@ class ChatStore {
   private presenceStaleTimer: ReturnType<typeof setInterval> | null = null;
   private typingUnsubs: Map<string, () => void> = new Map();
   private typingSafetyTimeouts: Map<string, Map<string, ReturnType<typeof setTimeout>>> = new Map();
+  private typingRetryTimer: ReturnType<typeof setTimeout> | null = null;
   private otherReadUnsub: (() => void) | null = null;
 
   // ---- Self profile listener ----
@@ -488,7 +490,7 @@ class ChatStore {
     // Optimistic: add to local array immediately so UI updates instantly
     this.messages = [...this.messages, message].sort((a, b) => a.ts - b.ts);
     await retryWithBackoff(
-      () => rtdb.update(await rtdb.ref('/'), updates),
+      async () => rtdb.update(await rtdb.ref('/'), updates),
       'sendMessage'
     ).catch((err) => {
       console.error('[sendMessage] All retries failed:', err);
@@ -517,7 +519,7 @@ class ChatStore {
     // Optimistic: add to local array immediately
     this.messages = [...this.messages, message].sort((a, b) => a.ts - b.ts);
     await retryWithBackoff(
-      () => rtdb.update(await rtdb.ref('/'), updates),
+      async () => rtdb.update(await rtdb.ref('/'), updates),
       'sendImageMessage'
     ).catch((err) => {
       console.error('[sendImageMessage] All retries failed:', err);
@@ -547,7 +549,7 @@ class ChatStore {
     const updates = this.buildFanOutUpdates(chatId, messageId, message, `🎬 Video ${durStr}`);
     this.messages = [...this.messages, message].sort((a, b) => a.ts - b.ts);
     await retryWithBackoff(
-      () => rtdb.update(await rtdb.ref('/'), updates),
+      async () => rtdb.update(await rtdb.ref('/'), updates),
       'sendVideoMessage'
     ).catch((err) => {
       console.error('[sendVideoMessage] All retries failed:', err);
@@ -578,7 +580,7 @@ class ChatStore {
     // Optimistic: add to local array immediately
     this.messages = [...this.messages, message].sort((a, b) => a.ts - b.ts);
     await retryWithBackoff(
-      () => rtdb.update(await rtdb.ref('/'), updates),
+      async () => rtdb.update(await rtdb.ref('/'), updates),
       'sendVoiceMessage'
     ).catch((err) => {
       console.error('[sendVoiceMessage] All retries failed:', err);
@@ -754,67 +756,108 @@ class ChatStore {
   private async attachTypingListener(chatId: string): Promise<void> {
     this.detachTypingListener();
     const meta = this.chats.get(chatId);
-    if (!meta) return;
-    this.typingSafetyTimeouts.set(chatId, new Map());
-    for (const uid of meta.participantIds) {
-      const r = await rtdb.ref(RTDB_PATHS.TYPING(chatId, uid));
-      const unsub = await rtdb.onValue(r, (snap) => {
-        const existingSet = this.typingUsers.get(chatId);
-        let changed = false;
-
-        // Determine if this uid should be in the typing set
-        let shouldHave = false;
-        if (!snap.exists()) {
-          this.clearTypingSafetyTimeout(chatId, uid);
-        } else {
-          const raw = snap.val();
-          // Support both formats:
-          //   - Number (timestamp): { typing: 1715234567890 }
-          //   - Object (legacy):   { typing: true, ts: 1715234567890 }
-          const isTyping = typeof raw === 'number'
-            ? (raw > 0 && Date.now() - raw < 8000)
-            : (raw && raw.typing === true);
-
-          if (!isTyping) {
-            this.clearTypingSafetyTimeout(chatId, uid);
-          } else {
-            shouldHave = true;
-            this.clearTypingSafetyTimeout(chatId, uid);
-            const timeout = setTimeout(() => {
-              const s = this.typingUsers.get(chatId);
-              if (s) {
-                const updated = new Set(s);
-                updated.delete(uid);
-                const m = new Map(this.typingUsers);
-                m.set(chatId, updated);
-                this.typingUsers = m;
-                this._typingTick++;
-              }
-              const timeouts = this.typingSafetyTimeouts.get(chatId);
-              if (timeouts) timeouts.delete(uid);
-            }, 3000);
-            this.typingSafetyTimeouts.get(chatId)!.set(uid, timeout);
-          }
+    if (!meta || !meta.participantIds || meta.participantIds.length === 0) {
+      // Meta not loaded yet — retry after a short delay
+      console.warn('[ChatStore] attachTypingListener: meta not available for', chatId, '- retrying in 1s');
+      if (this.typingRetryTimer) clearTimeout(this.typingRetryTimer);
+      this.typingRetryTimer = setTimeout(() => {
+        if (this.activeChatId === chatId) {
+          this.attachTypingListener(chatId).catch(() => {});
         }
-
-        const wasInSet = existingSet?.has(uid) ?? false;
-        if (shouldHave !== wasInSet) changed = true;
-
-        if (!changed) return;
-
-        const newMap = new Map(this.typingUsers);
-        const set = new Set(newMap.get(chatId) ?? []);
-        if (shouldHave) {
-          set.add(uid);
-        } else {
-          set.delete(uid);
-        }
-        newMap.set(chatId, set);
-        this.typingUsers = newMap;
-        this._typingTick++; // Force reactive update for typing indicator UI
-      });
-      this.typingUnsubs.set(uid, unsub);
+      }, 1000);
+      return;
     }
+
+    this.typingSafetyTimeouts.set(chatId, new Map());
+    const myUid = authStore.user?.id;
+
+    // Only listen for OTHER users' typing (skip own UID — we already know we're typing)
+    const otherUids = meta.participantIds.filter(uid => uid !== myUid);
+    console.log('[ChatStore] Attaching typing listeners for', otherUids.length, 'users in chat', chatId);
+
+    for (const uid of otherUids) {
+      try {
+        const r = await rtdb.ref(RTDB_PATHS.TYPING(chatId, uid));
+        const unsub = await rtdb.onValue(r, (snap) => {
+          this._handleTypingSnapshot(chatId, uid, snap);
+        });
+        this.typingUnsubs.set(uid, unsub);
+      } catch (err) {
+        console.error('[ChatStore] Failed to attach typing listener for', uid, err);
+      }
+    }
+  }
+
+  /** Process a typing snapshot and update reactive display names */
+  private _handleTypingSnapshot(chatId: string, uid: string, snap: any): void {
+    const myUid = authStore.user?.id;
+    let isTyping = false;
+
+    if (snap.exists()) {
+      const raw = snap.val();
+      // Support both formats:
+      //   - Number (timestamp): 1715234567890
+      //   - Object (legacy):   { typing: true, ts: 1715234567890 }
+      if (typeof raw === 'number') {
+        isTyping = raw > 0 && (Date.now() - raw) < 8000;
+      } else if (raw && (raw.typing === true || (raw.ts && typeof raw.ts === 'number' && Date.now() - raw.ts < 8000))) {
+        isTyping = true;
+      }
+    }
+
+    // Clear existing safety timeout for this user
+    this.clearTypingSafetyTimeout(chatId, uid);
+
+    // Get or create the internal typing set
+    let uidSet = this._typingUids.get(chatId);
+    if (!uidSet) {
+      uidSet = new Set();
+      this._typingUids.set(chatId, uidSet);
+    }
+
+    const wasTyping = uidSet.has(uid);
+
+    if (isTyping) {
+      uidSet.add(uid);
+      // Safety timeout: auto-remove after 5s even if no stop event
+      const timeout = setTimeout(() => {
+        uidSet.delete(uid);
+        this._updateTypingDisplayNames(chatId);
+        const timeouts = this.typingSafetyTimeouts.get(chatId);
+        if (timeouts) timeouts.delete(uid);
+      }, 5000);
+      const chatTimeouts = this.typingSafetyTimeouts.get(chatId);
+      if (chatTimeouts) chatTimeouts.set(uid, timeout);
+    } else {
+      uidSet.delete(uid);
+    }
+
+    // Only update reactive state if the typing status actually changed
+    if (wasTyping !== isTyping) {
+      console.log(`[ChatStore] Typing ${isTyping ? 'START' : 'STOP'}: uid=${uid} chat=${chatId}`);
+      this._updateTypingDisplayNames(chatId);
+    }
+  }
+
+  /** Sync the internal _typingUids set to the reactive typingDisplayNames map */
+  private _updateTypingDisplayNames(chatId: string): void {
+    const uidSet = this._typingUids.get(chatId);
+    const myUid = authStore.user?.id;
+    if (!uidSet || uidSet.size === 0) {
+      // Clear typing display
+      if (this.typingDisplayNames.has(chatId)) {
+        const m = new Map(this.typingDisplayNames);
+        m.delete(chatId);
+        this.typingDisplayNames = m;
+      }
+      return;
+    }
+    const names = Array.from(uidSet)
+      .filter(uid => uid !== myUid)
+      .map(uid => this.userDict.get(uid)?.displayName ?? 'Someone');
+    const m = new Map(this.typingDisplayNames);
+    m.set(chatId, names);
+    this.typingDisplayNames = m;
   }
 
   private clearTypingSafetyTimeout(chatId: string, uid: string): void {
@@ -835,6 +878,13 @@ class ChatStore {
       for (const [, t] of chatTimeouts) clearTimeout(t);
     }
     this.typingSafetyTimeouts.clear();
+    // Clear retry timer
+    if (this.typingRetryTimer) {
+      clearTimeout(this.typingRetryTimer);
+      this.typingRetryTimer = null;
+    }
+    // Clear internal typing state
+    this._typingUids.clear();
   }
 
   // ============================================================
@@ -964,7 +1014,7 @@ class ChatStore {
   }
 
   getTypingUsersForChat(chatId: string): string[] {
-    const set = this.typingUsers.get(chatId);
+    const set = this._typingUids.get(chatId);
     if (!set || set.size === 0) return [];
     return Array.from(set).map((uid) => this.userDict.get(uid)?.displayName ?? uid);
   }

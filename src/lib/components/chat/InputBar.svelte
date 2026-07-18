@@ -168,7 +168,8 @@
     isUploading = true;
     uploadProgress = 0;
     try {
-      const result = await uploadFile(blob, 'voice', `voice-${Date.now()}.webm`, (pct) => { uploadProgress = pct; });
+      const ext = blob.type.includes('mp4') ? 'm4a' : 'webm';
+      const result = await uploadFile(blob, 'voice', `voice-${Date.now()}.${ext}`, (pct) => { uploadProgress = pct; });
       await chatStore.sendVoiceMessage(chatStore.activeChatId, result.publicUrl, duration);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

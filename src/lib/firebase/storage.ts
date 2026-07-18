@@ -747,8 +747,31 @@ export async function uploadFile(
       })
     : Promise.resolve();
 
-  // For non-image, non-video files (e.g. voice blobs), skip presign and go directly to stream proxy
+  // For non-image, non-video files (e.g. voice blobs), also try presign + direct upload
+  // This avoids the double-hop through the stream proxy
   if (!isImage && !isVideo) {
+    reportPhase('preparing', 2);
+    // Try presign + direct upload first (fastest)
+    const presignResult = await getPresignedUrl(originalName, contentType, effectiveFolder, signal)
+      .catch(() => null as PresignResponse | null);
+    if (presignResult) {
+      try {
+        reportPhase('uploading', 5);
+        await uploadDirectToR2(
+          presignResult.uploadUrl,
+          fileToUpload,
+          finalContentType,
+          onProgress,
+          onDetailedProgress,
+          signal,
+        );
+        return { publicUrl: presignResult.publicUrl, key: presignResult.key };
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') throw err;
+        console.warn('[storage] Direct R2 upload failed for non-image, trying stream proxy:', err);
+      }
+    }
+    // Fallback to stream proxy
     reportPhase('uploading', 5);
     const result = await uploadViaStreamProxy(
       fileToUpload,

@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { getEnv } from '$lib/server/firebase-rest';
-import { uploadToR2 } from '$lib/server/r2';
+import { uploadToR2Stream } from '$lib/server/r2';
 
 const ALLOWED_PREFIXES = ['image/', 'video/', 'audio/'];
 const MAX_SIZE = 100 * 1024 * 1024; // 100 MB
@@ -28,18 +28,14 @@ export async function PUT({ request, platform }: { request: Request; platform: a
       }
     }
 
-    const buffer = await request.arrayBuffer();
-
-    if (buffer.byteLength > MAX_SIZE) {
-      return json({ error: 'File too large — maximum 100 MB' }, { status: 413 });
-    }
-
-    if (buffer.byteLength === 0) {
-      return json({ error: 'Empty file body' }, { status: 400 });
+    // Stream directly to R2 without buffering entire file in memory
+    const body = request.body;
+    if (!body) {
+      return json({ error: 'Empty request body' }, { status: 400 });
     }
 
     const env = getEnv(platform);
-    const result = await uploadToR2(env, buffer, filename, contentType, folder);
+    const result = await uploadToR2Stream(env, body, filename, contentType, folder);
 
     return json(result);
   } catch (err) {

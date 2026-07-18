@@ -273,14 +273,18 @@ class PresenceManager {
     try {
       const ref = await rtdb.ref(RTDB_PATHS.TYPING(chatId, uid));
       if (typing) {
-        // Write a timestamp number — compatible with both old and new Firebase rules
-        await rtdb.set(ref, Date.now());
+        const ts = Date.now();
+        // Write a timestamp number — compatible with Firebase rules expecting isNumber()
+        console.log('[PresenceManager] Writing typing indicator:', { chatId, uid, ts });
+        await rtdb.set(ref, ts);
+        console.log('[PresenceManager] Typing write completed for', uid);
       } else {
         // Remove the typing node immediately when stopping
         await rtdb.remove(ref).catch(() => {});
       }
     } catch (err) {
-      // Silently fail — typing is non-critical
+      // Log but don't throw — typing is non-critical
+      console.warn('[PresenceManager] writeTyping failed:', err);
     }
   }
 }

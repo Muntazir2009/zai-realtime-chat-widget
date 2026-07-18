@@ -1413,3 +1413,52 @@ Stage Summary:
 - Read receipts have premium smooth transitions
 - Message positioning fixed — no overlap with input bar
 - Presence display redesigned with glass styling
+
+---
+Task ID: 8
+Agent: Main Agent
+Task: Fix 7 critical regressions in real-time chat app
+
+Work Log:
+- **#1 Typing Indicator Fix**: Completely rewrote the typing system in chat.svelte.ts
+  - Replaced complex `typingUsers` Map + `_typingTick` pattern with simpler `typingDisplayNames` Map (chatId → string[])
+  - Added internal non-reactive `_typingUids` Map for tracking, with `_updateTypingDisplayNames()` to sync to reactive state
+  - Added retry mechanism: if chat meta not available when attaching listener, retries after 1s
+  - Skip listening for own UID (was wasteful before)
+  - Added comprehensive console.log for debugging (writeTyping, attachTypingListener, _handleTypingSnapshot)
+  - Updated Conversation.svelte `$derived` to use `chatStore.typingDisplayNames.get(chatId) ?? []` (no more `any` cast or tick)
+  - Added logging to PresenceManager.writeTyping
+
+- **#2 Voice Message Fix**: 
+  - VoiceRecorder now detects best MIME type: prefers `audio/webm;codecs=opus`, falls back to `audio/mp4` for Safari
+  - InputBar uses correct file extension (.m4a for mp4, .webm for webm)
+
+- **#3 Upload Performance Fix**:
+  - Stream proxy (`/api/upload/stream`) now uses `request.body` ReadableStream directly instead of buffering with `arrayBuffer()`
+  - Added `uploadToR2Stream()` in r2.ts that pipes Web ReadableStream to S3 PutObjectCommand
+  - Non-image/non-video files (voice, etc.) now try presign + direct R2 upload first, falling back to stream proxy
+  - Presign endpoint already allowed `audio/` content type
+
+- **#4 Auto-scroll Fix**:
+  - New message auto-scroll now uses `requestAnimationFrame` to ensure DOM has rendered
+  - Initial scroll on chat open: tries at rAF, 100ms, and 500ms to catch async message loading
+  - Added `visualViewport` resize listener for keyboard-aware scrolling (mobile keyboard)
+  - Removed duplicate `scrollToBottom` function
+  - Unified `scrollToBottom` with `instant` parameter
+
+- **#5 Sticker/Emoji Size Fix**:
+  - Increased emoji font-size from `120px` to `min(180px, 40vw)` for responsive sizing
+  - Added `:has(.bbl-emoji)` CSS rule to break out of max-width constraint (420px vs 360px)
+  - Reduced emoji bubble padding for cleaner look
+
+- **#6 Pre-existing Bug Fix**: 
+  - Fixed esbuild build error: all 4 `retryWithBackoff` callbacks were missing `async` keyword
+
+Stage Summary:
+- Typing indicator: complete rewrite with simpler reactive model, retry, logging, own-UID filtering
+- Voice: Safari-compatible MIME type detection, correct file extensions
+- Upload: true streaming (zero-buffer) for proxy, direct R2 for audio files
+- Auto-scroll: rAF-based, multi-attempt initial scroll, keyboard-aware
+- Stickers: 50% larger (180px), responsive, wider container
+- Build: fixed async callback bug that was crashing esbuild
+- All changes verified: dev server starts, page loads correctly

@@ -759,6 +759,11 @@
     min-width: fit-content;
   }
 
+  /* Emoji-only messages break out of max-width for large display */
+  .msg-row:has(.bbl-emoji) .msg-content {
+    max-width: min(85%, 420px);
+  }
+
   .msg-own .msg-content { align-items: flex-end; }
   .msg-other .msg-content { align-items: flex-start; }
 
@@ -903,13 +908,14 @@
   .bbl-emoji {
     background: transparent !important;
     box-shadow: none !important;
-    padding: 4px 6px 2px !important;
+    padding: 2px 4px 0 !important;
     animation: none;
+    max-width: none !important;
   }
 
   .bbl-emoji-text {
-    font-size: 120px;
-    line-height: 1.1;
+    font-size: min(180px, 40vw);
+    line-height: 1.15;
   }
 
   /* === CONTENT === */
