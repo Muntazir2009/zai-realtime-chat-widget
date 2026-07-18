@@ -782,6 +782,10 @@
       0 1px 3px rgba(0, 0, 0, 0.04);
   }
 
+  .bbl-grouped {
+    margin-top: 2px;
+  }
+
   .bbl-sent.bbl-grouped {
     border-radius: calc(var(--bubble-radius, 20px) - 6px) calc(var(--bubble-radius, 20px) - 6px) 4px calc(var(--bubble-radius, 20px) - 6px);
     box-shadow:
@@ -1028,8 +1032,9 @@
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 3px;
+    gap: 4px;
     margin-top: 2px;
+    margin-bottom: -2px;
     padding: 0 2px;
     min-height: 14px;
     position: relative;

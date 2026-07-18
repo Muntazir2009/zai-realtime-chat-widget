@@ -8,67 +8,127 @@
 
   let { status, lastSeen }: Props = $props();
 
-  const config = $derived({
-    online: {
-      bg: 'rgba(16, 185, 129, 0.15)',
-      text: '#dc2626',
-      label: 'Online',
-      darkText: '#f87171',
-    },
-    away: {
-      bg: 'rgba(245, 158, 11, 0.15)',
-      text: '#d97706',
-      label: 'Away',
-      darkText: '#fbbf24',
-    },
-    offline: {
-      bg: 'rgba(156, 163, 175, 0.15)',
-      text: '#6b7280',
-      label: '',
-      darkText: '#9ca3af',
-    },
-  }[status]);
+  function formatLastSeen(ts: number): string {
+    const now = Date.now();
+    const diffMs = now - ts;
+    const diffMin = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMin / 60);
+    const diffDays = Math.floor(diffHours / 24);
 
-  const relativeTime = $derived.by(() => {
-    if (status === 'offline' && lastSeen > 0) {
-      return `Last seen ${formatDistanceToNow(lastSeen, { addSuffix: true })}`;
-    }
-    if (status === 'away') {
-      return `Last seen ${formatDistanceToNow(lastSeen, { addSuffix: true })}`;
-    }
-    return '';
+    if (diffMin < 1) return 'just now';
+    if (diffMin < 60) return `${diffMin} min ago`;
+
+    const d = new Date(ts);
+    let hours = d.getHours();
+    const minutes = d.getMinutes().toString().padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12 || 12;
+    const timeStr = `${hours}:${minutes} ${ampm}`;
+
+    if (diffHours < 24) return `today at ${timeStr}`;
+    if (diffHours < 48) return `yesterday at ${timeStr}`;
+
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const month = months[d.getMonth()];
+    const day = d.getDate();
+    return `${month} ${day} at ${timeStr}`;
+  }
+
+  const label = $derived.by(() => {
+    if (status === 'online') return 'Online';
+    if (lastSeen > 0) return `Last seen ${formatLastSeen(lastSeen)}`;
+    return 'Offline';
   });
+
+  const dotColor = $derived(
+    status === 'online' ? '#10b981' : status === 'away' ? '#f59e0b' : '#6b7280'
+  );
 </script>
 
 <span
-  class="online-pill inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium transition-all duration-300 ease-out"
-  style="background: {config.bg}; color: {config.text};"
+  class="online-pill"
+  class:pill-online={status === 'online'}
+  class:pill-away={status === 'away'}
+  class:pill-offline={status === 'offline'}
   role="status"
-  aria-label={status === 'online' ? 'Online' : relativeTime || status}
+  aria-label={label}
   aria-live="polite"
 >
-  <!-- Status Dot -->
-  <span
-    class="inline-block w-[6px] h-[6px] rounded-full flex-shrink-0 transition-colors duration-300"
-    class:online-pulse={status === 'online'}
-    style="background: {config.text};"
-  ></span>
-  <span class="transition-opacity duration-200">
-    {#if status === 'offline' || status === 'away'}
-      {relativeTime || config.label}
-    {:else}
-      {config.label}
+  <span class="pill-dot" style="--dot-color: {dotColor};">
+    {#if status === 'online'}
+      <span class="pill-dot-ring"></span>
     {/if}
   </span>
+  <span class="pill-text">{label}</span>
 </span>
 
 <style>
-  .online-pulse {
-    animation: onlinePulse 2s ease-in-out infinite;
+  .online-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px 2px 6px;
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 500;
+    background: var(--glass-bg, rgba(255, 255, 255, 0.65));
+    backdrop-filter: blur(8px) saturate(160%);
+    -webkit-backdrop-filter: blur(8px) saturate(160%);
+    border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.2));
+    transition: background 300ms ease, border-color 300ms ease;
+    white-space: nowrap;
   }
 
-  @keyframes onlinePulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5); }
-    50% { box-shadow: 0 0 0 4px rgba(34, 197, 94, 0); }
+  /* State text colors */
+  .pill-online .pill-text {
+    color: #10b981;
+  }
+
+  .pill-away .pill-text {
+    color: #d97706;
+  }
+
+  .pill-offline .pill-text {
+    color: #9ca3af;
+  }
+
+  .pill-text {
+    transition: color 300ms ease;
+    line-height: 1;
+  }
+
+  /* Dot */
+  .pill-dot {
+    position: relative;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--dot-color, #6b7280);
+    flex-shrink: 0;
+    transition: background-color 300ms ease;
+  }
+
+  /* Gentle pulse ring for online — not a box-shadow flash */
+  .pill-dot-ring {
+    position: absolute;
+    inset: -3px;
+    border-radius: 50%;
+    border: 1.5px solid var(--dot-color, #10b981);
+    animation: ringPulse 2.2s ease-in-out infinite;
+  }
+
+  @keyframes ringPulse {
+    0%, 100% {
+      opacity: 0;
+      transform: scale(0.8);
+    }
+    40% {
+      opacity: 0.6;
+      transform: scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(1.4);
+    }
   }
 </style>

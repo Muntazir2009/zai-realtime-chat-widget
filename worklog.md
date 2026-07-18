@@ -1342,3 +1342,51 @@ Stage Summary:
 - Typing indicator resilient to RTDB latency
 - Auto-scroll responsive and reliable
 - Network writes retry automatically on transient failures
+
+---
+Task ID: polish-positioning-ux
+Agent: UX Polish Agent
+Task: Fix message positioning and final UX polish
+
+Work Log:
+- Increased scroll-bottom-pad to account for input area + safe areas
+- Adjusted floating-input-area transform to reduce overlap
+- Ensured proper safe-area-inset-top on header
+- Polished bubble meta spacing and timestamp alignment
+- Added smooth scroll and -webkit-overflow-scrolling to scroll container
+
+Stage Summary:
+- Messages no longer merge into the input bar
+- Safe areas properly handled on all sides
+- Smoother scroll behavior on iOS
+
+---
+Task ID: polish-receipts-presence
+Agent: Polish Agent
+Task: Redesign read receipts and online/last-seen presence display
+
+Work Log:
+- Rewrote DeliveryStatus with smooth SVG checkmarks, CSS transitions, glow on read
+- Rewrote OnlinePill with better time formatting, glass pill, smooth dot animations
+- No flicker: CSS transitions instead of keyframe animations for state changes
+
+Stage Summary:
+- Read receipts: sending→sent→delivered→read with smooth color/scale transitions
+- Online pill: premium glass style, better time formatting, gentle pulse
+---
+Task ID: pwa-support
+Agent: PWA Agent
+Task: Add Progressive Web App support
+
+Work Log:
+- Created SVG icon with chat bubble + teal gradient
+- Created web manifest (standalone, portrait, theme-color)
+- Created service worker (cache-first for static, network-first for HTML, skip API/Firebase)
+- Added manifest link and SW registration to app.html
+- Service worker handles cache versioning and cleanup
+
+Stage Summary:
+- App is now installable on Android/iOS
+- Static assets cached for offline shell
+- API and Firebase calls always go to network
+- New version detection via onupdatefound

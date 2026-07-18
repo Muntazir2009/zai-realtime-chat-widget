@@ -10,9 +10,27 @@
                 <meta name="apple-mobile-web-app-title" content="Chat" />
                 <link rel="icon" href="/favicon.png" />
                 <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+                <link rel="manifest" href="/manifest.json" />
                 %sveltekit.head%
         </head>
         <body class="h-full overscroll-none">
                 <div style="display: contents" class="h-full">%sveltekit.body%</div>
+        <script>
+                if ('serviceWorker' in navigator) {
+                        window.addEventListener('load', () => {
+                                navigator.serviceWorker.register('/sw.js').then((reg) => {
+                                        reg.onupdatefound = () => {
+                                                const newWorker = reg.installing;
+                                                newWorker.onstatechange = () => {
+                                                        if (newWorker.state === 'activated') {
+                                                                // New version available — could show a toast
+                                                                console.log('[SW] New version activated');
+                                                        }
+                                                };
+                                        };
+                                }).catch(() => {});
+                        });
+                }
+        </script>
         </body>
 </html>

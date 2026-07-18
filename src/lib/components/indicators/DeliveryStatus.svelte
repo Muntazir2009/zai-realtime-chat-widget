@@ -1,6 +1,4 @@
 <script lang="ts">
-  import { Check, Loader2 } from 'lucide-svelte';
-
   interface Props {
     status: 'sending' | 'sent' | 'delivered' | 'read';
   }
@@ -22,37 +20,39 @@
 
 <span
   class="delivery-status"
-  class:status-transition={animKey > 0}
-  class:status-read={status === 'read'}
+  class:pop={animKey > 0}
+  class:state-sending={status === 'sending'}
+  class:state-sent={status === 'sent'}
+  class:state-delivered={status === 'delivered'}
+  class:state-read={status === 'read'}
   role="status"
   aria-label={status}
   aria-live="polite"
 >
   {#key animKey}
     {#if status === 'sending'}
-      <span class="status-sending">
-        <span class="sending-dot"></span>
-      </span>
+      <!-- Pulsing clock icon -->
+      <svg class="icon-sending" width="10" height="10" viewBox="0 0 10 10" fill="none">
+        <circle cx="5" cy="5" r="4" stroke="currentColor" stroke-width="1.2" />
+        <polyline points="5,2.5 5,5 7,6.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
     {:else if status === 'sent'}
-      <span class="status-check-single">
-        <svg width="16" height="12" viewBox="0 0 16 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="2,6 6,10 14,2" />
-        </svg>
-      </span>
+      <!-- Single check — gray -->
+      <svg class="icon-check" width="14" height="10" viewBox="0 0 14 10" fill="none">
+        <polyline points="1.5,5 5,8.5 12.5,1.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
     {:else if status === 'delivered'}
-      <span class="status-check-double">
-        <svg width="18" height="12" viewBox="0 0 18 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="2,6 5.5,9.5 9,4" />
-          <polyline points="8,6 11.5,9.5 16,3" />
-        </svg>
-      </span>
+      <!-- Double check — gray -->
+      <svg class="icon-check icon-check-double" width="14" height="10" viewBox="0 0 14 10" fill="none">
+        <polyline points="0.5,5 3,7.5 6.5,3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+        <polyline points="5.5,5 8,7.5 12.5,3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
     {:else if status === 'read'}
-      <span class="status-check-double status-check-read">
-        <svg width="18" height="12" viewBox="0 0 18 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="2,6 5.5,9.5 9,4" />
-          <polyline points="8,6 11.5,9.5 16,3" />
-        </svg>
-      </span>
+      <!-- Double check — primary with glow -->
+      <svg class="icon-check icon-check-double icon-check-glow" width="14" height="10" viewBox="0 0 14 10" fill="none">
+        <polyline points="0.5,5 3,7.5 6.5,3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+        <polyline points="5.5,5 8,7.5 12.5,3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
     {/if}
   {/key}
 </span>
@@ -61,71 +61,68 @@
   .delivery-status {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    min-width: 18px;
-    min-height: 14px;
-    color: var(--text-tertiary, #999);
-    transition: color 300ms ease;
+    vertical-align: middle;
+    min-width: 14px;
+    min-height: 10px;
+    color: #9ca3af;
+    transition: color 250ms ease, filter 250ms ease;
+    flex-shrink: 0;
   }
 
-  /* Transition animation when status changes */
-  .status-transition {
-    animation: statusPop 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  /* State colors — smooth CSS transitions, no keyframe flicker */
+  .state-sent {
+    color: #9ca3af;
+  }
+
+  .state-delivered {
+    color: #9ca3af;
+  }
+
+  .state-read {
+    color: var(--color-primary, #059669);
+    filter: drop-shadow(0 0 4px color-mix(in srgb, var(--color-primary, #059669) 35%, transparent));
+  }
+
+  .state-sending {
+    color: #9ca3af;
+  }
+
+  /* Scale pop ONLY on state change (triggered by animKey) */
+  .pop {
+    animation: statusPop 250ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
   }
 
   @keyframes statusPop {
     0% {
-      opacity: 0.3;
-      transform: scale(0.6) translateY(1px);
+      transform: scale(0.7);
+      opacity: 0.4;
     }
     60% {
-      transform: scale(1.1) translateY(0);
+      transform: scale(1.12);
     }
     100% {
+      transform: scale(1);
       opacity: 1;
-      transform: scale(1) translateY(0);
     }
   }
 
-  /* Sending state — pulsing dot */
-  .status-sending {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+  /* Sending clock pulse — this is the only continuous animation */
+  .icon-sending {
+    animation: clockPulse 1.4s ease-in-out infinite;
   }
 
-  .sending-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: currentColor;
-    opacity: 0.5;
-    animation: sendPulse 1.2s ease-in-out infinite;
-  }
-
-  @keyframes sendPulse {
+  @keyframes clockPulse {
     0%, 100% {
-      opacity: 0.3;
-      transform: scale(0.8);
+      opacity: 0.4;
+      transform: scale(0.9);
     }
     50% {
-      opacity: 0.7;
-      transform: scale(1.1);
+      opacity: 0.8;
+      transform: scale(1.05);
     }
   }
 
-  /* Read state */
-  .status-read {
-    color: var(--color-primary, #22c55e);
-    filter: drop-shadow(0 0 3px color-mix(in srgb, var(--color-primary, #22c55e) 40%, transparent));
-  }
-
-  .status-check-double {
-    display: inline-flex;
-    align-items: center;
-  }
-
-  .status-check-read {
-    color: var(--color-primary, #22c55e);
+  .icon-check {
+    display: inline-block;
   }
 </style>

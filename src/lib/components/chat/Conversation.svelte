@@ -327,29 +327,45 @@
 
   function checkEasterEgg(content: string): EggType | null {
     const lower = content.toLowerCase().trim();
-    if (['❤️', 'i love you', 'love you', 'love u'].includes(lower)) return 'heart';
-    if (['💋', 'mwah', 'muah', 'muahh', 'mwahh', 'kiss'].includes(lower)) return 'kiss';
-    if (['😂', 'lmao', 'lol', 'haha', 'hahaha'].includes(lower)) return 'laugh';
-    if (['🔥', 'lit', 'fire', 'on fire'].includes(lower)) return 'fire';
-    if (['🎉', 'congrats', 'congratulations', 'yay', 'woohoo', 'celebrate'].includes(lower)) return 'celebration';
-    if (['✨', 'sparkle', 'sparkles', 'amazing', 'beautiful'].includes(lower)) return 'sparkle';
-    if (['👍', 'nice', 'great job', 'well done'].includes(lower)) return 'thumbsup';
-    if (['👏', 'bravo', 'clap', 'applause'].includes(lower)) return 'applause';
-    if (['😭', '😢', 'crying', 'tears', 'sad'].includes(lower)) return 'tears';
-    if (['😍', 'heart eyes', 'hearts for you', 'so cute'].includes(lower)) return 'hearteyes';
-    if (['💯', '100', 'hundred', 'perfect', 'nailed it'].includes(lower)) return 'hundred';
+    // Heart triggers
+    if (['❤️', '💕', '💖', '💗', '💞', '💘', '😝', '😍',
+         'i love you', 'love you', 'love u', 'love',
+         'miss you', 'miss u',
+         'good night ❤️', 'good morning ❤️',
+         'mwah', 'muah'].some(t => lower.includes(t) || lower === t)) return 'heart';
+    // Kiss triggers
+    if (['💋', 'kiss', 'mwahh', 'muahh'].some(t => lower.includes(t) || lower === t)) return 'kiss';
+    // Laugh triggers
+    if (['😂', 'lmao', 'lol', 'haha', 'hahaha', '😂😂'].some(t => lower.includes(t) || lower === t)) return 'laugh';
+    // Fire triggers
+    if (['🔥', 'lit', 'fire', 'on fire', '🔥🔥'].some(t => lower.includes(t) || lower === t)) return 'fire';
+    // Celebration triggers
+    if (['🎉', '🎊', 'congrats', 'congratulations', 'yay', 'woohoo', 'celebrate'].some(t => lower.includes(t) || lower === t)) return 'celebration';
+    // Sparkle triggers
+    if (['✨', 'sparkle', 'sparkles', 'amazing', 'beautiful', '⚡'].some(t => lower.includes(t) || lower === t)) return 'sparkle';
+    // Thumbs up triggers
+    if (['👍', 'nice', 'great job', 'well done', '👍🏻'].some(t => lower.includes(t) || lower === t)) return 'thumbsup';
+    // Applause triggers
+    if (['👏', 'bravo', 'clap', 'applause', '👏🏻'].some(t => lower.includes(t) || lower === t)) return 'applause';
+    // Tears triggers
+    if (['😭', '😢', 'crying', 'tears', 'sad'].some(t => lower.includes(t) || lower === t)) return 'tears';
+    // Heart eyes triggers
+    if (['😍', 'heart eyes', 'hearts for you', 'so cute'].some(t => lower.includes(t) || lower === t)) return 'hearteyes';
+    // 100/hundred triggers
+    if (['💯', '100', 'hundred', 'perfect', 'nailed it'].some(t => lower.includes(t) || lower === t)) return 'hundred';
     return null;
   }
 
   function emojiToEffectType(emoji: string): EggType | null {
     const map: Record<string, EggType> = {
-      '❤️': 'heart',
-      '💋': 'kiss',
+      '❤️': 'heart', '💕': 'heart', '💖': 'heart', '💗': 'heart', '💞': 'heart', '💘': 'heart',
+      '💋': 'kiss', '😘': 'kiss',
       '🔥': 'fire',
       '😂': 'laugh',
       '😍': 'hearteyes',
-      '👍': 'thumbsup',
-      '😢': 'tears',
+      '👍': 'thumbsup', '👏': 'applause',
+      '😢': 'tears', '😭': 'tears',
+      '🎉': 'celebration', '✨': 'sparkle', '💯': 'hundred',
     };
     return map[emoji] ?? null;
   }
@@ -747,10 +763,14 @@
 
   function handleStickerSelect(sticker: string) {
     if (!chatStore.activeChatId) return;
-    const isEggSticker = ['❤️', '💕', '💗', '💋', '😘'].includes(sticker);
-    const meta = isEggSticker ? { egg: 'heart' } : undefined;
+    const isEggSticker = ['❤️', '💕', '💗', '💞', '💘', '💖', '💋', '😘', '😍', '❣️', '💓', '💞', '💝'].includes(sticker);
+    const effectForSticker = emojiToEffectType(sticker);
+    const meta = isEggSticker ? { egg: effectForSticker || 'heart' } : undefined;
     chatStore.sendMessage(chatStore.activeChatId, sticker, undefined, meta);
-    if (isEggSticker) triggerEasterEgg++;
+    if (isEggSticker || effectForSticker) {
+      if (effectForSticker) currentEffectType = effectForSticker;
+      triggerEasterEgg++;
+    }
   }
 
   function handleGifSelect(gifUrl: string) {
@@ -1255,6 +1275,7 @@
     -webkit-backdrop-filter: blur(32px) saturate(220%);
     box-shadow: 0 0.5px 0 var(--border-subtle), 0 4px 24px rgba(0,0,0,0.04), 0 1px 0 color-mix(in srgb, var(--color-primary) 8%, transparent);
     z-index: 50;
+    padding-top: max(12px, env(safe-area-inset-top, 0px));
     position: relative;
     flex-shrink: 0;
     border-bottom: 0.5px solid color-mix(in srgb, var(--glass-border) 80%, transparent);
@@ -1499,7 +1520,8 @@
   .msg-scroll {
     flex: 1;
     overflow-y: auto;
-    padding: 4px 0 0;
+    padding: 4px 0 4px;
+    scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
     background-attachment: fixed;
@@ -1512,7 +1534,7 @@
   }
 
   .scroll-bottom-pad {
-    height: 24px;
+    height: calc(80px + env(safe-area-inset-bottom, 0px) + 16px);
     flex-shrink: 0;
   }
 
@@ -1652,8 +1674,8 @@
     flex-shrink: 0;
     position: relative;
     z-index: 30;
-    transform: translateY(-14px);
-    margin-bottom: -6px;
+    transform: translateY(-8px);
+    margin-bottom: 0px;
   }
 
   /* === TYPING AREA === */

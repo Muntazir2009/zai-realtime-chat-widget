@@ -175,26 +175,44 @@
 
   /* ─── Canvas-Confetti Presets ─── */
 
+  // Check for reduced-motion preference
+  const prefersReducedMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
   function fireConfetti(type: EffectType) {
+    if (prefersReducedMotion) return; // Respect accessibility
+
     switch (type) {
       case 'heart':
         confetti({
-          particleCount: 60,
-          spread: 80,
+          particleCount: 50,
+          spread: 70,
           origin: { y: 0.7 },
-          colors: ['#ef4444', '#f87171', '#ec4899', '#f43f5e', '#e11d48'],
+          colors: ['#ef4444', '#f87171', '#ec4899', '#f43f5e', '#e11d48', '#ff6b9d'],
           shapes: ['circle'],
           gravity: 0.8,
-          scalar: 1.2,
+          scalar: 1.3,
           ticks: 120,
-          startVelocity: 35,
+          startVelocity: 30,
         });
+        // Second heart burst slightly delayed for richness
+        setTimeout(() => confetti({
+          particleCount: 30,
+          spread: 55,
+          origin: { y: 0.65, x: 0.5 },
+          colors: ['#f472b6', '#fb923c', '#fca5a5', '#fda4af'],
+          shapes: ['circle'],
+          gravity: 0.9,
+          scalar: 0.8,
+          ticks: 90,
+          startVelocity: 25,
+        }), 150);
         break;
 
       case 'kiss':
+        // Kiss: hearts + pink burst
         confetti({
-          particleCount: 50,
-          spread: 70,
+          particleCount: 35,
+          spread: 60,
           origin: { y: 0.65, x: 0.5 },
           colors: ['#ec4899', '#f472b6', '#f9a8d4', '#ef4444', '#be185d'],
           shapes: ['circle'],
@@ -203,6 +221,17 @@
           ticks: 130,
           startVelocity: 30,
         });
+        setTimeout(() => confetti({
+          particleCount: 20,
+          spread: 50,
+          origin: { y: 0.7 },
+          colors: ['#ef4444', '#f87171', '#ec4899', '#ff6b9d'],
+          shapes: ['circle'],
+          gravity: 0.9,
+          scalar: 1.0,
+          ticks: 100,
+          startVelocity: 25,
+        }), 100);
         break;
 
       case 'laugh':
