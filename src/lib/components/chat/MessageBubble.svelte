@@ -63,7 +63,7 @@
     isStarred?: boolean;
     replyPreviewMsg?: Message | null;
     onReply?: (msg: Message) => void;
-    onLongPress?: (msg: Message) => void;
+    onLongPress?: (msg: Message, x?: number, y?: number) => void;
     onImageTap?: (imageUrl: string, caption?: string) => void;
     onVideoTap?: (url: string, thumbUrl?: string | null, duration?: number, caption?: string) => void;
     onReaction?: (msg: Message, emoji: string) => void;
@@ -123,11 +123,16 @@
   let didLongPress = false;
   let lastTapTime = 0;
   let rowEl: HTMLDivElement | undefined;
+  let bubbleEl: HTMLDivElement | undefined;
   let swipeFlash = $state(false);
   let showSwipeIndicator = $state(false);
+  let touchMovedPastSlop = false;
+  let touchDetected = false;
+  let justReacted = $state(false);
 
   const SWIPE_THRESHOLD = 50;
   const MAX_PULL = 90;
+  const TOUCH_SLOP = 10;
 
   function handleTouchStart(e: TouchEvent) {
     touchStartX = e.touches[0].clientX;
@@ -136,25 +141,35 @@
     lastTouchTime = Date.now();
     isSwiping = false;
     didLongPress = false;
+    touchMovedPastSlop = false;
+    touchDetected = true;
     showSwipeIndicator = false;
 
     if (rowEl) rowEl.style.animation = 'none';
 
-    // Long press now opens reaction picker directly
+    // Long press → opens context menu
     longPressTimer = setTimeout(() => {
-      if (!isSwiping) {
+      if (!isSwiping && !touchMovedPastSlop) {
         didLongPress = true;
         navigator.vibrate?.(30);
-        showReactionPicker = true;
+        onLongPress?.(msg, touchStartX, touchStartY);
       }
-    }, 350);
+    }, 400);
   }
 
   function handleTouchMove(e: TouchEvent) {
     const cx = e.touches[0].clientX;
     const cy = e.touches[0].clientY;
+    const absDx = Math.abs(cx - touchStartX);
+    const absDy = Math.abs(cy - touchStartY);
     const rawDx = isOwn ? touchStartX - cx : cx - touchStartX;
-    const dy = Math.abs(cy - touchStartY);
+    const dy = absDy;
+
+    // Touch slop: cancel long press if finger moved significantly
+    if (!touchMovedPastSlop && (absDx > TOUCH_SLOP || absDy > TOUCH_SLOP)) {
+      touchMovedPastSlop = true;
+      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    }
 
     if (rawDx > 6 && dy < rawDx * 0.6) {
       e.preventDefault();
@@ -196,13 +211,25 @@
   function handleTouchEnd() {
     if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
     if (didLongPress) { didLongPress = false; isSwiping = false; return; }
-    if (!isSwiping) {
-      // Schedule single-tap action (context menu), but allow double-tap to cancel it
-      if (singleTapTimer) { clearTimeout(singleTapTimer); singleTapTimer = null; }
+    if (!isSwiping && !touchMovedPastSlop) {
+      // Double-tap detection: if within 300ms, trigger quick ❤️
+      const now = Date.now();
+      if (now - lastTapTime < 300) {
+        // Double tap → quick ❤️ reaction
+        if (singleTapTimer) { clearTimeout(singleTapTimer); singleTapTimer = null; }
+        onReaction?.(msg, '❤️');
+        justReacted = true;
+        setTimeout(() => { justReacted = false; }, 600);
+        lastTapTime = 0;
+        return;
+      }
+      // Single tap → open reaction picker (delayed to allow double-tap detection)
+      lastTapTime = now;
+      if (singleTapTimer) clearTimeout(singleTapTimer);
       singleTapTimer = setTimeout(() => {
         singleTapTimer = null;
-        onLongPress?.(msg);
-      }, 250);
+        showReactionPicker = true;
+      }, 280);
       return;
     }
 
@@ -252,22 +279,42 @@
 
   function handleContextMenu(e: MouseEvent) {
     e.preventDefault();
-    // Right-click on desktop opens reaction picker (equivalent to long press)
-    showReactionPicker = true;
+    // Right-click on desktop opens context menu
+    onLongPress?.(msg, e.clientX, e.clientY);
   }
 
-  function handleBubbleClick() {
+  function handleBubbleClick(e: MouseEvent) {
+    // On touch devices, ignore click events (handled by touch events)
+    if (touchDetected) {
+      touchDetected = false;
+      return;
+    }
+    // Desktop: single click → reaction picker, double click → ❤️
     const now = Date.now();
-    if (now - lastTapTime < 300) {
-      // Double tap → quick ❤️ reaction
+    if (now - lastTapTime < 350) {
+      // Double click → quick ❤️ reaction
       if (singleTapTimer) { clearTimeout(singleTapTimer); singleTapTimer = null; }
       onReaction?.(msg, '❤️');
+      justReacted = true;
+      setTimeout(() => { justReacted = false; }, 600);
+      lastTapTime = 0;
+    } else {
+      // Single click → open reaction picker (delayed for double-click detection)
+      lastTapTime = now;
+      if (singleTapTimer) clearTimeout(singleTapTimer);
+      singleTapTimer = setTimeout(() => {
+        singleTapTimer = null;
+        showReactionPicker = true;
+      }, 300);
     }
-    lastTapTime = now;
   }
 
   function handleBubbleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter') handleBubbleClick();
+    if (e.key === 'Enter') showReactionPicker = true;
+    if (e.key === ' ' || e.key === 'ContextMenu') {
+      e.preventDefault();
+      onLongPress?.(msg);
+    }
   }
 
   function handleImageClick(e: MouseEvent) {
@@ -344,7 +391,8 @@
       // Wait one tick for the picker element to exist in DOM
       requestAnimationFrame(() => {
         positionPicker();
-        pickerReady = true;
+        // Delay ready state for animation timing
+        setTimeout(() => { pickerReady = true; }, 30);
       });
     } else {
       pickerReady = false;
@@ -352,56 +400,56 @@
   });
 
   function positionPicker() {
-    if (!rxnAddBtn || !rxnPickerEl) return;
-    const btnRect = rxnAddBtn.getBoundingClientRect();
+    // Prefer positioning relative to the bubble for visual attachment
+    const anchor = bubbleEl || rxnAddBtn;
+    if (!anchor || !rxnPickerEl) return;
+    const anchorRect = anchor.getBoundingClientRect();
     const pickerRect = rxnPickerEl.getBoundingClientRect();
     const vw = window.innerWidth;
     const vh = window.innerHeight;
 
-    const gap = 8;
-    const caretH = 8;
-    const vPad = 12;
+    const gap = 10;
+    const caretH = 10;
+    const vPad = 16;
     const hPad = 12;
+    const safeBottom = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sab') || '0');
 
     // Horizontal: clamp to viewport with padding
-    let left = btnRect.left + btnRect.width / 2 - pickerRect.width / 2;
+    let left = anchorRect.left + anchorRect.width / 2 - pickerRect.width / 2;
     left = Math.max(hPad, Math.min(left, vw - pickerRect.width - hPad));
 
     // Vertical: try above first, then below
-    const spaceAbove = btnRect.top - gap - caretH;
-    const spaceBelow = vh - btnRect.bottom - gap - caretH;
+    const spaceAbove = anchorRect.top - gap - caretH;
+    const spaceBelow = vh - anchorRect.bottom - gap - caretH - safeBottom;
     let top: number;
     let showAbove: boolean;
 
     if (spaceAbove >= pickerRect.height) {
-      // Fits above
-      top = btnRect.top - pickerRect.height - gap - caretH;
+      top = anchorRect.top - pickerRect.height - gap - caretH;
       showAbove = true;
     } else if (spaceBelow >= pickerRect.height) {
-      // Fits below
-      top = btnRect.bottom + gap + caretH;
+      top = anchorRect.bottom + gap + caretH;
       showAbove = false;
     } else if (spaceAbove > spaceBelow) {
-      // Prefer above even if it clips slightly (at least show the picker)
-      top = Math.max(vPad, btnRect.top - pickerRect.height - gap - caretH);
+      top = Math.max(vPad, anchorRect.top - pickerRect.height - gap - caretH);
       showAbove = true;
     } else {
-      top = vh - vPad - pickerRect.height;
+      top = Math.min(vh - vPad - safeBottom - pickerRect.height, anchorRect.bottom + gap + caretH);
       showAbove = false;
     }
 
-    // Compute caret position
-    const caretCenter = btnRect.left + btnRect.width / 2;
+    // Compute caret position (point toward bubble center)
+    const caretCenter = anchorRect.left + anchorRect.width / 2;
     const pickerCenter = left + pickerRect.width / 2;
-    const caretLeft = Math.max(16, Math.min(caretCenter - left, pickerRect.width - 16));
+    const caretLeft = Math.max(20, Math.min(caretCenter - left, pickerRect.width - 20));
 
     pickerStyle = {
       position: 'fixed',
       top: `${top}px`,
       left: `${left}px`,
       '--caret-left': `${caretLeft}px`,
-      '--caret-bottom': showAbove ? '-9px' : 'auto',
-      '--caret-top': showAbove ? 'auto' : '-9px',
+      '--caret-bottom': showAbove ? '-10px' : 'auto',
+      '--caret-top': showAbove ? 'auto' : '-10px',
       '--caret-rotate': showAbove ? '45deg' : '-135deg',
       zIndex: '101',
     };
@@ -413,6 +461,8 @@
   }
 
   function handleReactionSelect(emoji: string) {
+    justReacted = true;
+    setTimeout(() => { justReacted = false; }, 600);
     showReactionPicker = false;
     onReaction?.(msg, emoji);
   }
