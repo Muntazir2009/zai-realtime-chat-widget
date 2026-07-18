@@ -458,7 +458,7 @@ async function uploadDirectToR2(
 
     xhr.onerror = () => reject(new Error('R2 direct upload: CORS or network error'));
     xhr.ontimeout = () => reject(new Error('R2 direct upload timed out'));
-    xhr.timeout = 300_000; // 5 minutes
+    xhr.timeout = 120_000; // 2 minutes (direct to R2 should be fast)
 
     // Wire up abort signal via event listener (XHR has no .signal property)
     if (signal) {
@@ -556,7 +556,7 @@ async function uploadViaStreamProxy(
     xhr.onload = origOnLoad;
     xhr.onerror = () => reject(new Error('Stream proxy network error'));
     xhr.ontimeout = () => reject(new Error('Stream proxy timed out'));
-    xhr.timeout = 300_000;
+    xhr.timeout = 120_000; // 2 minutes
 
     // Wire up abort signal via event listener
     if (signal) {
@@ -648,7 +648,7 @@ async function uploadViaFormDataProxy(
 
     xhr.onerror = () => reject(new Error('File proxy network error'));
     xhr.ontimeout = () => reject(new Error('File proxy timed out'));
-    xhr.timeout = 300_000;
+    xhr.timeout = 120_000; // 2 minutes
 
     // Wire up abort signal via event listener
     if (signal) {

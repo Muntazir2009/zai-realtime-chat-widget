@@ -1050,7 +1050,7 @@
 
     <!-- Input Bar -->
     <InputBar
-      {currentDraft as initialDraft}
+      initialDraft={currentDraft}
       onSend={handleSend}
       onMediaSelect={handleMediaSelect}
       onStickerSelect={handleStickerSelect}

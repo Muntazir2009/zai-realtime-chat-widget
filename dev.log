@@ -1,79 +1,14 @@
+▲ [WARNING] Cannot find base config file "./.svelte-kit/tsconfig.json" [tsconfig.json]
 
-  VITE v6.4.3  ready in 1925 ms
+    tsconfig.json:2:12:
+      2 │   "extends": "./.svelte-kit/tsconfig.json",
+        ╵              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+11:27:31 AM [vite] (client) Forced re-optimization of dependencies
+
+  VITE v6.4.3  ready in 2283 ms
 
   ➜  Local:   http://localhost:3000/
-  ➜  Network: http://21.0.5.131:3000/
-Using secrets defined in .env
-5:31:43 AM [vite-plugin-svelte] src/lib/components/ui/ToastContainer.svelte:151:6 Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
-https://svelte.dev/e/a11y_click_events_have_key_events
-5:31:43 AM [vite-plugin-svelte] src/lib/components/ui/ToastContainer.svelte:151:6 Non-interactive element `<div>` should not be assigned mouse or keyboard event listeners
-https://svelte.dev/e/a11y_no_noninteractive_element_interactions
-5:31:43 AM [vite-plugin-svelte] src/lib/components/ui/ToastContainer.svelte:206:12 Self-closing HTML tags for non-void elements are ambiguous — use `<div ...></div>` rather than `<div ... />`
-https://svelte.dev/e/element_invalid_self_closing_tag
-5:31:43 AM [vite-plugin-svelte] src/lib/components/ui/ToastContainer.svelte:443:4 Unused CSS selector ".dark .toast-x:hover"
-https://svelte.dev/e/css_unused_selector
-5:31:45 AM [vite] Internal server error: /home/z/my-project/src/lib/components/chat/Conversation.svelte:1053:20 Expected token }
-https://svelte.dev/e/expected_token
-
-- Did you forget to add a lang attribute to your style tag?
-- Did you forget to add a lang attribute to your style tag?
-- Did you forget to add a lang attribute to your style tag?
-- Did you forget to add a lang attribute to your style tag?
-- Did you forget to add a lang attribute to your style tag?
-- Did you forget to add a lang attribute to your style tag?
-- Did you forget to add a lang attribute to your style tag?
-- Did you forget to add a lang attribute to your style tag?
-- Did you forget to add a lang attribute to your style tag?
-- Did you forget to add a lang attribute to your style tag?
-- Did you forget to add a lang attribute to your style tag?
-- Did you forget to add a lang attribute to your style tag?
-- Did you forget to add a lang attribute to your style tag?
-- Did you forget to add a lang attribute to your style tag?
-- Did you forget to add a lang attribute to your style tag?
-- Did you forget to add a lang attribute to your style tag?
-- Did you forget to add a lang attribute to your style tag?
-- Did you forget to add a lang attribute to your style tag?
-- Did you forget to add a lang attribute to your style tag?
-- Did you forget to add a lang attribute to your style tag?
-- Did you forget to add a lang attribute to your style tag?
-- Did you forget to add a lang attribute to your style tag?
-- Did you forget to add a lang attribute to your style tag?
-- Did you forget to add a lang attribute to your style tag?
-- Did you forget to add a lang attribute to your style tag?
-- Did you forget to add a lang attribute to your style tag?
-  Plugin: vite-plugin-svelte
-  File: /home/z/my-project/src/lib/components/chat/Conversation.svelte:1053:20
-   1051 |      <!-- Input Bar -->
-   1052 |      <InputBar
-   1053 |        {currentDraft as initialDraft}
-                               ^
-   1054 |        onSend={handleSend}
-   1055 |        onMediaSelect={handleMediaSelect}
-5:31:45 AM [vite-plugin-svelte] src/lib/components/chat/SettingsView.svelte:376:18 Avoid using autofocus
-https://svelte.dev/e/a11y_autofocus
-5:31:45 AM [vite-plugin-svelte] src/lib/components/chat/SettingsView.svelte:393:12 Non-interactive element `<p>` cannot have interactive role 'button'
-https://svelte.dev/e/a11y_no_noninteractive_element_to_interactive_role
-5:31:45 AM [vite-plugin-svelte] src/lib/components/chat/SettingsView.svelte:393:12 Visible, non-interactive element `<p>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
-https://svelte.dev/e/a11y_click_events_have_key_events
-5:31:45 AM [vite-plugin-svelte] src/lib/components/chat/SettingsView.svelte:406:20 Avoid using autofocus
-https://svelte.dev/e/a11y_autofocus
-5:31:45 AM [vite-plugin-svelte] src/lib/components/chat/SettingsView.svelte:744:2 Elements with the 'dialog' interactive role must have a tabindex value
-https://svelte.dev/e/a11y_interactive_supports_focus
-5:31:45 AM [vite-plugin-svelte] src/lib/components/chat/SettingsView.svelte:744:2 Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
-https://svelte.dev/e/a11y_click_events_have_key_events
-5:31:45 AM [vite-plugin-svelte] src/lib/components/chat/SettingsView.svelte:751:4 Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
-https://svelte.dev/e/a11y_click_events_have_key_events
-5:31:45 AM [vite-plugin-svelte] src/lib/components/chat/SettingsView.svelte:977:2 Unused CSS selector ".username-edit-icon"
-https://svelte.dev/e/css_unused_selector
-5:31:45 AM [vite-plugin-svelte] src/lib/components/chat/SettingsView.svelte:981:2 Unused CSS selector ".username:hover .username-edit-icon"
-https://svelte.dev/e/css_unused_selector
-5:31:45 AM [vite-plugin-svelte] src/lib/components/ui/BottomNavBar.svelte:108:2 Unused CSS selector ".nav-pill-icon"
-https://svelte.dev/e/css_unused_selector
-5:31:45 AM [vite-plugin-svelte] src/lib/components/ui/BottomNavBar.svelte:119:2 Unused CSS selector ".nav-pill-active .nav-pill-icon"
-https://svelte.dev/e/css_unused_selector
-5:31:45 AM [vite-plugin-svelte] src/lib/components/chat/ChatTile.svelte:139:2 Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
-https://svelte.dev/e/a11y_click_events_have_key_events
-5:31:45 AM [vite-plugin-svelte] src/lib/components/chat/ChatTile.svelte:140:4 Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
-https://svelte.dev/e/a11y_click_events_have_key_events
-5:31:45 AM [vite-plugin-svelte] src/lib/components/chat/ChatTile.svelte:272:2 Unused CSS selector ".tile-preview-icon"
-https://svelte.dev/e/css_unused_selector
+  ➜  Network: http://21.0.6.153:3000/
+st:3000/
+  ➜  Network: http://21.0.6.153:3000/
