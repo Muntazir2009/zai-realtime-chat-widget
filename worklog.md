@@ -1390,3 +1390,26 @@ Stage Summary:
 - Static assets cached for offline shell
 - API and Firebase calls always go to network
 - New version detection via onupdatefound
+---
+Task ID: polish-all-6
+Agent: Main Agent
+Task: Polish read receipts, PWA, positioning, easter eggs, presence, UX
+
+Work Log:
+- Rewrote DeliveryStatus: smooth SVG checkmarks, 250ms CSS color transitions, glow on read, no flicker
+- Rewrote OnlinePill: glass pill style, gentle ring pulse, better time formatting
+- Added PWA: manifest.json, service worker (cache-first/network-first/skip-API), SVG icon, SW registration
+- Fixed message positioning: scroll-bottom-pad calc, floating-input-area transform, header safe-area
+- Expanded easter egg triggers: all love/heart/kiss/laugh/fire/celebration/sparkle/thumbsup/applause/tears/hearteyes/hundred
+- Expanded reaction emoji-to-effect mapping, stickers now trigger per-emoji effects
+- Added reduced-motion accessibility to EasterEggFx
+- Improved heart/kiss confetti with delayed second burst for richness
+- UX polish: grouped bubble 2px margin, meta gap 4px, header safe-area, smooth scroll
+
+Stage Summary:
+- All 6 polish tasks completed, no regressions
+- App is now installable PWA with offline app shell
+- Easter eggs trigger for all listed phrases and emojis
+- Read receipts have premium smooth transitions
+- Message positioning fixed — no overlap with input bar
+- Presence display redesigned with glass styling
