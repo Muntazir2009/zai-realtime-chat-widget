@@ -132,7 +132,10 @@
 
   const SWIPE_THRESHOLD = 50;
   const MAX_PULL = 90;
-  const TOUCH_SLOP = 10;
+  const TOUCH_SLOP = 14;
+  const DOUBLE_TAP_WINDOW = 320;
+  const SINGLE_TAP_DELAY = 250;
+  const LONG_PRESS_MS = 350;
 
   function handleTouchStart(e: TouchEvent) {
     touchStartX = e.touches[0].clientX;
@@ -154,7 +157,7 @@
         navigator.vibrate?.(30);
         onLongPress?.(msg, touchStartX, touchStartY);
       }
-    }, 400);
+    }, LONG_PRESS_MS);
   }
 
   function handleTouchMove(e: TouchEvent) {
@@ -171,7 +174,7 @@
       if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
     }
 
-    if (rawDx > 6 && dy < rawDx * 0.6) {
+    if (rawDx > 8 && dy < rawDx * 0.6) {
       e.preventDefault();
       if (!isSwiping) {
         isSwiping = true;
@@ -212,9 +215,9 @@
     if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
     if (didLongPress) { didLongPress = false; isSwiping = false; return; }
     if (!isSwiping && !touchMovedPastSlop) {
-      // Double-tap detection: if within 300ms, trigger quick ❤️
+      // Double-tap detection: if within DOUBLE_TAP_WINDOW, trigger quick ❤️
       const now = Date.now();
-      if (now - lastTapTime < 300) {
+      if (now - lastTapTime < DOUBLE_TAP_WINDOW) {
         // Double tap → quick ❤️ reaction
         if (singleTapTimer) { clearTimeout(singleTapTimer); singleTapTimer = null; }
         onReaction?.(msg, '❤️');
@@ -229,7 +232,7 @@
       singleTapTimer = setTimeout(() => {
         singleTapTimer = null;
         showReactionPicker = true;
-      }, 280);
+      }, SINGLE_TAP_DELAY);
       return;
     }
 
@@ -511,7 +514,7 @@
   <div class="msg-content">
     <!-- Bubble -->
     <div
-      class="msg-bubble {isOwn ? 'bbl-sent' : 'bbl-recv'} {isGrouped ? 'bbl-grouped' : ''} {isPinned ? 'bbl-pinned' : ''} {isEmojiOnly ? 'bbl-emoji' : ''}"
+      class="msg-bubble {isOwn ? 'bbl-sent' : 'bbl-recv'} {isGrouped ? 'bbl-grouped' : ''} {isPinned ? 'bbl-pinned' : ''} {isEmojiOnly ? 'bbl-emoji' : ''} {justReacted ? 'bbl-just-reacted' : ''}"
       style={!isOwn && senderAccentColor ? `border-left: 3px solid ${senderAccentColor};` : ''}
       onclick={handleBubbleClick}
       role="button"
@@ -795,7 +798,22 @@
   }
 
   .msg-bubble:active {
-    transform: scale(0.985);
+    transform: scale(0.985) translateY(-1px);
+    box-shadow:
+      0 3px 6px rgba(0, 0, 0, 0.08),
+      0 8px 20px -2px color-mix(in srgb, var(--color-sent) 22%, transparent),
+      0 2px 4px rgba(0, 0, 0, 0.04);
+  }
+
+  /* Reaction bounce on the bubble */
+  .msg-bubble.bbl-just-reacted {
+    animation: reactionPulse 400ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+
+  @keyframes reactionPulse {
+    0% { transform: scale(1); }
+    30% { transform: scale(1.015); }
+    100% { transform: scale(1); }
   }
 
   /* Subtle hover lift on desktop */
@@ -1248,9 +1266,9 @@
   .rxn-picker {
     display: grid;
     grid-template-columns: repeat(8, 1fr);
-    gap: 2px;
-    padding: 10px 12px;
-    border-radius: 24px;
+    gap: 4px;
+    padding: 12px 14px;
+    border-radius: 26px;
     background: var(--glass-bg, rgba(255, 255, 255, 0.78));
     backdrop-filter: blur(24px) saturate(200%);
     -webkit-backdrop-filter: blur(24px) saturate(200%);
@@ -1260,8 +1278,8 @@
       0 4px 12px rgba(0, 0, 0, 0.06),
       inset 0 1px 0 rgba(255, 255, 255, 0.15);
     opacity: 0;
-    transform: scale(0.88) translateY(6px);
-    transition: opacity 200ms ease, transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    transform: scale(0.85) translateY(8px);
+    transition: opacity 150ms ease, transform 350ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
     pointer-events: none;
     position: relative;
     width: max-content;
@@ -1302,8 +1320,9 @@
   }
 
   .rxn-picker-btn {
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
+    font-size: 24px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1317,7 +1336,11 @@
     position: relative;
   }
   .rxn-picker-btn:hover { background: color-mix(in srgb, var(--color-primary) 10%, transparent); }
-  .rxn-picker-btn:active { transform: scale(0.78); }
+  .rxn-picker-btn:active { transform: scale(0.72); }
+  @media (hover: hover) {
+    .rxn-picker-btn:hover { transform: scale(1.08); }
+    .rxn-picker-btn:active { transform: scale(0.72); }
+  }
 
   .rxn-picker-btn-active {
     background: color-mix(in srgb, var(--color-primary) 16%, transparent);

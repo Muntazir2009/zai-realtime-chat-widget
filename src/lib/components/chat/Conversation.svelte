@@ -32,6 +32,8 @@
   let isMuted = $state(false);
   let contextMenuMsg: Message | null = $state(null);
   let showContextMenu = $state(false);
+  let contextMenuX = $state(0);
+  let contextMenuY = $state(0);
   let lightboxImages = $state<Array<{url: string; caption?: string}>>([]);
   let lightboxIndex = $state(0);
   let showLightbox = $state(false);
@@ -721,8 +723,12 @@
     toastStore.success('Reply');
   }
 
-  function handleLongPress(msg: Message) {
+  function handleLongPress(msg: Message, x?: number, y?: number) {
+    // Close any open reaction picker
+    reactionPickerTargetId = null;
     contextMenuMsg = msg;
+    contextMenuX = x ?? 0;
+    contextMenuY = y ?? 0;
     showContextMenu = true;
   }
 
@@ -1147,6 +1153,8 @@
       open={showContextMenu}
       onClose={() => { showContextMenu = false; contextMenuMsg = null; }}
       msg={contextMenuMsg}
+      x={contextMenuX}
+      y={contextMenuY}
       isOwn={contextMenuMsg.sid === authStore.user?.id}
       isPinned={chatStore.pinnedMessages.has(contextMenuMsg.id)}
       isStarred={chatStore.starredMessageIds.has(contextMenuMsg.id)}

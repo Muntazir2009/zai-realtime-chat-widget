@@ -4,6 +4,7 @@
   import { Camera, Trash2, X } from 'lucide-svelte';
   import { chatStore } from '$lib/stores/chat.svelte';
   import { uiStore } from '$lib/stores/ui.svelte';
+  import { draftStore } from '$lib/stores/draft.svelte';
 
   interface Props {
     chatId: string;
@@ -51,8 +52,13 @@
     return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
   }
 
+  // Draft preview
+  let draftText = $derived(draftStore.getDraft(chatId));
+  let hasDraft = $derived(draftText.length > 0);
+
   function lastMessagePreview(): string {
-    if (!chatMeta) return 'Loading...';
+    if (hasDraft) return draftText;
+    if (!chatMeta) return 'No messages yet';
     const lm = chatMeta.lm;
     if (!lm) return 'No messages yet';
     if (lm.startsWith('📷')) return '📷 Photo';
@@ -60,7 +66,10 @@
     return lm;
   }
 
-  const hasMediaPreview = $derived((chatMeta?.lm?.startsWith('📷') ?? false) || (chatMeta?.lm?.startsWith('🎙') ?? false));
+  const hasMediaPreview = $derived(
+    !hasDraft &&
+    ((chatMeta?.lm?.startsWith('📷') ?? false) || (chatMeta?.lm?.startsWith('🎙') ?? false))
+  );
 
   function handleTouchStart() {
     longPressTimer = setTimeout(() => {
@@ -115,8 +124,10 @@
       <span class="tile-time">{chatMeta?.ts ? formatTime(chatMeta.ts) : ''}</span>
     </div>
     <div class="tile-bottom">
-      <p class="tile-preview">
-        {#if hasMediaPreview}
+      <p class="tile-preview" class:tile-preview-draft={hasDraft}>
+        {#if hasDraft}
+          <span class="tile-draft-label">Draft:</span>
+        {:else if hasMediaPreview}
           <Camera size={13} class="tile-preview-icon" />
         {/if}
         {lastMessagePreview()}
@@ -267,6 +278,18 @@
     align-items: center;
     gap: 4px;
     min-width: 0;
+  }
+
+  .tile-preview-draft {
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+
+  .tile-draft-label {
+    color: var(--color-primary);
+    font-weight: 600;
+    flex-shrink: 0;
+    margin-right: 1px;
   }
 
   .tile-preview-icon {
