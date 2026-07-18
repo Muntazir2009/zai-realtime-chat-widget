@@ -727,8 +727,15 @@ class ChatStore {
           set.delete(uid);
           this.clearTypingSafetyTimeout(chatId, uid);
         } else {
-          const data = snap.val() as { typing: boolean; ts: number } | null;
-          if (!data || !data.typing) {
+          const raw = snap.val();
+          // Support both formats:
+          //   - Number (timestamp): { typing: 1715234567890 }
+          //   - Object (legacy):   { typing: true, ts: 1715234567890 }
+          const isTyping = typeof raw === 'number'
+            ? (raw > 0 && Date.now() - raw < 5000)
+            : (raw && raw.typing === true);
+
+          if (!isTyping) {
             set.delete(uid);
             this.clearTypingSafetyTimeout(chatId, uid);
           } else {

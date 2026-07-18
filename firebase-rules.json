@@ -106,7 +106,7 @@
         "$uid": {
           ".read": "auth != null && root.child('user_chats').child(auth.uid).child($chatId).exists()",
           ".write": "auth != null && $uid === auth.uid",
-          ".validate": "newData.isNumber() && newData.val() <= now"
+          "ts": { ".validate": "newData.isNumber() && newData.val() <= now" }
         }
       }
     },

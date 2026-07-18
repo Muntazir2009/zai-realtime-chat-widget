@@ -273,7 +273,8 @@ class PresenceManager {
     try {
       const ref = await rtdb.ref(RTDB_PATHS.TYPING(chatId, uid));
       if (typing) {
-        await rtdb.set(ref, { typing: true, ts: Date.now() });
+        // Write a timestamp number — compatible with both old and new Firebase rules
+        await rtdb.set(ref, Date.now());
       } else {
         // Remove the typing node immediately when stopping
         await rtdb.remove(ref).catch(() => {});
