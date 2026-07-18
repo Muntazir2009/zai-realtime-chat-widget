@@ -7,6 +7,25 @@
   import { presenceManager } from '$lib/managers/PresenceManager.svelte';
   import ConnectionStatus from '$lib/components/indicators/ConnectionStatus.svelte';
 
+  // Svelte action: after a CSS animation finishes, clear the applied
+  // transform/opacity so the element stops creating a new containing
+  // block for position:fixed descendants.  animation-fill-mode: both/forwards
+  // leaves transform:translateX(0) on the element even after it finishes,
+  // which breaks all fixed-positioned popups inside it.
+  function clearAnimAfterPlay(node: HTMLElement) {
+    function onEnd(e: AnimationEvent) {
+      if (e.target === node) {
+        node.style.transform = '';
+        node.style.opacity = '';
+        node.style.animation = 'none';
+      }
+    }
+    node.addEventListener('animationend', onEnd);
+    return {
+      destroy() { node.removeEventListener('animationend', onEnd); }
+    };
+  }
+
   // Component references — dynamic imports for code splitting
   let AuthScreen: any = $state(null);
   let ChatList: any = $state(null);
@@ -110,7 +129,7 @@
   <div class="h-full flex flex-col" style="background-color: var(--bg-page);">
     <div class="flex-1 min-h-0 has-nav" class:has-nav={showNav}>
       {#if view === 'conversation' && Conversation}
-        <div class="animate-conv-enter h-full">
+        <div class="animate-conv-enter h-full" use:clearAnimAfterPlay>
           <Conversation />
         </div>
       {:else}
