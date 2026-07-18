@@ -1256,3 +1256,21 @@ Stage Summary:
 - Tighter, more polished message spacing
 - Better reaction chip and add-button interactions
 - Hover/active states throughout
+---
+Task ID: upload-fix
+Agent: Main Agent
+Task: Fix broken file uploads and Conversation.svelte syntax error
+
+Work Log:
+- Investigated dev.log: found Conversation.svelte syntax error at line 1053 and upload routes missing
+- Discovered all 3 upload API routes were accidentally deleted in commit 7021e10c
+- Restored /api/upload/presign/+server.ts, /api/upload/stream/+server.ts, /api/upload/file/+server.ts from git history
+- Fixed Conversation.svelte: `{currentDraft as initialDraft}` → `initialDraft={currentDraft}` (invalid Svelte 5 syntax)
+- Reduced XHR upload timeouts from 300s to 120s per method to prevent cascading slow fallback
+- Verified dev server starts clean with no errors
+- Committed and pushed as 1716471d
+
+Stage Summary:
+- File uploads fully restored (3-tier: presign → stream proxy → FormData fallback)
+- Conversation.svelte compiles without errors
+- Upload speed issue resolved (was caused by deleted routes, not actual network slowness)
