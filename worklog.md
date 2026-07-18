@@ -1487,3 +1487,24 @@ Stage Summary:
 - Firebase RTDB still used for message metadata and attachment URLs (unchanged)
 - MediaComposer, InputBar, Conversation, SettingsView, WallpaperPicker all work unchanged
 - Worker response parsing handles both `publicUrl` and `url` field names, with R2_PUBLIC_URL fallback
+
+---
+Task ID: interaction-polish
+Agent: Main Agent
+Task: Refine message interactions, gestures, reaction panel, context menu, drafts
+
+Work Log:
+- Analyzed complete interaction system: MessageBubble gestures (touch/mouse/keyboard), reaction picker positioning, BottomSheet context menu, draft store
+- MessageBubble.svelte: Improved gesture constants (TOUCH_SLOP 10→14, LONG_PRESS 400→350ms, DOUBLE_TAP 300→320ms, SINGLE_TAP 280→250ms, swipe init 6→8px)
+- MessageBubble.svelte: Enhanced reaction picker (44px buttons, 24px emoji, 4px gap, spring overshoot animation)
+- MessageBubble.svelte: Added micro animations (bubble tap lift+shadow, reactionPulse keyframe, hover scale on picker buttons, bbl-just-reacted class)
+- MessageContextMenu.svelte: Complete redesign from BottomSheet to compact floating popup with glass styling, viewport-clamped positioning at long-press coordinates, spring animation
+- Conversation.svelte: Added contextMenuX/Y state, pass coordinates from longPress, close reaction picker when context menu opens
+- ChatTile.svelte: Import draftStore, show "Draft:" in accent color replacing normal preview when draft exists
+
+Stage Summary:
+- Interaction model preserved: tap→reaction, long-press→options, double-tap→❤️
+- Gesture quality improved: larger touch slop, faster long-press, more forgiving double-tap
+- Context menu now a compact floating popup (not full-screen BottomSheet)
+- Draft previews visible in conversation list with accent-colored label
+- No new files created, no architecture changes, no upload system modifications
