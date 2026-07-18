@@ -294,12 +294,8 @@
     const len = chatStore.messages.length;
     if (len === 0 || !messagesContainer) return;
     if (len > prevMsgCount && isNearBottom) {
-      requestAnimationFrame(() => {
-        if (messagesContainer) {
-          messagesContainer.scrollTo({ top: messagesContainer.scrollHeight, behavior: 'smooth' });
-          newMsgWhileScrolled = 0;
-        }
-      });
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      newMsgWhileScrolled = 0;
     }
     prevMsgCount = len;
   });
@@ -310,6 +306,7 @@
       requestAnimationFrame(() => {
         if (messagesContainer) {
           messagesContainer.scrollTop = messagesContainer.scrollHeight;
+          isNearBottom = true; // Force near-bottom after initial scroll
         }
       });
     }

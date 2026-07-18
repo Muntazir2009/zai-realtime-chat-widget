@@ -556,7 +556,7 @@ async function uploadViaStreamProxy(
     xhr.onload = origOnLoad;
     xhr.onerror = () => reject(new Error('Stream proxy network error'));
     xhr.ontimeout = () => reject(new Error('Stream proxy timed out'));
-    xhr.timeout = 120_000; // 2 minutes
+    xhr.timeout = 60_000; // 1 minute
 
     // Wire up abort signal via event listener
     if (signal) {
@@ -648,7 +648,7 @@ async function uploadViaFormDataProxy(
 
     xhr.onerror = () => reject(new Error('File proxy network error'));
     xhr.ontimeout = () => reject(new Error('File proxy timed out'));
-    xhr.timeout = 120_000; // 2 minutes
+    xhr.timeout = 60_000; // 1 minute
 
     // Wire up abort signal via event listener
     if (signal) {
@@ -698,7 +698,7 @@ export async function uploadFile(
 
   const effectiveFolder = folder || 'media';
   const originalName = filename || (file instanceof File ? file.name : `upload-${Date.now()}.bin`);
-  const contentType = file instanceof File ? file.type : 'application/octet-stream';
+  const contentType = (file instanceof File ? file.type : file.type) || 'application/octet-stream';
   const isImage = file instanceof File && file.type.startsWith('image/');
   const isVideo = file instanceof File && file.type.startsWith('video/');
 
@@ -747,6 +747,22 @@ export async function uploadFile(
       })
     : Promise.resolve();
 
+  // For non-image, non-video files (e.g. voice blobs), skip presign and go directly to stream proxy
+  if (!isImage && !isVideo) {
+    reportPhase('uploading', 5);
+    const result = await uploadViaStreamProxy(
+      fileToUpload,
+      finalFilename,
+      finalContentType,
+      effectiveFolder,
+      onProgress,
+      onDetailedProgress,
+      signal,
+    );
+    return { publicUrl: result.publicUrl, key: result.key };
+  }
+
+  // Image path: parallel blurhash + compression + presign
   // Start presign URL fetch in parallel
   const presignPromise = getPresignedUrl(originalName, contentType, effectiveFolder, signal)
     .catch(() => null as PresignResponse | null);
@@ -764,7 +780,7 @@ export async function uploadFile(
     throw new DOMException('Upload cancelled', 'AbortError');
   }
 
-  reportPhase('preparing', isImage ? 10 : 5);
+  reportPhase('preparing', 10);
 
   // Helper to build final result
   const buildResult = (publicUrl: string, key: string): UploadResult => {

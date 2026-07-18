@@ -854,8 +854,8 @@
   }
 
   .bbl-emoji-text {
-    font-size: 80px;
-    line-height: 1.15;
+    font-size: 120px;
+    line-height: 1.1;
   }
 
   /* === CONTENT === */

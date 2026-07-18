@@ -16,6 +16,29 @@ import { networkManager } from '$lib/managers/NetworkManager.svelte.js';
 import { cacheMessages, getCachedMessages, cacheUserProfiles, getUserProfile } from '$lib/managers/CacheManager.js';
 import { generateIdempotencyKey } from '$lib/utils/idempotency.js';
 
+// ── Network resilience: retry with exponential backoff ──
+
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  label: string,
+  maxRetries = 3,
+): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (attempt < maxRetries) {
+        const delay = Math.min(1000 * Math.pow(2, attempt), 8000); // 1s, 2s, 4s
+        console.warn(`[${label}] Attempt ${attempt + 1} failed, retrying in ${delay}ms:`, err);
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
+  }
+  throw lastErr;
+}
+
 function formatVideoDuration(secs: number): string {
   const m = Math.floor(secs / 60);
   const s = Math.floor(secs % 60);
@@ -464,9 +487,12 @@ class ChatStore {
     const updates = this.buildFanOutUpdates(chatId, messageId, message, content.slice(0, 100));
     // Optimistic: add to local array immediately so UI updates instantly
     this.messages = [...this.messages, message].sort((a, b) => a.ts - b.ts);
-    await rtdb.update(await rtdb.ref('/'), updates).catch((err) => {
-      console.error('[sendMessage] RTDB write failed:', err);
-      // Remove the optimistic message on failure
+    await retryWithBackoff(
+      () => rtdb.update(await rtdb.ref('/'), updates),
+      'sendMessage'
+    ).catch((err) => {
+      console.error('[sendMessage] All retries failed:', err);
+      toastStore.error('Failed to send message. Check your connection.');
       this.messages = this.messages.filter((m) => m.id !== messageId);
     });
   }
@@ -490,8 +516,12 @@ class ChatStore {
     const updates = this.buildFanOutUpdates(chatId, messageId, message, caption ?? '📷 Photo');
     // Optimistic: add to local array immediately
     this.messages = [...this.messages, message].sort((a, b) => a.ts - b.ts);
-    await rtdb.update(await rtdb.ref('/'), updates).catch((err) => {
-      console.error('[sendImageMessage] RTDB write failed:', err);
+    await retryWithBackoff(
+      () => rtdb.update(await rtdb.ref('/'), updates),
+      'sendImageMessage'
+    ).catch((err) => {
+      console.error('[sendImageMessage] All retries failed:', err);
+      toastStore.error('Failed to send photo. Check your connection.');
       this.messages = this.messages.filter((m) => m.id !== messageId);
     });
   }
@@ -516,8 +546,12 @@ class ChatStore {
 
     const updates = this.buildFanOutUpdates(chatId, messageId, message, `🎬 Video ${durStr}`);
     this.messages = [...this.messages, message].sort((a, b) => a.ts - b.ts);
-    await rtdb.update(await rtdb.ref('/'), updates).catch((err) => {
-      console.error('[sendVideoMessage] RTDB write failed:', err);
+    await retryWithBackoff(
+      () => rtdb.update(await rtdb.ref('/'), updates),
+      'sendVideoMessage'
+    ).catch((err) => {
+      console.error('[sendVideoMessage] All retries failed:', err);
+      toastStore.error('Failed to send video. Check your connection.');
       this.messages = this.messages.filter((m) => m.id !== messageId);
     });
   }
@@ -543,8 +577,12 @@ class ChatStore {
     const updates = this.buildFanOutUpdates(chatId, messageId, message, '🎙 Voice message');
     // Optimistic: add to local array immediately
     this.messages = [...this.messages, message].sort((a, b) => a.ts - b.ts);
-    await rtdb.update(await rtdb.ref('/'), updates).catch((err) => {
-      console.error('[sendVoiceMessage] RTDB write failed:', err);
+    await retryWithBackoff(
+      () => rtdb.update(await rtdb.ref('/'), updates),
+      'sendVoiceMessage'
+    ).catch((err) => {
+      console.error('[sendVoiceMessage] All retries failed:', err);
+      toastStore.error('Failed to send voice message. Check your connection.');
       this.messages = this.messages.filter((m) => m.id !== messageId);
     });
   }
@@ -721,10 +759,12 @@ class ChatStore {
     for (const uid of meta.participantIds) {
       const r = await rtdb.ref(RTDB_PATHS.TYPING(chatId, uid));
       const unsub = await rtdb.onValue(r, (snap) => {
-        const newMap = new Map(this.typingUsers);
-        const set = new Set(newMap.get(chatId) ?? []);
+        const existingSet = this.typingUsers.get(chatId);
+        let changed = false;
+
+        // Determine if this uid should be in the typing set
+        let shouldHave = false;
         if (!snap.exists()) {
-          set.delete(uid);
           this.clearTypingSafetyTimeout(chatId, uid);
         } else {
           const raw = snap.val();
@@ -732,14 +772,13 @@ class ChatStore {
           //   - Number (timestamp): { typing: 1715234567890 }
           //   - Object (legacy):   { typing: true, ts: 1715234567890 }
           const isTyping = typeof raw === 'number'
-            ? (raw > 0 && Date.now() - raw < 5000)
+            ? (raw > 0 && Date.now() - raw < 8000)
             : (raw && raw.typing === true);
 
           if (!isTyping) {
-            set.delete(uid);
             this.clearTypingSafetyTimeout(chatId, uid);
           } else {
-            set.add(uid);
+            shouldHave = true;
             this.clearTypingSafetyTimeout(chatId, uid);
             const timeout = setTimeout(() => {
               const s = this.typingUsers.get(chatId);
@@ -756,6 +795,19 @@ class ChatStore {
             }, 3000);
             this.typingSafetyTimeouts.get(chatId)!.set(uid, timeout);
           }
+        }
+
+        const wasInSet = existingSet?.has(uid) ?? false;
+        if (shouldHave !== wasInSet) changed = true;
+
+        if (!changed) return;
+
+        const newMap = new Map(this.typingUsers);
+        const set = new Set(newMap.get(chatId) ?? []);
+        if (shouldHave) {
+          set.add(uid);
+        } else {
+          set.delete(uid);
         }
         newMap.set(chatId, set);
         this.typingUsers = newMap;

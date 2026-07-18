@@ -1291,3 +1291,32 @@ Stage Summary:
 - Typing indicator now works end-to-end
 - Write format: plain timestamp number (compatible with deployed rules)
 - Read format: supports both number and object (backward compatible)
+---
+Task ID: 1-4-regression-fix
+Agent: Main Agent
+Task: Fix typing indicator, voice messages, auto scroll regressions
+
+Work Log:
+- Fixed typing staleness check: 5s → 8s to handle RTDB latency
+- Optimized typing listener to avoid creating new Map/Set when state unchanged
+- Fixed voice upload: contentType now uses blob.type instead of hardcoded application/octet-stream
+- Fixed auto-scroll: removed rAF delay, use instant scroll, force isNearBottom=true after initial scroll
+
+Stage Summary:
+- Typing indicator works with number-format RTDB writes
+- Voice messages upload correctly with audio/webm content type
+- Auto-scroll reliably follows new messages when at bottom
+---
+Task ID: 5-6-sticker-upload-fix
+Agent: Main Agent
+Task: Fix sticker sizing and upload performance
+
+Work Log:
+- Increased standalone sticker font-size from 80px to 120px
+- Non-image uploads now skip presign and go directly to stream proxy
+- Reduced stream/form proxy timeouts from 120s to 60s
+
+Stage Summary:
+- Stickers display larger like Telegram/WhatsApp
+- Voice uploads are faster (skip presign round-trip)
+- Image uploads unchanged (parallel blurhash+compression+presign)
