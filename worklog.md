@@ -1320,3 +1320,25 @@ Stage Summary:
 - Stickers display larger like Telegram/WhatsApp
 - Voice uploads are faster (skip presign round-trip)
 - Image uploads unchanged (parallel blurhash+compression+presign)
+---
+Task ID: 7-regression-fixes
+Agent: Main Agent
+Task: Fix all 7 regressions — typing, voice, uploads, scroll, stickers, performance, network
+
+Work Log:
+- Typing: Increased staleness 5s→8s, added changed-guard to skip unnecessary Map/Set creation
+- Voice: Fixed contentType — `(file instanceof File ? file.type : file.type) || 'application/octet-stream'`
+- Upload: Non-image/non-video skip presign (voice goes straight to stream proxy), timeouts 120s→60s
+- Scroll: Removed rAF + smooth scroll, use instant scrollTop, force isNearBottom=true after init scroll
+- Stickers: font-size 80px → 120px for standalone emoji/sticker messages
+- Performance: Eliminated typing listener Map/Set churn, optimized upload pipeline
+- Network: Added retryWithBackoff (3 retries, 1s/2s/4s exponential backoff) for all 4 send methods
+- All changes committed and pushed as bfd6466c
+
+Stage Summary:
+- All 7 regressions fixed, no new features added
+- Dev server clean (no compile errors)
+- Voice uploads now work (correct content type)
+- Typing indicator resilient to RTDB latency
+- Auto-scroll responsive and reliable
+- Network writes retry automatically on transient failures
