@@ -1,5 +1,6 @@
 <script lang="ts">
   import { ChevronLeft, MoreVertical, Clock, Image as ImageIcon, Pin, X, Trash2, BellOff, Bell, Wallpaper } from 'lucide-svelte';
+  import { portal } from '$lib/actions/portal';
   import MessageBubble from './MessageBubble.svelte';
   import Lightbox from '$lib/components/media/Lightbox.svelte';
   import VideoLightbox from '$lib/components/media/VideoLightbox.svelte';
@@ -1160,38 +1161,44 @@
     />
   {/if}
 
-  <!-- Context Menu -->
+  <!-- Context Menu (portaled to body to avoid overflow/z-index issues) -->
   {#if contextMenuMsg}
-    <MessageContextMenu
-      open={showContextMenu}
-      onClose={() => { showContextMenu = false; contextMenuMsg = null; }}
-      msg={contextMenuMsg}
-      x={contextMenuX}
-      y={contextMenuY}
-      isOwn={contextMenuMsg.sid === authStore.user?.id}
-      isPinned={chatStore.pinnedMessages.has(contextMenuMsg.id)}
-      isStarred={chatStore.starredMessageIds.has(contextMenuMsg.id)}
-      onReply={handleReply}
-      onCopy={handleCopyText}
-      onDelete={handleDeleteMessage}
-      onPin={handlePinMessage}
-      onStar={handleStarMessage}
-      onEdit={handleEditMessage}
-      onReact={(m) => { showContextMenu = false; contextMenuMsg = null; handleTapReaction(m, contextMenuX, contextMenuY); }}
-    />
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div use:portal>
+      <MessageContextMenu
+        open={showContextMenu}
+        onClose={() => { showContextMenu = false; contextMenuMsg = null; }}
+        msg={contextMenuMsg}
+        x={contextMenuX}
+        y={contextMenuY}
+        isOwn={contextMenuMsg.sid === authStore.user?.id}
+        isPinned={chatStore.pinnedMessages.has(contextMenuMsg.id)}
+        isStarred={chatStore.starredMessageIds.has(contextMenuMsg.id)}
+        onReply={handleReply}
+        onCopy={handleCopyText}
+        onDelete={handleDeleteMessage}
+        onPin={handlePinMessage}
+        onStar={handleStarMessage}
+        onEdit={handleEditMessage}
+        onReact={(m) => { showContextMenu = false; contextMenuMsg = null; handleTapReaction(m, contextMenuX, contextMenuY); }}
+      />
+    </div>
   {/if}
 
-  <!-- Reaction Picker (screen-level) -->
+  <!-- Reaction Picker (portaled to body) -->
   {#if reactionPickerMsg}
-    <ReactionPicker
-      open={showReactionPicker}
-      onClose={() => { showReactionPicker = false; reactionPickerMsg = null; }}
-      msg={reactionPickerMsg}
-      x={reactionPickerX}
-      y={reactionPickerY}
-      existingReactions={chatStore.getReactions(reactionPickerMsg.id).map(r => r.emoji)}
-      onReact={handleReactFromPicker}
-    />
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div use:portal>
+      <ReactionPicker
+        open={showReactionPicker}
+        onClose={() => { showReactionPicker = false; reactionPickerMsg = null; }}
+        msg={reactionPickerMsg}
+        x={reactionPickerX}
+        y={reactionPickerY}
+        existingReactions={chatStore.getReactions(reactionPickerMsg.id).map(r => r.emoji)}
+        onReact={handleReactFromPicker}
+      />
+    </div>
   {/if}
 </div>
 

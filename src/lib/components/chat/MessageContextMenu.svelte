@@ -69,7 +69,7 @@
       position: 'fixed',
       top: `${top}px`,
       left: `${left}px`,
-      zIndex: '105',
+      zIndex: '10000',
     };
   }
 
@@ -160,7 +160,7 @@
   .ctx-backdrop {
     position: fixed;
     inset: 0;
-    z-index: 104;
+    z-index: 9999;
   }
 
   .ctx-menu {
