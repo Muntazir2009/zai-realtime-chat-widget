@@ -1644,3 +1644,41 @@ Stage Summary:
 - Settings UI improved: Customisation section is now a collapsible dropdown
 - App loads cleanly with no console errors
 - Pre-existing TypeScript errors remain (30 errors in 33 files, all pre-existing)
+
+---
+Task ID: context-menu-fix
+Agent: Main Agent
+Task: Fix broken message context menu options and close-on-tap-outside
+
+Work Log:
+- Diagnosed that the old MessageContextMenu had multiple issues:
+  1. `ready` state with `pointer-events: none` blocking interactions — the 20ms delay + $effect re-runs could leave menu unclickable
+  2. Document-level `pointerdown` + `touchstart` capture handlers with `e.preventDefault()` interfering with mobile click events
+  3. `menuEl` not declared as `$state()` (Svelte 5 warning)
+  4. `onClose` prop tracked as $effect dependency causing unnecessary re-runs
+- Rewrote MessageContextMenu.svelte:
+  - Removed `ready`/`pointer-events` gating — menu is immediately interactive (`pointer-events: auto` always)
+  - Changed from `pointerdown`+`touchstart` capture to `mousedown`+`touchend` capture (avoids interfering with click events)
+  - Removed `e.preventDefault()` from capture handlers (was suppressing click events on mobile)
+  - Made `menuEl` reactive with `$state<HTMLDivElement | null>(null)`
+  - Separated positioning into its own `$effect` (no listener dependency)
+  - Used `positioned` state only for CSS animation (opacity/transform), not for interactivity
+  - Simplified to mousedown + touchend for outside-click detection (no preventDefault)
+- Fixed `handleCopyText` in Conversation.svelte:
+  - Old code: `navigator.clipboard?.writeText(text).then(...)` crashes when clipboard is undefined (non-HTTPS)
+  - New code: checks `navigator.clipboard && window.isSecureContext`, falls back to `document.execCommand('copy')` with textarea
+- Verified all context menu actions work via browser testing:
+  - Reply ✓ (sets reply preview)
+  - Copy ✓ (fallback clipboard API)
+  - Pin ✓ (pinned message banner appears)
+  - Star ✓
+  - Delete ✓
+  - React ✓ (opens reaction picker)
+  - Edit ✓ (for own messages)
+  - Close on outside tap ✓
+
+Stage Summary:
+- MessageContextMenu completely rewritten — all actions now work reliably
+- Clipboard copy fixed with fallback for non-HTTPS contexts
+- Context menu close-on-tap-outside works via document-level mousedown/touchend capture
+- Key insight: old `pointerdown` capture with `e.preventDefault()` was suppressing click events on mobile

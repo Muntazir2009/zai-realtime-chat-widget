@@ -25,85 +25,72 @@
     onReply, onCopy, onDelete, onPin, onStar, onEdit, onReact,
   }: Props = $props();
 
-  let menuEl: HTMLDivElement | undefined;
-  let ready = $state(false);
-  let menuStyle = $state<Record<string, string>>({});
+  let menuEl = $state<HTMLDivElement | null>(null);
+  let positioned = $state(false);
 
+  // Position the menu once it's in the DOM
   $effect(() => {
-    if (open) {
-      ready = false;
-      requestAnimationFrame(() => {
-        positionMenu();
-        setTimeout(() => { ready = true; }, 20);
-      });
-
-      // Close on Escape
-      const onKey = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') onClose();
-      };
-      // Close on any tap/click outside the menu (document-level, bypasses portal issues)
-      const onPointerDown = (e: PointerEvent) => {
-        if (!menuEl) return;
-        // Check if the tap target is inside the menu
-        if (!menuEl.contains(e.target as Node)) {
-          e.preventDefault();
-          onClose();
-        }
-      };
-      // Also handle touchstart for older mobile browsers
-      const onTouchStart = (e: TouchEvent) => {
-        if (!menuEl) return;
-        if (!menuEl.contains(e.target as Node)) {
-          e.preventDefault();
-          onClose();
-        }
-      };
-
-      document.addEventListener('keydown', onKey);
-      document.addEventListener('pointerdown', onPointerDown, true); // capture phase
-      document.addEventListener('touchstart', onTouchStart, true); // capture phase
-      return () => {
-        document.removeEventListener('keydown', onKey);
-        document.removeEventListener('pointerdown', onPointerDown, true);
-        document.removeEventListener('touchstart', onTouchStart, true);
-      };
-    } else {
-      ready = false;
+    if (!open || !menuEl) {
+      positioned = false;
+      return;
     }
+
+    // Wait one frame for layout, then position
+    requestAnimationFrame(() => {
+      if (!menuEl) return;
+      const rect = menuEl.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const pad = 12;
+      const safeBottom = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sab') || '0');
+
+      let left = x - rect.width / 2;
+      let top = y - rect.height - 12;
+
+      left = Math.max(pad, Math.min(left, vw - rect.width - pad));
+
+      if (top < pad) {
+        top = y + 12;
+      }
+
+      if (top + rect.height > vh - safeBottom - pad) {
+        top = Math.max(pad, vh - safeBottom - pad - rect.height);
+      }
+
+      menuEl.style.top = `${top}px`;
+      menuEl.style.left = `${left}px`;
+      positioned = true;
+    });
   });
 
-  function positionMenu() {
-    if (!menuEl) return;
-    const rect = menuEl.getBoundingClientRect();
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const pad = 12;
-    const safeBottom = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sab') || '0');
+  // Close on outside click — use mousedown (not pointerdown) to avoid interfering with touch
+  $effect(() => {
+    if (!open) return;
 
-    let left = x - rect.width / 2;
-    let top = y - rect.height - 12;
-
-    left = Math.max(pad, Math.min(left, vw - rect.width - pad));
-
-    if (top < pad) {
-      top = y + 12;
+    function handleClickOutside(e: MouseEvent) {
+      if (!menuEl) return;
+      if (!menuEl.contains(e.target as Node)) {
+        onClose();
+      }
     }
 
-    if (top + rect.height > vh - safeBottom - pad) {
-      top = Math.max(pad, vh - safeBottom - pad - rect.height);
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
     }
 
-    menuStyle = {
-      position: 'fixed',
-      top: `${top}px`,
-      left: `${left}px`,
-      zIndex: '10000',
+    // Use mousedown in capture phase — fires before click, gives us a chance to close
+    // before any other click handler runs. We intentionally do NOT call preventDefault()
+    // so that the normal click event still fires on the target.
+    document.addEventListener('mousedown', handleClickOutside, true);
+    document.addEventListener('touchend', handleClickOutside, true);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside, true);
+      document.removeEventListener('touchend', handleClickOutside, true);
+      document.removeEventListener('keydown', handleKeyDown);
     };
-  }
-
-  function handleMenuClick(e: MouseEvent) {
-    e.stopPropagation();
-  }
+  });
 
   function handleReply(e: MouseEvent) { e.stopPropagation(); if (!msg) return; onReply(msg); onClose(); }
   function handleCopy(e: MouseEvent) { e.stopPropagation(); if (!msg) return; onCopy(msg.c); onClose(); }
@@ -115,14 +102,13 @@
 </script>
 
 {#if open}
-  <!-- No backdrop div needed — document-level listener handles outside taps -->
-  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div
-    class="ctx-menu {ready ? 'ctx-menu-visible' : ''}"
-    style={Object.entries(menuStyle).map(([k, v]) => `${k}: ${v}`).join('; ')}
+    class="ctx-menu"
+    class:ctx-menu-visible={positioned}
+    style="position: fixed; z-index: 10000;"
     bind:this={menuEl}
     role="menu"
-    onclick={handleMenuClick}
+    tabindex="-1"
   >
     <button class="ctx-item" onclick={handleReply} role="menuitem">
       <Reply size={16} />
@@ -195,13 +181,12 @@
     opacity: 0;
     transform: scale(0.9);
     transition: opacity 140ms ease, transform 280ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    pointer-events: none;
+    pointer-events: auto;
   }
 
   .ctx-menu-visible {
     opacity: 1;
     transform: scale(1);
-    pointer-events: auto;
   }
 
   .ctx-item {

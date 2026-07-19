@@ -801,7 +801,29 @@
   }
 
   function handleCopyText(text: string) {
-    navigator.clipboard?.writeText(text).then(() => toastStore.success('Copied')).catch(() => toastStore.error('Failed to copy'));
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(() => toastStore.success('Copied')).catch(() => {
+        fallbackCopy(text);
+      });
+    } else {
+      fallbackCopy(text);
+    }
+  }
+
+  function fallbackCopy(text: string) {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      toastStore.success('Copied');
+    } catch {
+      toastStore.error('Failed to copy');
+    }
   }
 
   async function handleDeleteMessage(msg: Message) {
