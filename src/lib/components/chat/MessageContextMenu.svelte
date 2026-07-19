@@ -114,6 +114,7 @@
   <div
     class="ctx-menu"
     class:ctx-menu-visible={positioned}
+    class:ctx-menu-locked={guardActive}
     style="position: fixed; z-index: 10000;"
     bind:this={menuEl}
     role="menu"
@@ -191,6 +192,10 @@
     transform: scale(0.9);
     transition: opacity 140ms ease, transform 280ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
     pointer-events: auto;
+  }
+
+  .ctx-menu-locked {
+    pointer-events: none !important;
   }
 
   .ctx-menu-visible {
