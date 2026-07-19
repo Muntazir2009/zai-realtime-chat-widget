@@ -137,7 +137,17 @@
   const SINGLE_TAP_DELAY = 250;
   const LONG_PRESS_MS = 350;
 
+  let touchOnReaction = false;
+
   function handleTouchStart(e: TouchEvent) {
+    // Ignore touches that start on reaction chips — they handle themselves
+    const target = e.target as HTMLElement;
+    if (target.closest('.rxn-bar')) {
+      touchOnReaction = true;
+      return;
+    }
+    touchOnReaction = false;
+
     touchStartX = e.touches[0].clientX;
     touchStartY = e.touches[0].clientY;
     lastTouchX = touchStartX;
@@ -212,6 +222,7 @@
   }
 
   function handleTouchEnd() {
+    if (touchOnReaction) { touchOnReaction = false; return; }
     if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
     if (didLongPress) { didLongPress = false; isSwiping = false; return; }
     if (!isSwiping && !touchMovedPastSlop) {
