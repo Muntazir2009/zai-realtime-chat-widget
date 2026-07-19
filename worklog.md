@@ -1531,3 +1531,45 @@ Stage Summary:
 - Modified: `app.css`, `MessageBubble.svelte`, `Conversation.svelte`, `MessageContextMenu.svelte`
 - Reaction picker now appears as a screen-level floating panel (like the options menu), positioned correctly at the tap point
 - Context menu items now properly execute their actions (stopPropagation + will-change fix)
+---
+Task ID: 2
+Agent: Main Agent
+Task: Redesign message reaction UI to bottom-sheet style picker
+
+Work Log:
+- Read and analyzed all related files: ReactionPicker.svelte, MessageContextMenu.svelte, MessageBubble.svelte, Conversation.svelte, +page.svelte, portal.ts, app.css
+- Identified root cause of menus appearing behind bubbles: both popups were rendered inside conversation wrapper which creates a stacking context due to CSS animation transforms (even after clearing, other ancestors may contribute)
+- Confirmed `use:portal` action already exists and correctly teleports elements to `document.body`
+- Completely rewrote ReactionPicker.svelte from a floating vertical menu to a Discord/Telegram-style bottom sheet:
+  - Full-viewport dimmed backdrop (z-index 10000, portaled to body)
+  - Glassmorphism sheet with backdrop-filter blur
+  - Horizontal category tabs: Recent, Smileys, Gestures, Hearts, Fun, Nature
+  - Frequently used emoji tracking via localStorage (up to 16 recent)
+  - Large emoji grid with 44dp+ touch targets, responsive columns (8/10/12)
+  - Slide-up animation using derived inline styles (380ms cubic-bezier) to avoid CSS specificity conflicts
+  - Swipe-down to dismiss with 0.5x resistance physics
+  - Back button support via history.pushState with re-entry guard
+  - Escape key handler
+  - Reaction processed BEFORE panel closes (150ms delay)
+  - Event isolation: stopPropagation on sheet prevents backdrop click
+  - Haptic feedback on selection
+  - Existing reactions shown with indicator dot
+  - Safe area inset support for notched devices
+- Updated Conversation.svelte:
+  - Removed x/y coordinate params for reaction picker (not needed for bottom sheet)
+  - Simplified handleTapReaction signature (kept backward compat with _x, _y params)
+  - Updated ReactionPicker usage to remove x/y props
+  - Added null-safe existingReactions computation
+- MessageContextMenu: Already portaled and working, kept unchanged
+- Build passes successfully, pushed to main
+
+Stage Summary:
+- ReactionPicker redesigned from floating popup to bottom-sheet style
+- Stacking context issue resolved by portal to document.body (both menus)
+- Key architectural decisions:
+  - Inline styles for sheet transform/opacity (avoids CSS specificity issues with animation)
+  - Closing guard flag prevents double-close from history.back + popstate race
+  - Selection guard flag prevents double-reaction from rapid taps
+  - Category switching uses {#key} for clean grid re-render
+- Files modified: src/lib/components/chat/ReactionPicker.svelte, src/lib/components/chat/Conversation.svelte
+- Commit: eb4305db "feat: redesign reaction picker to bottom-sheet style"
