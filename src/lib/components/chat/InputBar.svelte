@@ -189,6 +189,7 @@
   function handleFileSelect(e: Event) {
     const input = e.target as HTMLInputElement;
     const fileList = input.files;
+    console.log('[UPLOAD-DEBUG] InputBar handleFileSelect, files:', fileList?.length);
     if (!fileList || fileList.length === 0) return;
     input.value = '';
 

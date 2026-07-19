@@ -336,6 +336,7 @@
 
   // ── Actions ──
   function handleSend() {
+    console.log('[UPLOAD-DEBUG] MediaComposer handleSend, files.length:', files.length);
     if (files.length === 0) return;
     onSend(files, caption.trim());
   }

@@ -423,6 +423,7 @@
 
   // ── Media Composer handlers ──
   async function handleMediaSelect(files: File[]) {
+    console.log('[UPLOAD-DEBUG] handleMediaSelect called, files:', files.length, 'activeChatId:', chatStore.activeChatId);
     if (!chatStore.activeChatId) return;
 
     // Build MediaComposerFile objects with metadata
@@ -529,7 +530,8 @@
 
   // Called when user presses Send in the MediaComposer
   async function handleComposerSend(files: MediaComposerFile[], caption: string) {
-    if (!chatStore.activeChatId) return;
+    console.log('[UPLOAD-DEBUG] handleComposerSend called, files:', files.length, 'activeChatId:', chatStore.activeChatId);
+    if (!chatStore.activeChatId) { console.warn('[UPLOAD-DEBUG] ABORT: no activeChatId'); return; }
     showComposer = false;
 
     // Process each file: create optimistic message, then upload
@@ -585,9 +587,10 @@
       uploadTrackers.set(tempMsgId, tracker);
 
       // Start upload in background
+      console.log('[UPLOAD-DEBUG] Calling uploadMediaFile for', tempMsgId, 'type:', mediaFile.type, 'size:', mediaFile.file.size);
       uploadMediaFile(tempMsgId, mediaFile, caption, abortController).catch((err) => {
         if (err instanceof DOMException && err.name === 'AbortError') return;
-        console.error('[Composer] Upload failed:', err);
+        console.error('[UPLOAD-DEBUG] uploadMediaFile FAILED:', err);
         tracker.status = 'error';
         // Create retry function
         tracker.retry = () => {
@@ -616,14 +619,16 @@
     caption: string,
     abortController: AbortController,
   ) {
+    console.log('[UPLOAD-DEBUG] uploadMediaFile entered, msgId:', msgId);
     const tracker = uploadTrackers.get(msgId);
-    if (!tracker) return;
+    if (!tracker) { console.warn('[UPLOAD-DEBUG] ABORT: no tracker for', msgId); return; }
 
     const isImage = mediaFile.type === 'image';
     const isVideo = mediaFile.type === 'video';
     const folder = isVideo ? 'videos' : 'images';
 
     try {
+      console.log('[UPLOAD-DEBUG] Calling uploadFile, file:', mediaFile.file.name, 'size:', mediaFile.file.size, 'type:', mediaFile.file.type);
       const result = await uploadFile(
         mediaFile.file,
         folder,
