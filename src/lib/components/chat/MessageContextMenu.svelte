@@ -161,6 +161,7 @@
     position: fixed;
     inset: 0;
     z-index: 9999;
+    touch-action: manipulation;
   }
 
   .ctx-menu {
@@ -181,7 +182,6 @@
     transform: scale(0.9);
     transition: opacity 140ms ease, transform 280ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
     pointer-events: none;
-    will-change: transform, opacity;
   }
 
   .ctx-menu-visible {
@@ -208,6 +208,7 @@
     transition: background 120ms ease, transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1);
     -webkit-tap-highlight-color: transparent;
     text-align: left;
+    touch-action: manipulation;
   }
 
   .ctx-item:hover {

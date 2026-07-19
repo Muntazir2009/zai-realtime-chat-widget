@@ -378,12 +378,18 @@
 
   function handleReactionTap(e: MouseEvent, reaction: Reaction) {
     e.stopPropagation();
+    e.preventDefault();
     onReaction?.(msg, reaction.emoji);
   }
 
   function handleAddReactionTap(e: MouseEvent) {
     e.stopPropagation();
+    e.preventDefault();
     onTapReaction?.(msg, e.clientX, e.clientY);
+  }
+
+  function stopTouchPropagation(e: TouchEvent) {
+    e.stopPropagation();
   }
 </script>
 
@@ -578,11 +584,13 @@
 
   <!-- Reactions bar -->
   {#if msgReactions.length > 0}
-    <div class="rxn-bar" class:rxn-bar-own={isOwn}>
+    <div class="rxn-bar" class:rxn-bar-own={isOwn} ontouchstart={stopTouchPropagation}>
       {#each msgReactions as rxn (rxn.emoji)}
         <button
           class="rxn-chip {chatStore.hasReacted(msg.id, rxn.emoji) ? 'rxn-chip-active' : ''}"
           onclick={(e) => handleReactionTap(e, rxn)}
+          ontouchstart={stopTouchPropagation}
+          ontouchend={stopTouchPropagation}
           ondblclick={(e) => e.stopPropagation()}
         >
           <span class="rxn-emoji">{rxn.emoji}</span>
@@ -593,6 +601,8 @@
         class="rxn-add-btn"
         bind:this={rxnAddBtn}
         onclick={handleAddReactionTap}
+        ontouchstart={stopTouchPropagation}
+        ontouchend={stopTouchPropagation}
         ondblclick={(e) => e.stopPropagation()}
         aria-label="Add reaction"
       >
