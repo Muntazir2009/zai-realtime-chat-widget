@@ -1573,3 +1573,29 @@ Stage Summary:
   - Category switching uses {#key} for clean grid re-render
 - Files modified: src/lib/components/chat/ReactionPicker.svelte, src/lib/components/chat/Conversation.svelte
 - Commit: eb4305db "feat: redesign reaction picker to bottom-sheet style"
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Fix context menu close + wire all customisation/privacy prefs to real behavior
+
+Work Log:
+- Found root cause of context menu not closing: portal.ts sets pointer-events:none on wrapper, backdrop inherits it
+- Added pointer-events:auto to .ctx-backdrop CSS (the critical fix)
+- Changed backdrop to use onpointerdown for instant mobile close
+- Added Escape key listener to context menu
+- Wired timestampFormat pref to MessageBubble timeStr() (relative/absolute/none)
+- Wired showLinkPreviews pref to link card rendering
+- Wired autoPlayMedia pref to GIF rendering (shows static thumbnail + GIF badge when off)
+- Wired groupMessages pref to Conversation message grouping logic
+- Wired showAvatarsInChat pref to Conversation avatar rendering
+- Wired showEasterEggs pref to EasterEggFx render guard
+- Wired chatSortOrder pref to chat.svelte.ts sortedInbox (recent/unread/alphabetical)
+- Wired showOnline pref to PresenceManager.goOnline() — skips presence write when off
+- Wired sendReadReceipts pref to chat.svelte.ts markAsRead() and send message lrid update
+- Typing indicators were already wired in InputBar.svelte
+
+Stage Summary:
+- Context menu now closes on any tap/click outside AND on Escape key
+- All 16 preferences in PrefsStore are now connected to real app behavior
+- 5 files modified, pushed as 04e02533

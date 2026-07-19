@@ -1,5 +1,13 @@
+▲ [WARNING] Cannot find base config file "./.svelte-kit/tsconfig.json" [tsconfig.json]
 
-  VITE v6.4.3  ready in 1756 ms
+    tsconfig.json:2:12:
+      2 │   "extends": "./.svelte-kit/tsconfig.json",
+        ╵              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+1:15:19 PM [vite] (client) Forced re-optimization of dependencies
+
+  VITE v6.4.3  ready in 1899 ms
 
   ➜  Local:   http://localhost:3000/
-  ➜  Network: http://21.0.6.90:3000/
+  ➜  Network: http://21.0.17.133:3000/
+Using secrets defined in .env
