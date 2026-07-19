@@ -1604,7 +1604,7 @@
   }
 
   .scroll-bottom-pad {
-    height: calc(80px + env(safe-area-inset-bottom, 0px) + 16px);
+    height: calc(64px + env(safe-area-inset-bottom, 0px) + 8px);
     flex-shrink: 0;
   }
 

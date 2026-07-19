@@ -140,9 +140,9 @@
   let touchOnReaction = false;
 
   function handleTouchStart(e: TouchEvent) {
-    // Ignore touches that start on reaction chips — they handle themselves
+    // Ignore touches that start on reaction chips or audio player — they handle themselves
     const target = e.target as HTMLElement;
-    if (target.closest('.rxn-bar')) {
+    if (target.closest('.rxn-bar') || target.closest('.audio-player')) {
       touchOnReaction = true;
       return;
     }
@@ -487,7 +487,10 @@
         </a>
       {/if}
     {:else if msg.t === 'voice' && msg.mu}
-      <AudioPlayer url={msg.mu} duration={(msg.md?.duration as number) || 0} />
+      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+      <div class="voice-bubble" onclick={(e) => e.stopPropagation()} ontouchstart={(e) => e.stopPropagation()} onpointerdown={(e) => e.stopPropagation()}>
+        <AudioPlayer url={msg.mu} duration={(msg.md?.duration as number) || 0} />
+      </div>
     {:else if msg.t === 'video' && msg.mu}
       <div class="bbl-img-wrap">
         <VideoPlayer
@@ -633,11 +636,12 @@
     user-select: none;
     padding: 6px 0;
     align-items: flex-end;
-    animation: msgBubbleIn 250ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: msgBubbleIn 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    contain: layout style;
   }
 
   .msg-row.msg-grouped {
-    animation: msgBubbleInGrouped 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: msgBubbleInGrouped 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 
   .msg-own {
@@ -1089,6 +1093,13 @@
                 0 0 24px color-mix(in srgb, var(--color-primary) 25%, transparent) !important;
   }
 
+  /* === VOICE BUBBLE (event isolation) === */
+  .voice-bubble {
+    position: relative;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
   /* === REACTIONS BAR === */
   .rxn-bar {
     display: flex;
@@ -1165,13 +1176,15 @@
   }
 
   @keyframes msgBubbleIn {
-    from { opacity: 0.6; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
+    from { opacity: 0; transform: translateY(6px) scale(0.99); }
+    60% { opacity: 1; }
+    to { opacity: 1; transform: translateY(0) scale(1); }
   }
 
   @keyframes msgBubbleInGrouped {
-    from { opacity: 0.7; transform: translateY(4px); }
-    to { opacity: 1; transform: translateY(0); }
+    from { opacity: 0; transform: translateY(3px) scale(0.995); }
+    50% { opacity: 1; }
+    to { opacity: 1; transform: translateY(0) scale(1); }
   }
 
   /* ── Upload Overlay ── */

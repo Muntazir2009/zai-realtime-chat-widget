@@ -103,7 +103,10 @@
   // ── Open / Close ──
   function onBack(e: PopStateEvent) {
     if (!open || closing) return;
-    e.preventDefault?.();
+    e.preventDefault();
+    e.stopPropagation();
+    // Re-push state to prevent SvelteKit from navigating
+    history.pushState({ reactionPicker: true }, '');
     closeSheet();
   }
 
@@ -131,10 +134,10 @@
     if (closing) return;
     closing = true;
     sheetOpen = false;
-    // Remove our pushed history state if still present
+    // Clean up history: replace state to remove our marker without navigating
     try {
       if (window.history.state?.reactionPicker) {
-        window.history.back();
+        history.replaceState(null, '');
       }
     } catch { /* noop */ }
     setTimeout(() => {
@@ -185,6 +188,23 @@
   // ── Emoji Selection ──
   let selecting = $state(false);
 
+  // Post-close guard: swallow the next pointer event to prevent touch-through
+  let clickGuardActive = false;
+  function installClickGuard() {
+    if (clickGuardActive) return;
+    clickGuardActive = true;
+    const swallow = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+    };
+    // Capture phase to intercept before anything else
+    document.addEventListener('pointerdown', swallow, { capture: true, once: true });
+    document.addEventListener('click', swallow, { capture: true, once: true });
+    document.addEventListener('touchstart', swallow, { capture: true, once: true });
+    setTimeout(() => { clickGuardActive = false; }, 500);
+  }
+
   function handleSelect(emoji: string) {
     if (selecting || !msg) return;
     selecting = true;
@@ -200,16 +220,25 @@
 
     // 4. THEN close after a beat so the reaction is visually confirmed
     setTimeout(() => {
+      installClickGuard();
       closeSheet();
       // Reset selecting after sheet is fully gone
       setTimeout(() => { selecting = false; }, 350);
     }, 150);
   }
 
-  // ── Backdrop Click ──
-  function handleBackdropClick(e: MouseEvent) {
-    // Only close if clicking directly on the backdrop (not the sheet)
+  // ── Backdrop Dismiss ──
+  function handleBackdropPointerDown(e: PointerEvent) {
+    // Only close if touching directly on the backdrop (not the sheet)
     if ((e.target as HTMLElement).classList.contains('rxn-bs-backdrop')) {
+      e.preventDefault();
+      closeSheet();
+    }
+  }
+
+  function handleBackdropClick(e: MouseEvent) {
+    if ((e.target as HTMLElement).classList.contains('rxn-bs-backdrop')) {
+      e.preventDefault();
       closeSheet();
     }
   }
@@ -243,7 +272,9 @@
   <div
     class="rxn-bs-backdrop"
     class:rxn-bs-backdrop-visible={sheetOpen}
+    onpointerdown={handleBackdropPointerDown}
     onclick={handleBackdropClick}
+    ontouchstart={(e) => { if ((e.target as HTMLElement).classList.contains('rxn-bs-backdrop')) { e.preventDefault(); } }}
     onkeydown={handleKey}
     role="dialog"
     aria-modal="true"
@@ -256,6 +287,7 @@
       style={sheetStyle}
       onclick={(e) => e.stopPropagation()}
       ontouchstart={(e) => e.stopPropagation()}
+      onpointerdown={(e) => e.stopPropagation()}
     >
       <!-- Drag Handle -->
       <div class="rxn-bs-handle-area" ontouchstart={onDragStart} ontouchmove={onDragMove} ontouchend={onDragEnd}>
@@ -329,6 +361,8 @@
     justify-content: flex-end;
     -webkit-tap-highlight-color: transparent;
     outline: none;
+    pointer-events: auto;
+    touch-action: manipulation;
   }
 
   .rxn-bs-backdrop-visible {
@@ -342,6 +376,7 @@
     max-height: 70vh;
     display: flex;
     flex-direction: column;
+    pointer-events: auto;
     background: var(--glass-bg, rgba(255, 255, 255, 0.88));
     backdrop-filter: blur(28px) saturate(200%);
     -webkit-backdrop-filter: blur(28px) saturate(200%);

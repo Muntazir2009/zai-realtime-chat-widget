@@ -179,7 +179,7 @@
             left: {(i / 28) * 100}%;
             height: {20 + Math.sin(i * 0.6) * 55 + Math.cos(i * 1.1) * 25}%;
             background: {i / 28 <= displayProgress / 100 ? 'var(--color-primary)' : 'var(--text-tertiary)'};
-            opacity: {i / 28 <= displayProgress / 100 ? 1 : 0.3};
+            opacity: {i / 28 <= displayProgress / 100 ? 1 : 0.5};
           "
         ></span>
       {/each}
@@ -215,9 +215,9 @@
   .audio-player {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     width: 100%;
-    min-height: 44px;
+    min-height: 48px;
     max-width: 300px;
   }
 
@@ -225,9 +225,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
-    min-width: 40px;
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
     border-radius: 50%;
     border: none;
     background: var(--color-primary);
@@ -236,7 +236,7 @@
     flex-shrink: 0;
     -webkit-tap-highlight-color: transparent;
     transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 200ms ease;
-    box-shadow: 0 2px 8px color-mix(in srgb, var(--color-primary) 30%, transparent);
+    box-shadow: 0 2px 10px color-mix(in srgb, var(--color-primary) 35%, transparent);
   }
   .ap-play-btn:active { transform: scale(0.88); }
 
@@ -254,13 +254,13 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 4px;
     min-width: 0;
   }
 
   .ap-waveform {
     position: relative;
-    height: 28px;
+    height: 32px;
     display: flex;
     align-items: center;
     cursor: pointer;
@@ -281,8 +281,8 @@
   .ap-seek-thumb {
     position: absolute;
     top: 50%;
-    width: 12px;
-    height: 12px;
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
     background: var(--color-primary);
     transform: translate(-50%, -50%) scale(0);
@@ -303,20 +303,21 @@
   }
 
   .ap-time {
-    font-size: 10px;
-    color: var(--text-tertiary);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-secondary);
     font-variant-numeric: tabular-nums;
     line-height: 1;
   }
 
   .ap-time-dur {
-    opacity: 0.6;
+    color: var(--text-tertiary);
   }
 
   .ap-right {
     display: flex;
     align-items: center;
-    gap: 1px;
+    gap: 2px;
     flex-shrink: 0;
   }
 
@@ -324,16 +325,16 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    min-width: 28px;
-    min-height: 28px;
+    min-width: 30px;
+    min-height: 30px;
     border: none;
     background: transparent;
-    color: var(--text-tertiary);
+    color: var(--text-secondary);
     cursor: pointer;
     border-radius: 50%;
     -webkit-tap-highlight-color: transparent;
     transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1), color 150ms ease, background 150ms ease;
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 700;
   }
   .ap-sm-btn:active {
@@ -343,7 +344,7 @@
 
   .ap-speed-btn {
     font-variant-numeric: tabular-nums;
-    min-width: 30px;
+    min-width: 32px;
     border-radius: 6px;
     font-size: 10px;
   }
