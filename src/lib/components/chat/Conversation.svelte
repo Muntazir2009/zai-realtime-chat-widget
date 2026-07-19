@@ -759,13 +759,9 @@
   // Screen-level reaction picker state
   let reactionPickerMsg: Message | null = $state(null);
   let showReactionPicker = $state(false);
-  let reactionPickerX = $state(0);
-  let reactionPickerY = $state(0);
 
-  function handleTapReaction(msg: Message, x?: number, y?: number) {
+  function handleTapReaction(msg: Message, _x?: number, _y?: number) {
     reactionPickerMsg = msg;
-    reactionPickerX = x ?? 0;
-    reactionPickerY = y ?? 0;
     showReactionPicker = true;
   }
 
@@ -1180,7 +1176,7 @@
         onPin={handlePinMessage}
         onStar={handleStarMessage}
         onEdit={handleEditMessage}
-        onReact={(m) => { showContextMenu = false; contextMenuMsg = null; handleTapReaction(m, contextMenuX, contextMenuY); }}
+        onReact={(m) => { showContextMenu = false; contextMenuMsg = null; handleTapReaction(m); }}
       />
     </div>
   {/if}
@@ -1193,9 +1189,7 @@
         open={showReactionPicker}
         onClose={() => { showReactionPicker = false; reactionPickerMsg = null; }}
         msg={reactionPickerMsg}
-        x={reactionPickerX}
-        y={reactionPickerY}
-        existingReactions={chatStore.getReactions(reactionPickerMsg.id).map(r => r.emoji)}
+        existingReactions={reactionPickerMsg ? chatStore.getReactions(reactionPickerMsg.id).map(r => r.emoji) : []}
         onReact={handleReactFromPicker}
       />
     </div>
