@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ChevronLeft, MoreVertical, Clock, Image as ImageIcon, Pin, X, Trash2, BellOff, Bell, Wallpaper } from 'lucide-svelte';
+  import { ChevronLeft, MoreVertical, Clock, Image as ImageIcon, Pin, X, Trash2, BellOff, Bell, Wallpaper, Search, ChevronUp, ChevronDown } from 'lucide-svelte';
   import { portal } from '$lib/actions/portal';
   import MessageBubble from './MessageBubble.svelte';
   import Lightbox from '$lib/components/media/Lightbox.svelte';
@@ -55,6 +55,65 @@
   let newMsgWhileScrolled = $state(0);
   let prevScrollHeight = 0;
   let lastSeenMsgCount = $state(0);
+
+  // ── Search state ──
+  let showSearch = $state(false);
+  let searchQuery = $state('');
+  let searchCurrentIdx = $state(0);
+  let searchInputEl: HTMLInputElement | null = $state(null);
+
+  let searchMatches = $derived.by(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return [];
+    const results: Array<{ id: string; index: number }> = [];
+    let flatIdx = 0;
+    for (const msg of chatStore.messages) {
+      if (msg.t === 'text' && msg.c.toLowerCase().includes(q)) {
+        results.push({ id: msg.id, index: flatIdx });
+      }
+      flatIdx++;
+    }
+    return results;
+  });
+
+  let searchMatchIds = $derived(new Set(searchMatches.map(m => m.id)));
+  let searchTotalCount = $derived(searchMatches.length);
+  let searchCurrentLabel = $derived(searchTotalCount > 0 ? `${searchCurrentIdx + 1} of ${searchTotalCount}` : 'No results');
+
+  $effect(() => {
+    if (showSearch && searchInputEl) {
+      setTimeout(() => searchInputEl?.focus(), 50);
+    }
+    if (!showSearch) {
+      searchQuery = '';
+      searchCurrentIdx = 0;
+    }
+  });
+
+  function openSearch() {
+    showSearch = true;
+    searchQuery = '';
+    searchCurrentIdx = 0;
+  }
+
+  function closeSearch() {
+    showSearch = false;
+  }
+
+  function navigateSearch(direction: -1 | 1) {
+    if (searchTotalCount === 0) return;
+    searchCurrentIdx = (searchCurrentIdx + direction + searchTotalCount) % searchTotalCount;
+    const match = searchMatches[searchCurrentIdx];
+    if (match) {
+      scrollToMessage(match.id);
+    }
+  }
+
+  $effect(() => {
+    if (searchMatches.length > 0 && searchCurrentIdx >= searchMatches.length) {
+      searchCurrentIdx = 0;
+    }
+  });
 
   // ── Media Composer state ──
   let showComposer = $state(false);
@@ -870,6 +929,10 @@
   }
 
   function handleKeyDown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && showSearch) {
+      closeSearch();
+      return;
+    }
     if (e.key === 'Escape' && showMenu) {
       showMenu = false;
     }
@@ -913,7 +976,10 @@
 
 <svelte:window ontouchstart={handleGlobalTouchStart} onkeydown={handleKeyDown} />
 
-<div class="conv-shell" style="background: var(--bg-page); {wallpaperStyle}">
+<div class="conv-shell" style="background: var(--bg-page);">
+  {#if chatWallpaper}
+    <div class="wallpaper-layer" style="{wallpaperStyle}; opacity: var(--wallpaper-opacity, 1);"></div>
+  {/if}
   {#if triggerEasterEgg > 0 && prefsStore.showEasterEggs}
     <EasterEggFx trigger={triggerEasterEgg} effectType={currentEffectType} />
   {/if}
@@ -967,12 +1033,49 @@
       </button>
 
       <div class="header-actions">
+        <button class="h-btn h-btn-sm" onclick={openSearch} aria-label="Search messages">
+          <Search size={18} />
+        </button>
         <button class="h-btn h-btn-sm menu-trigger-btn" class:menu-open={showMenu} onclick={() => (showMenu = !showMenu)} aria-label="More options">
           <MoreVertical size={18} />
         </button>
       </div>
     </div>
   </header>
+
+  <!-- Search Bar -->
+  {#if showSearch}
+    <div class="search-bar">
+      <div class="search-bar-inner">
+        <Search size={15} style="color: var(--text-tertiary); flex-shrink: 0;" />
+        <input
+          bind:this={searchInputEl}
+          type="text"
+          bind:value={searchQuery}
+          placeholder="Search messages..."
+          class="search-input"
+          onkeydown={(e) => {
+            if (e.key === 'Escape') closeSearch();
+            if (e.key === 'Enter') { e.preventDefault(); navigateSearch(e.shiftKey ? -1 : 1); }
+          }}
+        />
+        {#if searchQuery.trim()}
+          <span class="search-count">{searchCurrentLabel}</span>
+          <div class="search-nav">
+            <button class="search-nav-btn" onclick={() => navigateSearch(-1)} aria-label="Previous match" disabled={searchTotalCount === 0}>
+              <ChevronUp size={14} />
+            </button>
+            <button class="search-nav-btn" onclick={() => navigateSearch(1)} aria-label="Next match" disabled={searchTotalCount === 0}>
+              <ChevronDown size={14} />
+            </button>
+          </div>
+        {/if}
+        <button class="search-close-btn" onclick={closeSearch} aria-label="Close search">
+          <X size={15} />
+        </button>
+      </div>
+    </div>
+  {/if}
 
   <!-- Pinned Banner -->
   {#if sortedPinned.length > 0}
@@ -1025,7 +1128,7 @@
           {@const nextMsg = idx < group.messages.length - 1 ? group.messages[idx + 1] : null}
           {@const isConsecutive = prefsStore.groupMessages && prevMsg?.sid === msg.sid}
           {@const isLastInGroup = prefsStore.groupMessages ? nextMsg?.sid !== msg.sid : true}
-          <div data-msg-id={msg.id}>
+          <div data-msg-id={msg.id} class:search-dimmed={searchMatchIds.size > 0 && !searchMatchIds.has(msg.id)} class:search-match-highlight={searchMatchIds.has(msg.id)}>
           <MessageBubble
             {msg}
             {isOwn}
@@ -1337,6 +1440,14 @@
     -webkit-user-select: none;
     user-select: none;
     overflow: hidden;
+  }
+
+  .wallpaper-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    transition: opacity 300ms ease;
   }
 
   /* === PREMIUM HEADER === */
@@ -2203,6 +2314,126 @@
   .header-seen {
     color: var(--color-primary) !important;
     font-weight: 500;
+  }
+
+  /* === SEARCH BAR === */
+  .search-bar {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 0.5px solid var(--border-subtle);
+    padding: 6px 12px;
+    flex-shrink: 0;
+    z-index: 49;
+    animation: searchSlideIn 200ms ease both;
+  }
+
+  @keyframes searchSlideIn {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .search-bar-inner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--input-bg);
+    border-radius: 10px;
+    padding: 0 8px;
+    height: 36px;
+    border: 1px solid var(--border-subtle);
+  }
+
+  .search-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    font-size: 14px;
+    color: var(--text-primary);
+    font-family: var(--font-sans, inherit);
+    min-width: 0;
+  }
+
+  .search-input::placeholder {
+    color: var(--text-tertiary);
+  }
+
+  .search-count {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .search-nav {
+    display: flex;
+    align-items: center;
+    gap: 1px;
+    background: color-mix(in srgb, var(--text-secondary) 12%, transparent);
+    border-radius: 6px;
+    padding: 2px;
+  }
+
+  .search-nav-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 150ms ease, color 150ms ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .search-nav-btn:hover { background: color-mix(in srgb, var(--text-primary) 8%, transparent); }
+  .search-nav-btn:active { transform: scale(0.88); }
+  .search-nav-btn:disabled { opacity: 0.35; pointer-events: none; }
+
+  .search-close-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    border-radius: 50%;
+    transition: background 150ms ease, color 150ms ease;
+    flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .search-close-btn:hover { background: color-mix(in srgb, var(--text-primary) 8%, transparent); }
+  .search-close-btn:active { transform: scale(0.88); }
+
+  /* Search dimming & highlight */
+  .search-dimmed {
+    opacity: 0.3;
+    transition: opacity 200ms ease;
+    pointer-events: none;
+  }
+
+  .search-match-highlight {
+    transition: opacity 200ms ease;
+    position: relative;
+  }
+
+  .search-match-highlight::before {
+    content: '';
+    position: absolute;
+    inset: -2px -4px;
+    border-radius: var(--bubble-radius, 16px);
+    background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+    z-index: -1;
+    pointer-events: none;
   }
 
 </style>

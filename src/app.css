@@ -1868,6 +1868,23 @@ input, textarea, [contenteditable="true"] {
 }
 
 /* ============================================================
+   Animation Speed Preferences (set via PrefsStore)
+   ============================================================ */
+
+/* Reduced: near-instant, minimal motion */
+.anim-reduced *, .anim-reduced *::before, .anim-reduced *::after {
+  animation-duration: 0.05ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 50ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Enhanced: spring-like easing for smoother feel */
+.anim-enhanced {
+  --anim-easing: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ============================================================
    Audio Player — Dark Mode Contrast Boost
    ============================================================ */
 .dark .ap-wave-bar,

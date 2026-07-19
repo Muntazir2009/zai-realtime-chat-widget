@@ -394,6 +394,15 @@
     msg.t === 'text' && /^[\p{Emoji_Presentation}\p{Extended_Pictographic}\u{FE0F}\u{200D}\u{20E3}\u{200C}\u{1F3FB}\u{1F3FC}\u{1F3FD}\u{1F3FE}\u{1F3FF}\u{1F9B0}\u{1F9B1}\u{1F9B2}\u{1F9B3}\u{1F9B4}\u{1F9B5}\u{1F9B6}\u{1F9B7}\u{1F9B8}\u{1F9B9}\u{1F9BA}\u{1F9BB}\u{1F9BC}\u{1F9BD}]+$/u.test(msg.c.trim()) && msg.c.trim().length <= 20
   );
 
+  // Media quality-aware image source selection
+  function getMediaSrc(): string {
+    // GIF: show thumbnail if autoPlay is off
+    if (msg.c === 'GIF' && !prefsStore.autoPlayMedia && msg.mh) return msg.mh;
+    // Low quality: prefer thumbnail if available
+    if (prefsStore.mediaQuality === 'low' && msg.mh) return msg.mh;
+    return msg.mu || '';
+  }
+
   // --- Reactions ---
   let msgReactions = $derived(chatStore.getReactions(msg.id));
   let rxnAddBtn: HTMLButtonElement | undefined;
@@ -545,10 +554,10 @@
       <div class="bbl-img-wrap">
         <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
         <img
-          src={(!prefsStore.autoPlayMedia && msg.c === 'GIF' && msg.mh) ? msg.mh : msg.mu}
+          src={getMediaSrc()}
           alt={msg.c || 'Shared image'}
           class="bbl-img"
-          loading="lazy"
+          loading={prefsStore.mediaQuality === 'high' ? 'eager' : 'lazy'}
           onclick={handleImageClick}
         />
         {#if !prefsStore.autoPlayMedia && msg.c === 'GIF'}

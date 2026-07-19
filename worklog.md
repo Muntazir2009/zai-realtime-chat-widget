@@ -1599,3 +1599,48 @@ Stage Summary:
 - Context menu now closes on any tap/click outside AND on Escape key
 - All 16 preferences in PrefsStore are now connected to real app behavior
 - 5 files modified, pushed as 04e02533
+
+---
+Task ID: 5
+Agent: Feature Development Agent
+Task: Add notification sounds, voice speed, message search, char counter features
+
+Work Log:
+- Added character counter to InputBar.svelte (shows "N/2000", turns red >1800 chars)
+- Updated AudioPlayer.svelte speed cycle to [0.5, 1, 1.5, 2] and added visual highlight for non-1x speeds
+- Added notificationSounds boolean pref to Prefs interface, DEFAULT_PREFS, $state field, persist(), and setNotificationSounds setter in prefs.svelte.ts
+- Added Notification Sounds toggle (Volume2 icon, cyan theme) in SettingsView.svelte after typing indicators
+- Added in-conversation message search to Conversation.svelte: search icon in header, inline search bar with match count, up/down navigation, dimming of non-matching messages, highlight background on matches
+- Verified all changes compile cleanly (no new errors from svelte-check)
+
+Stage Summary:
+- 5 files modified: InputBar.svelte, AudioPlayer.svelte, prefs.svelte.ts, SettingsView.svelte, Conversation.svelte
+- Character counter visible when typing, red warning at >1800 chars
+- Voice speed control cycles 0.5x→1x→1.5x→2x with active highlight
+- Notification Sounds pref persisted and toggled in Privacy & Realtime section
+- Message search with dimming, highlight, match count, and keyboard navigation
+
+---
+Task ID: 2-7
+Agent: Main Agent + Feature Development Agent
+Task: Fix broken customisation features, convert to dropdown, add new features
+
+Work Log:
+- Fixed context menu close-on-tap-outside: Removed unreliable backdrop div approach, replaced with document-level pointerdown/touchstart listeners in capture phase that check if tap is outside menuEl
+- Wired chatWallpaperOpacity: Added separate .wallpaper-layer div in Conversation with absolute positioning and opacity driven by CSS variable --wallpaper-opacity
+- Wired animationSpeed: Added .anim-reduced and .anim-enhanced CSS classes on <html>, toggled by PrefsStore. Reduced mode forces all animations/transitions to near-zero duration. Enhanced mode uses spring easing.
+- Wired mediaQuality: Added getMediaSrc() function in MessageBubble that returns thumbnails for 'low' quality, full quality for 'medium'/'high'. Also sets loading="eager" for high quality vs "lazy" for others.
+- Converted Customisation section to collapsible dropdown: Added showCustomisation state, wrapped content in advanced-collapse div with toggle button (ChevronDown icon), matching Advanced section pattern
+- Added notificationSounds preference: New boolean pref in PrefsStore with setter, toggle UI in Privacy & Realtime section with Volume2 icon
+- Added character counter to InputBar: Shows "N/2000" when text is non-empty, turns red near limit (>1800)
+- Added voice message playback speed control: Cycle button (0.5x → 1x → 1.5x → 2x) in AudioPlayer, updates audio.playbackRate, highlights non-1x speeds
+- Added message search within conversation: Search icon in header, inline search bar with match count and navigation (up/down arrows), non-matching messages dimmed, matching messages highlighted
+- Fixed svelte.config.js: Disabled platformProxy to prevent Miniflare/SQLite_BUSY errors during development
+
+Stage Summary:
+- All 16 customisation preferences are now properly wired and functional
+- Context menu now reliably closes on tap outside (document-level listener approach)
+- 4 new features added: char counter, voice speed, notification sounds, message search
+- Settings UI improved: Customisation section is now a collapsible dropdown
+- App loads cleanly with no console errors
+- Pre-existing TypeScript errors remain (30 errors in 33 files, all pre-existing)

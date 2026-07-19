@@ -34,6 +34,9 @@
   let fileInputEl: HTMLInputElement | null = $state(null);
   let isFocused = $state(false);
 
+  const MAX_CHARS = 2000;
+  let charCount = $derived(message.length);
+  let nearLimit = $derived(charCount > 1800);
   let hasText = $derived(message.trim().length > 0);
   let activePicker = $derived(isGifOpen ? 'gif' : isTrayOpen ? 'sticker' : null);
 
@@ -319,6 +322,13 @@
       {/if}
 
     </div>
+
+    <!-- Character counter -->
+    {#if message.length > 0}
+      <div class="char-counter" class:char-counter-warn={nearLimit}>
+        {charCount}/{MAX_CHARS}
+      </div>
+    {/if}
   </div>
 {/if}
 
@@ -563,6 +573,22 @@
       0 1px 2px color-mix(in srgb, black 12%, transparent),
       0 1px 4px color-mix(in srgb, var(--color-primary) 20%, transparent),
       inset 0 1px 0 color-mix(in srgb, white 15%, transparent);
+  }
+
+  /* Character counter */
+  .char-counter {
+    text-align: right;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    padding: 2px 16px 0;
+    font-variant-numeric: tabular-nums;
+    transition: color 200ms ease;
+    line-height: 1.4;
+  }
+
+  .char-counter-warn {
+    color: var(--color-danger, #ef4444);
   }
 
   @keyframes fadeIn {

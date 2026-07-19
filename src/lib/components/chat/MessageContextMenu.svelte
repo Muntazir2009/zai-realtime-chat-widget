@@ -36,10 +36,37 @@
         positionMenu();
         setTimeout(() => { ready = true; }, 20);
       });
+
       // Close on Escape
-      const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') onClose();
+      };
+      // Close on any tap/click outside the menu (document-level, bypasses portal issues)
+      const onPointerDown = (e: PointerEvent) => {
+        if (!menuEl) return;
+        // Check if the tap target is inside the menu
+        if (!menuEl.contains(e.target as Node)) {
+          e.preventDefault();
+          onClose();
+        }
+      };
+      // Also handle touchstart for older mobile browsers
+      const onTouchStart = (e: TouchEvent) => {
+        if (!menuEl) return;
+        if (!menuEl.contains(e.target as Node)) {
+          e.preventDefault();
+          onClose();
+        }
+      };
+
       document.addEventListener('keydown', onKey);
-      return () => document.removeEventListener('keydown', onKey);
+      document.addEventListener('pointerdown', onPointerDown, true); // capture phase
+      document.addEventListener('touchstart', onTouchStart, true); // capture phase
+      return () => {
+        document.removeEventListener('keydown', onKey);
+        document.removeEventListener('pointerdown', onPointerDown, true);
+        document.removeEventListener('touchstart', onTouchStart, true);
+      };
     } else {
       ready = false;
     }
@@ -74,11 +101,6 @@
     };
   }
 
-  // Close on any interaction with the backdrop area
-  function handleBackdropDown(e: PointerEvent) {
-    onClose();
-  }
-
   function handleMenuClick(e: MouseEvent) {
     e.stopPropagation();
   }
@@ -93,9 +115,7 @@
 </script>
 
 {#if open}
-  <!-- Full-screen backdrop that captures all taps/clicks outside the menu.
-       pointer-events: auto is critical because the portal wrapper sets pointer-events: none -->
-  <div class="ctx-backdrop" onpointerdown={handleBackdropDown}></div>
+  <!-- No backdrop div needed — document-level listener handles outside taps -->
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div
     class="ctx-menu {ready ? 'ctx-menu-visible' : ''}"
@@ -158,15 +178,6 @@
 {/if}
 
 <style>
-  .ctx-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 9999;
-    /* CRITICAL: must be auto to receive events despite portal wrapper's pointer-events: none */
-    pointer-events: auto;
-    touch-action: manipulation;
-  }
-
   .ctx-menu {
     display: flex;
     flex-direction: column;

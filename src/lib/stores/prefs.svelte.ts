@@ -21,6 +21,7 @@ interface Prefs {
   showOnline: boolean;
   sendReadReceipts: boolean;
   sendTypingIndicators: boolean;
+  notificationSounds: boolean;
   // Appearance
   fontSize: FontSize;
   bubbleStyle: BubbleStyle;
@@ -43,6 +44,7 @@ const DEFAULT_PREFS: Prefs = {
   showOnline: true,
   sendReadReceipts: true,
   sendTypingIndicators: true,
+  notificationSounds: true,
   fontSize: 'medium',
   bubbleStyle: 'round',
   compactMode: false,
@@ -81,6 +83,7 @@ class PrefsStore {
   showOnline = $state(readPrefs().showOnline);
   sendReadReceipts = $state(readPrefs().sendReadReceipts);
   sendTypingIndicators = $state(readPrefs().sendTypingIndicators);
+  notificationSounds = $state(readPrefs().notificationSounds);
   // Appearance
   fontSize = $state(readPrefs().fontSize);
   bubbleStyle = $state(readPrefs().bubbleStyle);
@@ -112,6 +115,7 @@ class PrefsStore {
       showOnline: this.showOnline,
       sendReadReceipts: this.sendReadReceipts,
       sendTypingIndicators: this.sendTypingIndicators,
+      notificationSounds: this.notificationSounds,
       fontSize: this.fontSize,
       bubbleStyle: this.bubbleStyle,
       compactMode: this.compactMode,
@@ -145,8 +149,10 @@ class PrefsStore {
 
   private applyAnimationSpeed(speed: AnimationSpeed): void {
     const root = document.documentElement;
+    root.classList.remove('anim-reduced', 'anim-enhanced');
     switch (speed) {
       case 'reduced':
+        root.classList.add('anim-reduced');
         root.style.setProperty('--anim-duration-multiplier', '0.4');
         root.style.setProperty('--anim-easing', 'ease');
         break;
@@ -155,6 +161,7 @@ class PrefsStore {
         root.style.removeProperty('--anim-easing');
         break;
       case 'enhanced':
+        root.classList.add('anim-enhanced');
         root.style.setProperty('--anim-duration-multiplier', '1.3');
         root.style.removeProperty('--anim-easing');
         break;
@@ -169,6 +176,7 @@ class PrefsStore {
   setShowOnline(val: boolean): void { this.showOnline = val; this.persist(); }
   setSendReadReceipts(val: boolean): void { this.sendReadReceipts = val; this.persist(); }
   setSendTypingIndicators(val: boolean): void { this.sendTypingIndicators = val; this.persist(); }
+  setNotificationSounds(val: boolean): void { this.notificationSounds = val; this.persist(); }
 
   // Appearance setters
   setEnterSend(val: boolean): void { this.enterSend = val; this.persist(); }

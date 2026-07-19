@@ -95,7 +95,7 @@
   }
 
   function cycleSpeed() {
-    const speeds = [0.5, 0.75, 1, 1.25, 1.5, 2];
+    const speeds = [0.5, 1, 1.5, 2];
     const idx = speeds.indexOf(playbackRate);
     playbackRate = speeds[(idx + 1) % speeds.length];
     if (audioEl) audioEl.playbackRate = playbackRate;
@@ -199,7 +199,7 @@
     <button class="ap-sm-btn" onclick={() => skip(-10)} aria-label="Rewind 10s">
       <SkipBack size={14} />
     </button>
-    <button class="ap-sm-btn ap-speed-btn" onclick={cycleSpeed} aria-label="Playback speed">
+    <button class="ap-sm-btn ap-speed-btn" class:ap-speed-active={playbackRate !== 1} onclick={cycleSpeed} aria-label="Playback speed">
       {speedLabel}
     </button>
     <button class="ap-sm-btn" onclick={replay} aria-label="Replay">
@@ -347,5 +347,11 @@
     min-width: 32px;
     border-radius: 6px;
     font-size: 10px;
+  }
+
+  .ap-speed-active {
+    background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+    color: var(--color-primary);
+    font-weight: 800;
   }
 </style>

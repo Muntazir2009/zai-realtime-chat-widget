@@ -7,7 +7,7 @@
     Sparkles, LayoutGrid, Type,
     Camera, Pencil, X,
     // New icons for privacy & customisation
-    Globe, EyeOff, Zap, Link2, Image, Play, PlayCircle, Users, ArrowUpDown, Sparkles as SparkleIcon, Ghost, Timer, Gauge, Layers
+    Globe, EyeOff, Zap, Link2, Image, Play, PlayCircle, Users, ArrowUpDown, Sparkles as SparkleIcon, Ghost, Timer, Gauge, Layers, Volume2
   } from 'lucide-svelte';
   import { themeManager } from '$lib/managers/ThemeManager.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
@@ -133,6 +133,9 @@
     if (diff < 86400_000) return `${Math.floor(diff / 3600_000)}h ago`;
     return new Date(ts).toLocaleDateString();
   }
+
+  // ── Customisation section (collapsed by default) ──
+  let showCustomisation = $state(false);
 
   // ── Advanced section (collapsed by default) ──
   let showAdvanced = $state(false);
@@ -694,6 +697,31 @@
           </button>
         </div>
 
+        <div class="toggle-divider"></div>
+
+        <!-- Notification Sounds -->
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="toggle-icon" style="background: color-mix(in srgb, #06b6d4 12%, transparent);">
+              <Volume2 size={15} style="color: #06b6d4;" />
+            </div>
+            <div>
+              <p class="toggle-title">Notification Sounds</p>
+              <p class="toggle-desc">Play sounds for new messages</p>
+            </div>
+          </div>
+          <button
+            class="toggle-track"
+            class:toggle-on={prefsStore.notificationSounds}
+            onclick={() => prefsStore.setNotificationSounds(!prefsStore.notificationSounds)}
+            role="switch"
+            aria-checked={prefsStore.notificationSounds}
+            aria-label="Toggle notification sounds"
+          >
+            <div class="toggle-thumb"></div>
+          </button>
+        </div>
+
         <!-- Privacy notice -->
         <div class="privacy-notice">
           <Shield size={11} style="color: var(--text-tertiary); flex-shrink: 0; margin-top: 1px;" />
@@ -704,228 +732,247 @@
     </section>
 
     <!-- ════════════════════════════════
-         CUSTOMISATION
+         CUSTOMISATION (collapsible dropdown)
          ════════════════════════════════ -->
     <section class="settings-section" style="--delay: 80ms;">
-      <span class="section-label">Customisation</span>
-      <div class="glass card customisation-card">
+      <button
+        class="advanced-toggle"
+        onclick={() => showCustomisation = !showCustomisation}
+        aria-expanded={showCustomisation}
+        aria-controls="customisation-content"
+      >
+        <span class="section-label" style="margin-bottom: 0;">Customisation</span>
+        <ChevronDown
+          size={14}
+          style="color: var(--text-tertiary); transition: transform 300ms ease; transform: rotate({showCustomisation ? 180 : 0}deg);"
+        />
+      </button>
 
-        <!-- Timestamp Format -->
-        <div class="option-row-header"><Clock size={12} /> Timestamps</div>
-        <div class="btn-group">
-          {#each timestampFormats as t (t.format)}
-            {@const isActive = prefsStore.timestampFormat === t.format}
+      <div
+        id="customisation-content"
+        class="advanced-collapse"
+        class:advanced-collapse-open={showCustomisation}
+        role="region"
+      >
+        <div class="glass card">
+
+          <!-- Timestamp Format -->
+          <div class="option-row-header"><Clock size={12} /> Timestamps</div>
+          <div class="btn-group">
+            {#each timestampFormats as t (t.format)}
+              {@const isActive = prefsStore.timestampFormat === t.format}
+              <button
+                class="btn-option btn-option-desc-btn"
+                class:btn-option-active={isActive}
+                onclick={() => prefsStore.setTimestampFormat(t.format)}
+              >
+                <span class="btn-option-label">{t.label}</span>
+                <span class="btn-option-sub">{t.desc}</span>
+              </button>
+            {/each}
+          </div>
+
+          <!-- Animation Speed -->
+          <div class="option-row-header"><Zap size={12} /> Animations</div>
+          <div class="btn-group">
+            {#each animationSpeeds as a (a.speed)}
+              {@const isActive = prefsStore.animationSpeed === a.speed}
+              <button
+                class="btn-option btn-option-desc-btn"
+                class:btn-option-active={isActive}
+                onclick={() => prefsStore.setAnimationSpeed(a.speed)}
+              >
+                <span class="btn-option-label">{a.label}</span>
+                <span class="btn-option-sub">{a.desc}</span>
+              </button>
+            {/each}
+          </div>
+
+          <!-- Chat List Sort Order -->
+          <div class="option-row-header"><ArrowUpDown size={12} /> Chat List Order</div>
+          <div class="btn-group">
+            {#each chatSortOptions as s (s.order)}
+              {@const isActive = prefsStore.chatSortOrder === s.order}
+              <button
+                class="btn-option"
+                class:btn-option-active={isActive}
+                onclick={() => prefsStore.setChatSortOrder(s.order)}
+              >
+                <s.icon size={13} />
+                {s.label}
+              </button>
+            {/each}
+          </div>
+
+          <!-- Media Quality -->
+          <div class="option-row-header"><Image size={12} /> Media Quality</div>
+          <div class="btn-group">
+            {#each mediaQualityOptions as m (m.quality)}
+              {@const isActive = prefsStore.mediaQuality === m.quality}
+              <button
+                class="btn-option btn-option-desc-btn"
+                class:btn-option-active={isActive}
+                onclick={() => prefsStore.setMediaQuality(m.quality)}
+              >
+                <span class="btn-option-label">{m.label}</span>
+                <span class="btn-option-sub">{m.desc}</span>
+              </button>
+            {/each}
+          </div>
+
+          <div class="toggle-divider"></div>
+
+          <!-- Show Link Previews -->
+          <div class="toggle-row">
+            <div class="toggle-info">
+              <div class="toggle-icon" style="background: color-mix(in srgb, #06b6d4 12%, transparent);">
+                <Link2 size={15} style="color: #06b6d4;" />
+              </div>
+              <div>
+                <p class="toggle-title">Link Previews</p>
+                <p class="toggle-desc">Show URL previews in messages</p>
+              </div>
+            </div>
             <button
-              class="btn-option btn-option-desc-btn"
-              class:btn-option-active={isActive}
-              onclick={() => prefsStore.setTimestampFormat(t.format)}
+              class="toggle-track"
+              class:toggle-on={prefsStore.showLinkPreviews}
+              onclick={() => prefsStore.setShowLinkPreviews(!prefsStore.showLinkPreviews)}
+              role="switch"
+              aria-checked={prefsStore.showLinkPreviews}
+              aria-label="Toggle link previews"
             >
-              <span class="btn-option-label">{t.label}</span>
-              <span class="btn-option-sub">{t.desc}</span>
+              <div class="toggle-thumb"></div>
             </button>
-          {/each}
-        </div>
+          </div>
 
-        <!-- Animation Speed -->
-        <div class="option-row-header"><Zap size={12} /> Animations</div>
-        <div class="btn-group">
-          {#each animationSpeeds as a (a.speed)}
-            {@const isActive = prefsStore.animationSpeed === a.speed}
+          <div class="toggle-divider"></div>
+
+          <!-- Message Grouping -->
+          <div class="toggle-row">
+            <div class="toggle-info">
+              <div class="toggle-icon" style="background: color-mix(in srgb, var(--color-accent) 12%, transparent);">
+                <Layers size={15} style="color: var(--color-accent);" />
+              </div>
+              <div>
+                <p class="toggle-title">Group Messages</p>
+                <p class="toggle-desc">Combine consecutive messages</p>
+              </div>
+            </div>
             <button
-              class="btn-option btn-option-desc-btn"
-              class:btn-option-active={isActive}
-              onclick={() => prefsStore.setAnimationSpeed(a.speed)}
+              class="toggle-track"
+              class:toggle-on={prefsStore.groupMessages}
+              onclick={() => prefsStore.setGroupMessages(!prefsStore.groupMessages)}
+              role="switch"
+              aria-checked={prefsStore.groupMessages}
+              aria-label="Toggle message grouping"
             >
-              <span class="btn-option-label">{a.label}</span>
-              <span class="btn-option-sub">{a.desc}</span>
+              <div class="toggle-thumb"></div>
             </button>
-          {/each}
-        </div>
+          </div>
 
-        <!-- Chat List Sort Order -->
-        <div class="option-row-header"><ArrowUpDown size={12} /> Chat List Order</div>
-        <div class="btn-group">
-          {#each chatSortOptions as s (s.order)}
-            {@const isActive = prefsStore.chatSortOrder === s.order}
+          <div class="toggle-divider"></div>
+
+          <!-- Show Avatars in Chat -->
+          <div class="toggle-row">
+            <div class="toggle-info">
+              <div class="toggle-icon" style="background: color-mix(in srgb, #8b5cf6 12%, transparent);">
+                <Users size={15} style="color: #8b5cf6;" />
+              </div>
+              <div>
+                <p class="toggle-title">Show Avatars</p>
+                <p class="toggle-desc">Display user avatars in chat</p>
+              </div>
+            </div>
             <button
-              class="btn-option"
-              class:btn-option-active={isActive}
-              onclick={() => prefsStore.setChatSortOrder(s.order)}
+              class="toggle-track"
+              class:toggle-on={prefsStore.showAvatarsInChat}
+              onclick={() => prefsStore.setShowAvatarsInChat(!prefsStore.showAvatarsInChat)}
+              role="switch"
+              aria-checked={prefsStore.showAvatarsInChat}
+              aria-label="Toggle avatars in chat"
             >
-              <s.icon size={13} />
-              {s.label}
+              <div class="toggle-thumb"></div>
             </button>
-          {/each}
-        </div>
+          </div>
 
-        <!-- Media Quality -->
-        <div class="option-row-header"><Image size={12} /> Media Quality</div>
-        <div class="btn-group">
-          {#each mediaQualityOptions as m (m.quality)}
-            {@const isActive = prefsStore.mediaQuality === m.quality}
+          <div class="toggle-divider"></div>
+
+          <!-- Auto-play Media -->
+          <div class="toggle-row">
+            <div class="toggle-info">
+              <div class="toggle-icon" style="background: color-mix(in srgb, #f97316 12%, transparent);">
+                <Play size={15} style="color: #f97316;" />
+              </div>
+              <div>
+                <p class="toggle-title">Auto-play Media</p>
+                <p class="toggle-desc">Play GIFs & videos automatically</p>
+              </div>
+            </div>
             <button
-              class="btn-option btn-option-desc-btn"
-              class:btn-option-active={isActive}
-              onclick={() => prefsStore.setMediaQuality(m.quality)}
+              class="toggle-track"
+              class:toggle-on={prefsStore.autoPlayMedia}
+              onclick={() => prefsStore.setAutoPlayMedia(!prefsStore.autoPlayMedia)}
+              role="switch"
+              aria-checked={prefsStore.autoPlayMedia}
+              aria-label="Toggle auto-play media"
             >
-              <span class="btn-option-label">{m.label}</span>
-              <span class="btn-option-sub">{m.desc}</span>
+              <div class="toggle-thumb"></div>
             </button>
-          {/each}
-        </div>
+          </div>
 
-        <div class="toggle-divider"></div>
+          <div class="toggle-divider"></div>
 
-        <!-- Show Link Previews -->
-        <div class="toggle-row">
-          <div class="toggle-info">
-            <div class="toggle-icon" style="background: color-mix(in srgb, #06b6d4 12%, transparent);">
-              <Link2 size={15} style="color: #06b6d4;" />
+          <!-- Easter Egg Effects -->
+          <div class="toggle-row">
+            <div class="toggle-info">
+              <div class="toggle-icon" style="background: color-mix(in srgb, #ec4899 12%, transparent);">
+                <SparkleIcon size={15} style="color: #ec4899;" />
+              </div>
+              <div>
+                <p class="toggle-title">Easter Egg Effects</p>
+                <p class="toggle-desc">Double-tap particle animations</p>
+              </div>
             </div>
-            <div>
-              <p class="toggle-title">Link Previews</p>
-              <p class="toggle-desc">Show URL previews in messages</p>
+            <button
+              class="toggle-track"
+              class:toggle-on={prefsStore.showEasterEggs}
+              onclick={() => prefsStore.setShowEasterEggs(!prefsStore.showEasterEggs)}
+              role="switch"
+              aria-checked={prefsStore.showEasterEggs}
+              aria-label="Toggle easter egg effects"
+            >
+              <div class="toggle-thumb"></div>
+            </button>
+          </div>
+
+          <div class="toggle-divider"></div>
+
+          <!-- Wallpaper Opacity Slider -->
+          <div class="slider-row">
+            <div class="toggle-info">
+              <div class="toggle-icon" style="background: color-mix(in srgb, var(--color-primary) 12%, transparent);">
+                <Ghost size={15} style="color: var(--color-primary);" />
+              </div>
+              <div>
+                <p class="toggle-title">Wallpaper Opacity</p>
+                <p class="toggle-desc">{prefsStore.chatWallpaperOpacity}%</p>
+              </div>
+            </div>
+            <div class="slider-wrap">
+              <input
+                type="range"
+                class="custom-slider"
+                min="10"
+                max="100"
+                step="5"
+                value={prefsStore.chatWallpaperOpacity}
+                oninput={(e) => prefsStore.setChatWallpaperOpacity(Number((e.target as HTMLInputElement).value))}
+                aria-label="Wallpaper opacity"
+              />
             </div>
           </div>
-          <button
-            class="toggle-track"
-            class:toggle-on={prefsStore.showLinkPreviews}
-            onclick={() => prefsStore.setShowLinkPreviews(!prefsStore.showLinkPreviews)}
-            role="switch"
-            aria-checked={prefsStore.showLinkPreviews}
-            aria-label="Toggle link previews"
-          >
-            <div class="toggle-thumb"></div>
-          </button>
+
         </div>
-
-        <div class="toggle-divider"></div>
-
-        <!-- Message Grouping -->
-        <div class="toggle-row">
-          <div class="toggle-info">
-            <div class="toggle-icon" style="background: color-mix(in srgb, var(--color-accent) 12%, transparent);">
-              <Layers size={15} style="color: var(--color-accent);" />
-            </div>
-            <div>
-              <p class="toggle-title">Group Messages</p>
-              <p class="toggle-desc">Combine consecutive messages</p>
-            </div>
-          </div>
-          <button
-            class="toggle-track"
-            class:toggle-on={prefsStore.groupMessages}
-            onclick={() => prefsStore.setGroupMessages(!prefsStore.groupMessages)}
-            role="switch"
-            aria-checked={prefsStore.groupMessages}
-            aria-label="Toggle message grouping"
-          >
-            <div class="toggle-thumb"></div>
-          </button>
-        </div>
-
-        <div class="toggle-divider"></div>
-
-        <!-- Show Avatars in Chat -->
-        <div class="toggle-row">
-          <div class="toggle-info">
-            <div class="toggle-icon" style="background: color-mix(in srgb, #8b5cf6 12%, transparent);">
-              <Users size={15} style="color: #8b5cf6;" />
-            </div>
-            <div>
-              <p class="toggle-title">Show Avatars</p>
-              <p class="toggle-desc">Display user avatars in chat</p>
-            </div>
-          </div>
-          <button
-            class="toggle-track"
-            class:toggle-on={prefsStore.showAvatarsInChat}
-            onclick={() => prefsStore.setShowAvatarsInChat(!prefsStore.showAvatarsInChat)}
-            role="switch"
-            aria-checked={prefsStore.showAvatarsInChat}
-            aria-label="Toggle avatars in chat"
-          >
-            <div class="toggle-thumb"></div>
-          </button>
-        </div>
-
-        <div class="toggle-divider"></div>
-
-        <!-- Auto-play Media -->
-        <div class="toggle-row">
-          <div class="toggle-info">
-            <div class="toggle-icon" style="background: color-mix(in srgb, #f97316 12%, transparent);">
-              <Play size={15} style="color: #f97316;" />
-            </div>
-            <div>
-              <p class="toggle-title">Auto-play Media</p>
-              <p class="toggle-desc">Play GIFs & videos automatically</p>
-            </div>
-          </div>
-          <button
-            class="toggle-track"
-            class:toggle-on={prefsStore.autoPlayMedia}
-            onclick={() => prefsStore.setAutoPlayMedia(!prefsStore.autoPlayMedia)}
-            role="switch"
-            aria-checked={prefsStore.autoPlayMedia}
-            aria-label="Toggle auto-play media"
-          >
-            <div class="toggle-thumb"></div>
-          </button>
-        </div>
-
-        <div class="toggle-divider"></div>
-
-        <!-- Easter Egg Effects -->
-        <div class="toggle-row">
-          <div class="toggle-info">
-            <div class="toggle-icon" style="background: color-mix(in srgb, #ec4899 12%, transparent);">
-              <SparkleIcon size={15} style="color: #ec4899;" />
-            </div>
-            <div>
-              <p class="toggle-title">Easter Egg Effects</p>
-              <p class="toggle-desc">Double-tap particle animations</p>
-            </div>
-          </div>
-          <button
-            class="toggle-track"
-            class:toggle-on={prefsStore.showEasterEggs}
-            onclick={() => prefsStore.setShowEasterEggs(!prefsStore.showEasterEggs)}
-            role="switch"
-            aria-checked={prefsStore.showEasterEggs}
-            aria-label="Toggle easter egg effects"
-          >
-            <div class="toggle-thumb"></div>
-          </button>
-        </div>
-
-        <div class="toggle-divider"></div>
-
-        <!-- Wallpaper Opacity Slider -->
-        <div class="slider-row">
-          <div class="toggle-info">
-            <div class="toggle-icon" style="background: color-mix(in srgb, var(--color-primary) 12%, transparent);">
-              <Ghost size={15} style="color: var(--color-primary);" />
-            </div>
-            <div>
-              <p class="toggle-title">Wallpaper Opacity</p>
-              <p class="toggle-desc">{prefsStore.chatWallpaperOpacity}%</p>
-            </div>
-          </div>
-          <div class="slider-wrap">
-            <input
-              type="range"
-              class="custom-slider"
-              min="10"
-              max="100"
-              step="5"
-              value={prefsStore.chatWallpaperOpacity}
-              oninput={(e) => prefsStore.setChatWallpaperOpacity(Number((e.target as HTMLInputElement).value))}
-              aria-label="Wallpaper opacity"
-            />
-          </div>
-        </div>
-
       </div>
     </section>
 

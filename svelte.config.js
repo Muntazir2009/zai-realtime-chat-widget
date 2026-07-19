@@ -8,7 +8,7 @@ const config = {
   kit: {
     adapter: adapter({
       platformProxy: {
-        enabled: process.env.NODE_ENV === 'development',
+        enabled: false,
       },
     }),
   },
