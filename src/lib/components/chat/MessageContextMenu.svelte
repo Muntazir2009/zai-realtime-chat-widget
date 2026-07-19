@@ -27,6 +27,7 @@
 
   let menuEl = $state<HTMLDivElement | null>(null);
   let positioned = $state(false);
+  let guardActive = $state(false);
 
   // Position the menu once it's in the DOM
   $effect(() => {
@@ -67,7 +68,13 @@
   $effect(() => {
     if (!open) return;
 
+    // Guard: ignore outside clicks for 150ms after opening so the opening
+    // gesture (long-press → pointerup/mouseup/touchend) doesn't instantly close the menu.
+    guardActive = true;
+    const guardTimer = setTimeout(() => { guardActive = false; }, 150);
+
     function handleClickOutside(e: MouseEvent) {
+      if (guardActive) return;
       if (!menuEl) return;
       if (!menuEl.contains(e.target as Node)) {
         onClose();
@@ -86,6 +93,8 @@
     document.addEventListener('keydown', handleKeyDown);
 
     return () => {
+      clearTimeout(guardTimer);
+      guardActive = false;
       document.removeEventListener('mousedown', handleClickOutside, true);
       document.removeEventListener('touchend', handleClickOutside, true);
       document.removeEventListener('keydown', handleKeyDown);
