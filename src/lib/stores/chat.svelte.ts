@@ -12,6 +12,7 @@ import type {
 import { MAX_MESSAGES_IN_MEMORY, RTDB_PATHS } from '$lib/types/index.js';
 import { authStore } from './auth.svelte.js';
 import { toastStore } from './toast.svelte.js';
+import { prefsStore } from './prefs.svelte.js';
 import { networkManager } from '$lib/managers/NetworkManager.svelte.js';
 import { cacheMessages, getCachedMessages, cacheUserProfiles, getUserProfile } from '$lib/managers/CacheManager.js';
 import { generateIdempotencyKey } from '$lib/utils/idempotency.js';
@@ -118,13 +119,28 @@ class ChatStore {
     return true;
   }
 
-  /** Derive sorted inbox (most recent first). Shows all user_chats entries, even before meta loads. */
+  /** Derive sorted inbox. Respects user's chat sort order preference. */
   sortedInbox = $derived.by(() => {
     const entries = Array.from(this.userChats.entries());
+    const order = prefsStore.chatSortOrder;
+
     entries.sort((a, b) => {
       const metaA = this.chats.get(a[1].chatId);
       const metaB = this.chats.get(b[1].chatId);
-      // If no meta, use joinedAt timestamp as fallback
+
+      if (order === 'alphabetical') {
+        const nameA = this.userDict.get(metaA?.participants?.find((p: string) => p !== authStore.user?.id) ?? '')?.displayName ?? '';
+        const nameB = this.userDict.get(metaB?.participants?.find((p: string) => p !== authStore.user?.id) ?? '')?.displayName ?? '';
+        return nameA.localeCompare(nameB);
+      }
+
+      if (order === 'unread') {
+        const unreadA = metaA ? ((metaA.lastMsgSid ?? '') === (authStore.user?.id ?? '') ? 0 : 1) : 0;
+        const unreadB = metaB ? ((metaB.lastMsgSid ?? '') === (authStore.user?.id ?? '') ? 0 : 1) : 0;
+        if (unreadA !== unreadB) return unreadB - unreadA;
+      }
+
+      // Default: recent (most recent first)
       return (metaB?.ts ?? b[1].jt) - (metaA?.ts ?? a[1].jt);
     });
     return entries.map(([chatId, uc]) => ({
@@ -454,7 +470,7 @@ class ChatStore {
     updates[RTDB_PATHS.USER_CHAT_ENTRY(user.id, chatId)] = {
       chatId,
       uid: user.id,
-      lrid: messageId,
+      lrid: prefsStore.sendReadReceipts ? messageId : (senderUC?.lrid ?? null),
       uc: 0,
       jt: senderUC?.jt ?? Date.now(),
     };
@@ -654,7 +670,7 @@ class ChatStore {
 
   async markAsRead(chatId: string): Promise<void> {
     const user = authStore.user;
-    if (!user) return;
+    if (!user || !prefsStore.sendReadReceipts) return;
 
     const lastMsg = this.messages[this.messages.length - 1];
     if (!lastMsg) return;

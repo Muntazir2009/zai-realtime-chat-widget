@@ -36,7 +36,7 @@
         positionMenu();
         setTimeout(() => { ready = true; }, 20);
       });
-      // Close on Escape key
+      // Close on Escape
       const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
       document.addEventListener('keydown', onKey);
       return () => document.removeEventListener('keydown', onKey);
@@ -56,15 +56,12 @@
     let left = x - rect.width / 2;
     let top = y - rect.height - 12;
 
-    // Clamp horizontal
     left = Math.max(pad, Math.min(left, vw - rect.width - pad));
 
-    // If goes above viewport, place below
     if (top < pad) {
       top = y + 12;
     }
 
-    // If goes below viewport, adjust
     if (top + rect.height > vh - safeBottom - pad) {
       top = Math.max(pad, vh - safeBottom - pad - rect.height);
     }
@@ -77,16 +74,9 @@
     };
   }
 
-  function handleBackdropClick(e: MouseEvent) {
+  // Close on any interaction with the backdrop area
+  function handleBackdropDown(e: PointerEvent) {
     onClose();
-  }
-
-  function handleBackdropPointerDown(e: PointerEvent) {
-    // Immediately close on any touch/pointer down on the backdrop for mobile responsiveness
-    if ((e.target as HTMLElement).classList.contains('ctx-backdrop')) {
-      e.preventDefault();
-      onClose();
-    }
   }
 
   function handleMenuClick(e: MouseEvent) {
@@ -103,7 +93,9 @@
 </script>
 
 {#if open}
-  <div class="ctx-backdrop" onclick={handleBackdropClick} onpointerdown={handleBackdropPointerDown}></div>
+  <!-- Full-screen backdrop that captures all taps/clicks outside the menu.
+       pointer-events: auto is critical because the portal wrapper sets pointer-events: none -->
+  <div class="ctx-backdrop" onpointerdown={handleBackdropDown}></div>
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div
     class="ctx-menu {ready ? 'ctx-menu-visible' : ''}"
@@ -170,6 +162,8 @@
     position: fixed;
     inset: 0;
     z-index: 9999;
+    /* CRITICAL: must be auto to receive events despite portal wrapper's pointer-events: none */
+    pointer-events: auto;
     touch-action: manipulation;
   }
 

@@ -8,6 +8,7 @@
 import * as rtdb from '$lib/firebase/rtdb.js';
 import { isReady as firebaseIsReady } from '$lib/firebase/config.js';
 import { authStore } from '$lib/stores/auth.svelte.js';
+import { prefsStore } from '$lib/stores/prefs.svelte.js';
 import type { PresenceState } from '$lib/types/index.js';
 import { TYPING_DEBOUNCE_MS, RTDB_PATHS } from '$lib/types/index.js';
 
@@ -74,6 +75,12 @@ class PresenceManager {
   goOnline(): void {
     const uid = this.uid;
     if (!uid) return;
+
+    // Respect user's "Show Online" privacy setting
+    if (!prefsStore.showOnline) {
+      this.onlineStatus = 'offline';
+      return;
+    }
 
     this.onlineStatus = 'online';
 

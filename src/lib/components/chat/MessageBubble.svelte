@@ -7,6 +7,7 @@
   import { Reply as ReplyIcon } from 'lucide-svelte';
   import { chatStore } from '$lib/stores/chat.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
+  import { prefsStore } from '$lib/stores/prefs.svelte';
   import type { UploadProgress } from '$lib/firebase/storage';
 
   // Svelte action: non-passive touchmove so preventDefault works for swipe
@@ -338,7 +339,17 @@
 
   // --- Derived ---
   const timeStr = $derived(() => {
+    if (prefsStore.timestampFormat === 'none') return '';
     const d = new Date(msg.ts);
+    if (prefsStore.timestampFormat === 'absolute') {
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    // relative
+    const now = Date.now();
+    const diff = now - msg.ts;
+    if (diff < 60_000) return 'Just now';
+    if (diff < 3600_000) return `${Math.floor(diff / 60_000)}m ago`;
+    if (diff < 86400_000) return `${Math.floor(diff / 3600_000)}h ago`;
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   });
 
@@ -476,7 +487,7 @@
     <!-- Content -->
     {#if msg.t === 'text'}
       <p class="bbl-text {isEmojiOnly ? 'bbl-emoji-text' : ''}">{msg.c}</p>
-      {#if urlMatch()}
+      {#if urlMatch() && prefsStore.showLinkPreviews}
         <a href={urlMatch()!} target="_blank" rel="noopener noreferrer" class="link-card">
           <div class="link-icon-wrap">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
@@ -534,12 +545,15 @@
       <div class="bbl-img-wrap">
         <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
         <img
-          src={msg.mu}
+          src={(!prefsStore.autoPlayMedia && msg.c === 'GIF' && msg.mh) ? msg.mh : msg.mu}
           alt={msg.c || 'Shared image'}
           class="bbl-img"
           loading="lazy"
           onclick={handleImageClick}
         />
+        {#if !prefsStore.autoPlayMedia && msg.c === 'GIF'}
+          <div class="gif-badge">GIF</div>
+        {/if}
         {#if isUploading}
           <div class="upload-overlay">
             <svg class="upload-ring" viewBox="0 0 36 36" width="42" height="42">
@@ -589,7 +603,9 @@
       {#if msg.edited}
         <span class="bbl-edited">edited</span>
       {/if}
-      <span class="bbl-time">{timeStr()}</span>
+      {#if timeStr()}
+        <span class="bbl-time">{timeStr()}</span>
+      {/if}
       {#if isOwn}
         <DeliveryStatus status={deliveryStatus} />
       {/if}
@@ -873,6 +889,22 @@
     z-index: 1;
     line-height: 0;
     box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+
+  .gif-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: rgba(0, 0, 0, 0.6);
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    letter-spacing: 0.04em;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    pointer-events: none;
   }
 
   .bbl-img {

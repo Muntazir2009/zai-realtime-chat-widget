@@ -18,6 +18,7 @@
   import { authStore } from '$lib/stores/auth.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
   import { draftStore } from '$lib/stores/draft.svelte';
+  import { prefsStore } from '$lib/stores/prefs.svelte';
   import { uploadFile, getVideoMetadata, getImageMetadata, type UploadProgress } from '$lib/firebase/storage';
   import type { Message } from '$lib/types/index';
   import { format, formatDistanceToNow, isToday, isYesterday, startOfDay } from 'date-fns';
@@ -913,7 +914,7 @@
 <svelte:window ontouchstart={handleGlobalTouchStart} onkeydown={handleKeyDown} />
 
 <div class="conv-shell" style="background: var(--bg-page); {wallpaperStyle}">
-  {#if triggerEasterEgg > 0}
+  {#if triggerEasterEgg > 0 && prefsStore.showEasterEggs}
     <EasterEggFx trigger={triggerEasterEgg} effectType={currentEffectType} />
   {/if}
 
@@ -1022,13 +1023,13 @@
           {@const isOwn = msg.sid === authStore.user?.id}
           {@const prevMsg = idx > 0 ? group.messages[idx - 1] : null}
           {@const nextMsg = idx < group.messages.length - 1 ? group.messages[idx + 1] : null}
-          {@const isConsecutive = prevMsg?.sid === msg.sid}
-          {@const isLastInGroup = nextMsg?.sid !== msg.sid}
+          {@const isConsecutive = prefsStore.groupMessages && prevMsg?.sid === msg.sid}
+          {@const isLastInGroup = prefsStore.groupMessages ? nextMsg?.sid !== msg.sid : true}
           <div data-msg-id={msg.id}>
           <MessageBubble
             {msg}
             {isOwn}
-            showAvatar={!isOwn && isLastInGroup}
+            showAvatar={!isOwn && isLastInGroup && prefsStore.showAvatarsInChat}
             senderName={chatStore.userDict.get(msg.sid)?.displayName}
             isGrouped={isConsecutive}
             isPinned={chatStore.pinnedMessages.has(msg.id)}
