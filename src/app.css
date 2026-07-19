@@ -82,6 +82,13 @@
   --input-bg: #f0fdf4;
   --overlay-bg: rgba(0, 0, 0, 0.3);
 
+  /* Animation speed control (customisable in settings) */
+  --anim-duration-multiplier: 1;
+  --anim-easing: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Wallpaper opacity (customisable in settings) */
+  --wallpaper-opacity: 1;
+
   color-scheme: light;
 }
 
@@ -1885,4 +1892,65 @@ input, textarea, [contenteditable="true"] {
 .amoled .ap-time-dur,
 .crimson-dark .ap-time-dur {
   color: var(--text-tertiary);
+}
+
+/* ============================================================
+   §VII — Performance & Containment
+   ============================================================ */
+
+/* Layout containment for major sections — tells the browser layout
+   of children won't affect anything outside, enabling faster reflows */
+.glass-header,
+.glass.card,
+.chat-tile,
+.settings-section,
+.msg-row {
+  contain: layout style;
+}
+
+/* Prevent invisible scrollbar jump */
+.custom-scrollbar {
+  scrollbar-gutter: stable;
+}
+
+/* GPU-accelerated animated elements */
+.ctx-menu,
+.msg-row,
+.chat-tile,
+.theme-option,
+.toggle-track,
+.btn-option,
+.color-circle-wrap,
+.avatar-wrap {
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+/* Remove will-change after animation to free GPU memory */
+@keyframes willChangeCleanup {
+  0% { will-change: transform; }
+  100% { will-change: auto; }
+}
+
+/* Smooth scrolling with momentum on all scrollable containers */
+.custom-scrollbar,
+.settings-scroll,
+.chat-messages {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Content-visibility for off-screen chat messages (auto) */
+.msg-group[data-visible="false"] {
+  content-visibility: hidden;
+  contain-intrinsic-size: 0 80px;
 }

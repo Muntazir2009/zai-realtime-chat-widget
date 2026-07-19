@@ -36,6 +36,10 @@
         positionMenu();
         setTimeout(() => { ready = true; }, 20);
       });
+      // Close on Escape key
+      const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+      document.addEventListener('keydown', onKey);
+      return () => document.removeEventListener('keydown', onKey);
     } else {
       ready = false;
     }
@@ -74,8 +78,13 @@
   }
 
   function handleBackdropClick(e: MouseEvent) {
-    // Only close if clicking directly on the backdrop
+    onClose();
+  }
+
+  function handleBackdropPointerDown(e: PointerEvent) {
+    // Immediately close on any touch/pointer down on the backdrop for mobile responsiveness
     if ((e.target as HTMLElement).classList.contains('ctx-backdrop')) {
+      e.preventDefault();
       onClose();
     }
   }
@@ -94,7 +103,7 @@
 </script>
 
 {#if open}
-  <div class="ctx-backdrop" onclick={handleBackdropClick}></div>
+  <div class="ctx-backdrop" onclick={handleBackdropClick} onpointerdown={handleBackdropPointerDown}></div>
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div
     class="ctx-menu {ready ? 'ctx-menu-visible' : ''}"

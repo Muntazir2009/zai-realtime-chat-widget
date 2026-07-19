@@ -5,7 +5,9 @@
     Wifi, WifiOff, Activity, Clock, Trash2,
     Lock, ChevronRight, ChevronDown,
     Sparkles, LayoutGrid, Type,
-    Camera, Pencil, X
+    Camera, Pencil, X,
+    // New icons for privacy & customisation
+    Globe, EyeOff, Zap, Link2, Image, Play, PlayCircle, Users, ArrowUpDown, Sparkles as SparkleIcon, Ghost, Timer, Gauge, Layers
   } from 'lucide-svelte';
   import { themeManager } from '$lib/managers/ThemeManager.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
@@ -15,7 +17,7 @@
   import { uploadFile } from '$lib/firebase/storage';
   import { presenceManager } from '$lib/managers/PresenceManager.svelte';
   import { networkManager } from '$lib/managers/NetworkManager.svelte';
-  import { prefsStore, type FontSize, type BubbleStyle } from '$lib/stores/prefs.svelte';
+  import { prefsStore, type FontSize, type BubbleStyle, type TimestampFormat, type AnimationSpeed, type MediaQuality, type ChatSortOrder } from '$lib/stores/prefs.svelte';
   import type { ThemeMode } from '$lib/types/index';
 
   // ── Dialog state ──
@@ -79,6 +81,34 @@
     { label: 'Indigo', value: '#6366f1' },
     { label: 'Purple', value: '#a855f7' },
     { label: 'Pink', value: '#ec4899' },
+  ];
+
+  // ── Timestamp formats ──
+  const timestampFormats: { format: TimestampFormat; label: string; desc: string }[] = [
+    { format: 'relative', label: 'Relative', desc: '2m ago, 1h ago' },
+    { format: 'absolute', label: 'Absolute', desc: '10:30 AM' },
+    { format: 'none', label: 'Hidden', desc: 'No timestamps' },
+  ];
+
+  // ── Animation speeds ──
+  const animationSpeeds: { speed: AnimationSpeed; label: string; desc: string }[] = [
+    { speed: 'reduced', label: 'Reduced', desc: 'Minimal motion' },
+    { speed: 'normal', label: 'Normal', desc: 'Default' },
+    { speed: 'enhanced', label: 'Enhanced', desc: 'Extra smooth' },
+  ];
+
+  // ── Media quality options ──
+  const mediaQualityOptions: { quality: MediaQuality; label: string; desc: string }[] = [
+    { quality: 'low', label: 'Low', desc: 'Saves data' },
+    { quality: 'medium', label: 'Medium', desc: 'Balanced' },
+    { quality: 'high', label: 'High', desc: 'Best quality' },
+  ];
+
+  // ── Chat sort options ──
+  const chatSortOptions: { order: ChatSortOrder; label: string; icon: typeof ArrowUpDown }[] = [
+    { order: 'recent', label: 'Recent', icon: Clock },
+    { order: 'unread', label: 'Unread', icon: Eye },
+    { order: 'alphabetical', label: 'A-Z', icon: ArrowUpDown },
   ];
 
   // ── Connection & stats ──
@@ -585,9 +615,324 @@
     </section>
 
     <!-- ════════════════════════════════
-         ADVANCED (collapsible)
+         PRIVACY & REALTIME
+         ════════════════════════════════ -->
+    <section class="settings-section" style="--delay: 60ms;">
+      <span class="section-label">Privacy & Realtime</span>
+      <div class="glass card">
+
+        <!-- Show Online Status -->
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="toggle-icon" style="background: color-mix(in srgb, #22c55e 12%, transparent);">
+              <Globe size={15} style="color: #22c55e;" />
+            </div>
+            <div>
+              <p class="toggle-title">Show Online Status</p>
+              <p class="toggle-desc">Let others see when you're active</p>
+            </div>
+          </div>
+          <button
+            class="toggle-track"
+            class:toggle-on={prefsStore.showOnline}
+            onclick={() => prefsStore.setShowOnline(!prefsStore.showOnline)}
+            role="switch"
+            aria-checked={prefsStore.showOnline}
+            aria-label="Toggle online status visibility"
+          >
+            <div class="toggle-thumb"></div>
+          </button>
+        </div>
+
+        <div class="toggle-divider"></div>
+
+        <!-- Send Read Receipts -->
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="toggle-icon" style="background: color-mix(in srgb, var(--color-primary) 12%, transparent);">
+              <Eye size={15} style="color: var(--color-primary);" />
+            </div>
+            <div>
+              <p class="toggle-title">Read Receipts</p>
+              <p class="toggle-desc">Show when you've read messages</p>
+            </div>
+          </div>
+          <button
+            class="toggle-track"
+            class:toggle-on={prefsStore.sendReadReceipts}
+            onclick={() => prefsStore.setSendReadReceipts(!prefsStore.sendReadReceipts)}
+            role="switch"
+            aria-checked={prefsStore.sendReadReceipts}
+            aria-label="Toggle read receipts"
+          >
+            <div class="toggle-thumb"></div>
+          </button>
+        </div>
+
+        <div class="toggle-divider"></div>
+
+        <!-- Send Typing Indicators -->
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="toggle-icon" style="background: color-mix(in srgb, var(--color-accent) 12%, transparent);">
+              <Timer size={15} style="color: var(--color-accent);" />
+            </div>
+            <div>
+              <p class="toggle-title">Typing Indicator</p>
+              <p class="toggle-desc">Show when you're typing a message</p>
+            </div>
+          </div>
+          <button
+            class="toggle-track"
+            class:toggle-on={prefsStore.sendTypingIndicators}
+            onclick={() => prefsStore.setSendTypingIndicators(!prefsStore.sendTypingIndicators)}
+            role="switch"
+            aria-checked={prefsStore.sendTypingIndicators}
+            aria-label="Toggle typing indicators"
+          >
+            <div class="toggle-thumb"></div>
+          </button>
+        </div>
+
+        <!-- Privacy notice -->
+        <div class="privacy-notice">
+          <Shield size={11} style="color: var(--text-tertiary); flex-shrink: 0; margin-top: 1px;" />
+          <span>These settings only affect what others see about you. You can always see others' status regardless of your own settings.</span>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════
+         CUSTOMISATION
          ════════════════════════════════ -->
     <section class="settings-section" style="--delay: 80ms;">
+      <span class="section-label">Customisation</span>
+      <div class="glass card customisation-card">
+
+        <!-- Timestamp Format -->
+        <div class="option-row-header"><Clock size={12} /> Timestamps</div>
+        <div class="btn-group">
+          {#each timestampFormats as t (t.format)}
+            {@const isActive = prefsStore.timestampFormat === t.format}
+            <button
+              class="btn-option btn-option-desc-btn"
+              class:btn-option-active={isActive}
+              onclick={() => prefsStore.setTimestampFormat(t.format)}
+            >
+              <span class="btn-option-label">{t.label}</span>
+              <span class="btn-option-sub">{t.desc}</span>
+            </button>
+          {/each}
+        </div>
+
+        <!-- Animation Speed -->
+        <div class="option-row-header"><Zap size={12} /> Animations</div>
+        <div class="btn-group">
+          {#each animationSpeeds as a (a.speed)}
+            {@const isActive = prefsStore.animationSpeed === a.speed}
+            <button
+              class="btn-option btn-option-desc-btn"
+              class:btn-option-active={isActive}
+              onclick={() => prefsStore.setAnimationSpeed(a.speed)}
+            >
+              <span class="btn-option-label">{a.label}</span>
+              <span class="btn-option-sub">{a.desc}</span>
+            </button>
+          {/each}
+        </div>
+
+        <!-- Chat List Sort Order -->
+        <div class="option-row-header"><ArrowUpDown size={12} /> Chat List Order</div>
+        <div class="btn-group">
+          {#each chatSortOptions as s (s.order)}
+            {@const isActive = prefsStore.chatSortOrder === s.order}
+            <button
+              class="btn-option"
+              class:btn-option-active={isActive}
+              onclick={() => prefsStore.setChatSortOrder(s.order)}
+            >
+              <s.icon size={13} />
+              {s.label}
+            </button>
+          {/each}
+        </div>
+
+        <!-- Media Quality -->
+        <div class="option-row-header"><Image size={12} /> Media Quality</div>
+        <div class="btn-group">
+          {#each mediaQualityOptions as m (m.quality)}
+            {@const isActive = prefsStore.mediaQuality === m.quality}
+            <button
+              class="btn-option btn-option-desc-btn"
+              class:btn-option-active={isActive}
+              onclick={() => prefsStore.setMediaQuality(m.quality)}
+            >
+              <span class="btn-option-label">{m.label}</span>
+              <span class="btn-option-sub">{m.desc}</span>
+            </button>
+          {/each}
+        </div>
+
+        <div class="toggle-divider"></div>
+
+        <!-- Show Link Previews -->
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="toggle-icon" style="background: color-mix(in srgb, #06b6d4 12%, transparent);">
+              <Link2 size={15} style="color: #06b6d4;" />
+            </div>
+            <div>
+              <p class="toggle-title">Link Previews</p>
+              <p class="toggle-desc">Show URL previews in messages</p>
+            </div>
+          </div>
+          <button
+            class="toggle-track"
+            class:toggle-on={prefsStore.showLinkPreviews}
+            onclick={() => prefsStore.setShowLinkPreviews(!prefsStore.showLinkPreviews)}
+            role="switch"
+            aria-checked={prefsStore.showLinkPreviews}
+            aria-label="Toggle link previews"
+          >
+            <div class="toggle-thumb"></div>
+          </button>
+        </div>
+
+        <div class="toggle-divider"></div>
+
+        <!-- Message Grouping -->
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="toggle-icon" style="background: color-mix(in srgb, var(--color-accent) 12%, transparent);">
+              <Layers size={15} style="color: var(--color-accent);" />
+            </div>
+            <div>
+              <p class="toggle-title">Group Messages</p>
+              <p class="toggle-desc">Combine consecutive messages</p>
+            </div>
+          </div>
+          <button
+            class="toggle-track"
+            class:toggle-on={prefsStore.groupMessages}
+            onclick={() => prefsStore.setGroupMessages(!prefsStore.groupMessages)}
+            role="switch"
+            aria-checked={prefsStore.groupMessages}
+            aria-label="Toggle message grouping"
+          >
+            <div class="toggle-thumb"></div>
+          </button>
+        </div>
+
+        <div class="toggle-divider"></div>
+
+        <!-- Show Avatars in Chat -->
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="toggle-icon" style="background: color-mix(in srgb, #8b5cf6 12%, transparent);">
+              <Users size={15} style="color: #8b5cf6;" />
+            </div>
+            <div>
+              <p class="toggle-title">Show Avatars</p>
+              <p class="toggle-desc">Display user avatars in chat</p>
+            </div>
+          </div>
+          <button
+            class="toggle-track"
+            class:toggle-on={prefsStore.showAvatarsInChat}
+            onclick={() => prefsStore.setShowAvatarsInChat(!prefsStore.showAvatarsInChat)}
+            role="switch"
+            aria-checked={prefsStore.showAvatarsInChat}
+            aria-label="Toggle avatars in chat"
+          >
+            <div class="toggle-thumb"></div>
+          </button>
+        </div>
+
+        <div class="toggle-divider"></div>
+
+        <!-- Auto-play Media -->
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="toggle-icon" style="background: color-mix(in srgb, #f97316 12%, transparent);">
+              <Play size={15} style="color: #f97316;" />
+            </div>
+            <div>
+              <p class="toggle-title">Auto-play Media</p>
+              <p class="toggle-desc">Play GIFs & videos automatically</p>
+            </div>
+          </div>
+          <button
+            class="toggle-track"
+            class:toggle-on={prefsStore.autoPlayMedia}
+            onclick={() => prefsStore.setAutoPlayMedia(!prefsStore.autoPlayMedia)}
+            role="switch"
+            aria-checked={prefsStore.autoPlayMedia}
+            aria-label="Toggle auto-play media"
+          >
+            <div class="toggle-thumb"></div>
+          </button>
+        </div>
+
+        <div class="toggle-divider"></div>
+
+        <!-- Easter Egg Effects -->
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="toggle-icon" style="background: color-mix(in srgb, #ec4899 12%, transparent);">
+              <SparkleIcon size={15} style="color: #ec4899;" />
+            </div>
+            <div>
+              <p class="toggle-title">Easter Egg Effects</p>
+              <p class="toggle-desc">Double-tap particle animations</p>
+            </div>
+          </div>
+          <button
+            class="toggle-track"
+            class:toggle-on={prefsStore.showEasterEggs}
+            onclick={() => prefsStore.setShowEasterEggs(!prefsStore.showEasterEggs)}
+            role="switch"
+            aria-checked={prefsStore.showEasterEggs}
+            aria-label="Toggle easter egg effects"
+          >
+            <div class="toggle-thumb"></div>
+          </button>
+        </div>
+
+        <div class="toggle-divider"></div>
+
+        <!-- Wallpaper Opacity Slider -->
+        <div class="slider-row">
+          <div class="toggle-info">
+            <div class="toggle-icon" style="background: color-mix(in srgb, var(--color-primary) 12%, transparent);">
+              <Ghost size={15} style="color: var(--color-primary);" />
+            </div>
+            <div>
+              <p class="toggle-title">Wallpaper Opacity</p>
+              <p class="toggle-desc">{prefsStore.chatWallpaperOpacity}%</p>
+            </div>
+          </div>
+          <div class="slider-wrap">
+            <input
+              type="range"
+              class="custom-slider"
+              min="10"
+              max="100"
+              step="5"
+              value={prefsStore.chatWallpaperOpacity}
+              oninput={(e) => prefsStore.setChatWallpaperOpacity(Number((e.target as HTMLInputElement).value))}
+              aria-label="Wallpaper opacity"
+            />
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════
+         ADVANCED (collapsible)
+         ════════════════════════════════ -->
+    <section class="settings-section" style="--delay: 120ms;">
       <button
         class="advanced-toggle"
         onclick={() => showAdvanced = !showAdvanced}
@@ -671,7 +1016,7 @@
               </div>
               <span class="info-title">Version</span>
             </div>
-            <span class="version-badge">v1.1.0</span>
+            <span class="version-badge">v1.2.0</span>
           </div>
 
           <div class="toggle-divider"></div>
@@ -723,7 +1068,7 @@
     <!-- ════════════════════════════════
          SIGN OUT
          ════════════════════════════════ -->
-    <section class="settings-section" style="--delay: 160ms;">
+    <section class="settings-section" style="--delay: 200ms;">
       <button
         class="logout-btn glass"
         onclick={handleLogout}
@@ -1626,5 +1971,112 @@
   .dialog-confirm-destructive {
     background: var(--color-danger);
     box-shadow: 0 2px 8px color-mix(in srgb, var(--color-danger) 30%, transparent);
+  }
+
+  /* ════════════════════════════════
+     PRIVACY NOTICE
+     ════════════════════════════════ */
+  .privacy-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 14px;
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--text-tertiary) 6%, transparent);
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--text-tertiary);
+  }
+
+  /* ════════════════════════════════
+     CUSTOMISATION CARD
+     ════════════════════════════════ */
+  .customisation-card {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .btn-option-desc-btn {
+    flex-direction: column;
+    gap: 1px;
+    padding: 8px 6px;
+    align-items: center;
+  }
+
+  .btn-option-label {
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.2;
+  }
+
+  .btn-option-sub {
+    font-size: 9px;
+    font-weight: 400;
+    opacity: 0.65;
+    line-height: 1.2;
+  }
+
+  /* ════════════════════════════════
+     SLIDER
+     ════════════════════════════════ */
+  .slider-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 0;
+    gap: 12px;
+  }
+
+  .slider-wrap {
+    flex-shrink: 0;
+    width: 120px;
+  }
+
+  .custom-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--input-bg);
+    outline: none;
+    cursor: pointer;
+    transition: background 200ms ease;
+  }
+
+  .custom-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--color-primary);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--color-primary) 30%, transparent);
+    cursor: pointer;
+    transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 200ms ease;
+    border: 3px solid var(--bg-surface);
+  }
+
+  .custom-slider::-webkit-slider-thumb:active {
+    transform: scale(1.15);
+    box-shadow: 0 2px 12px color-mix(in srgb, var(--color-primary) 40%, transparent);
+  }
+
+  .custom-slider::-moz-range-thumb {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--color-primary);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--color-primary) 30%, transparent);
+    cursor: pointer;
+    border: 3px solid var(--bg-surface);
+  }
+
+  .custom-slider::-moz-range-track {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--input-bg);
   }
 </style>
