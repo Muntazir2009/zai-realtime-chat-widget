@@ -612,8 +612,8 @@
       {#if msg.edited}
         <span class="bbl-edited">edited</span>
       {/if}
-      {#if timeStr()}
-        <span class="bbl-time">{timeStr()}</span>
+      {#if timeStr}
+        <span class="bbl-time">{timeStr}</span>
       {/if}
       {#if isOwn}
         <DeliveryStatus status={deliveryStatus} />
