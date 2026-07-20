@@ -338,7 +338,7 @@
   }
 
   // --- Derived ---
-  const timeStr = $derived(() => {
+  const timeStr = $derived.by(() => {
     if (prefsStore.timestampFormat === 'none') return '';
     const d = new Date(msg.ts);
     if (prefsStore.timestampFormat === 'absolute') {
