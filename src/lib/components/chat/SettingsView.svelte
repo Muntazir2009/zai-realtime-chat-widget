@@ -7,7 +7,7 @@
     Sparkles, LayoutGrid, Type,
     Camera, Pencil, X,
     // New icons for privacy & customisation
-    Globe, EyeOff, Zap, Link2, Image, Play, PlayCircle, Users, ArrowUpDown, Sparkles as SparkleIcon, Ghost, Timer, Gauge, Layers, Volume2
+    EyeOff, Zap, Link2, Image, Play, PlayCircle, Users, ArrowUpDown, Sparkles as SparkleIcon, Ghost, Timer, Gauge, Layers, Volume2
   } from 'lucide-svelte';
   import { themeManager } from '$lib/managers/ThemeManager.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
@@ -623,31 +623,6 @@
     <section class="settings-section" style="--delay: 60ms;">
       <span class="section-label">Privacy & Realtime</span>
       <div class="glass card">
-
-        <!-- Show Online Status -->
-        <div class="toggle-row">
-          <div class="toggle-info">
-            <div class="toggle-icon" style="background: color-mix(in srgb, #22c55e 12%, transparent);">
-              <Globe size={15} style="color: #22c55e;" />
-            </div>
-            <div>
-              <p class="toggle-title">Show Online Status</p>
-              <p class="toggle-desc">Let others see when you're active</p>
-            </div>
-          </div>
-          <button
-            class="toggle-track"
-            class:toggle-on={prefsStore.showOnline}
-            onclick={() => prefsStore.setShowOnline(!prefsStore.showOnline)}
-            role="switch"
-            aria-checked={prefsStore.showOnline}
-            aria-label="Toggle online status visibility"
-          >
-            <div class="toggle-thumb"></div>
-          </button>
-        </div>
-
-        <div class="toggle-divider"></div>
 
         <!-- Send Read Receipts -->
         <div class="toggle-row">

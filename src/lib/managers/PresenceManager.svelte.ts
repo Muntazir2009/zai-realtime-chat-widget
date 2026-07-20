@@ -76,12 +76,6 @@ class PresenceManager {
     const uid = this.uid;
     if (!uid) return;
 
-    // Respect user's "Show Online" privacy setting
-    if (!prefsStore.showOnline) {
-      this.onlineStatus = 'offline';
-      return;
-    }
-
     this.onlineStatus = 'online';
 
     // Queue the onDisconnect cleanup FIRST — this is the critical fix.

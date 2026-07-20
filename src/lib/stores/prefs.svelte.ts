@@ -18,7 +18,6 @@ export type ChatSortOrder = 'recent' | 'unread' | 'alphabetical';
 
 interface Prefs {
   // Privacy & Realtime
-  showOnline: boolean;
   sendReadReceipts: boolean;
   sendTypingIndicators: boolean;
   notificationSounds: boolean;
@@ -41,7 +40,6 @@ interface Prefs {
 }
 
 const DEFAULT_PREFS: Prefs = {
-  showOnline: true,
   sendReadReceipts: true,
   sendTypingIndicators: true,
   notificationSounds: true,
@@ -80,7 +78,6 @@ function writePrefs(p: Prefs): void {
 
 class PrefsStore {
   // Privacy & Realtime
-  showOnline = $state(readPrefs().showOnline);
   sendReadReceipts = $state(readPrefs().sendReadReceipts);
   sendTypingIndicators = $state(readPrefs().sendTypingIndicators);
   notificationSounds = $state(readPrefs().notificationSounds);
@@ -113,7 +110,6 @@ class PrefsStore {
 
   private persist(): void {
     writePrefs({
-      showOnline: this.showOnline,
       sendReadReceipts: this.sendReadReceipts,
       sendTypingIndicators: this.sendTypingIndicators,
       notificationSounds: this.notificationSounds,
@@ -181,7 +177,6 @@ class PrefsStore {
   }
 
   // Privacy & Realtime setters
-  setShowOnline(val: boolean): void { this.showOnline = val; this.persist(); }
   setSendReadReceipts(val: boolean): void { this.sendReadReceipts = val; this.persist(); }
   setSendTypingIndicators(val: boolean): void { this.sendTypingIndicators = val; this.persist(); }
   setNotificationSounds(val: boolean): void { this.notificationSounds = val; this.persist(); }
