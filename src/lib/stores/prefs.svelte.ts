@@ -107,6 +107,7 @@ class PrefsStore {
       this.applyBubbleStyle(this.bubbleStyle);
       this.applyAnimationSpeed(this.animationSpeed);
       this.applyWallpaperOpacity(this.chatWallpaperOpacity);
+      this.applyCompactMode(this.compactMode);
     }
   }
 
@@ -172,6 +173,13 @@ class PrefsStore {
     document.documentElement.style.setProperty('--wallpaper-opacity', (opacity / 100).toFixed(2));
   }
 
+  private applyCompactMode(compact: boolean): void {
+    const root = document.documentElement;
+    root.style.setProperty('--msg-row-pad', compact ? '2px' : '6px');
+    root.style.setProperty('--msg-row-pad-top', compact ? '4px' : '10px');
+    root.style.setProperty('--msg-bubble-pad', compact ? '6px 10px 4px 10px' : '10px 14px 6px 14px');
+  }
+
   // Privacy & Realtime setters
   setShowOnline(val: boolean): void { this.showOnline = val; this.persist(); }
   setSendReadReceipts(val: boolean): void { this.sendReadReceipts = val; this.persist(); }
@@ -182,7 +190,7 @@ class PrefsStore {
   setEnterSend(val: boolean): void { this.enterSend = val; this.persist(); }
   setFontSize(size: FontSize): void { this.fontSize = size; this.applyFontSize(size); this.persist(); }
   setBubbleStyle(style: BubbleStyle): void { this.bubbleStyle = style; this.applyBubbleStyle(style); this.persist(); }
-  setCompactMode(val: boolean): void { this.compactMode = val; this.persist(); }
+  setCompactMode(val: boolean): void { this.compactMode = val; this.applyCompactMode(val); this.persist(); }
 
   // Customisation setters
   setTimestampFormat(fmt: TimestampFormat): void { this.timestampFormat = fmt; this.persist(); }

@@ -659,7 +659,7 @@
     position: relative;
     -webkit-user-select: none;
     user-select: none;
-    padding: 6px 0;
+    padding: var(--msg-row-pad, 6px) 0;
     align-items: flex-end;
     animation: msgBubbleIn 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
     contain: layout style;
@@ -687,8 +687,8 @@
   }
 
   .msg-row:not(.msg-grouped) {
-    padding-top: 10px;
-    padding-bottom: 6px;
+    padding-top: var(--msg-row-pad-top, 10px);
+    padding-bottom: var(--msg-row-pad, 6px);
   }
 
   /* === BUBBLE + REACTIONS WRAPPER === */
@@ -723,7 +723,7 @@
 
   /* === BUBBLE — Premium Messaging Design === */
   .msg-bubble {
-    padding: 10px 14px 6px 14px;
+    padding: var(--msg-bubble-pad, 10px 14px 6px 14px);
     position: relative;
     overflow: hidden;
     transition: transform 120ms cubic-bezier(0.34, 1.56, 0.64, 1),
