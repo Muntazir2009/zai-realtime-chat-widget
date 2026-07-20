@@ -136,6 +136,14 @@
     return uploadTrackers.get(msgId);
   }
 
+  // Reset last-seen counter when chat changes so old egg messages don't retrigger
+  $effect(() => {
+    const id = chatStore.activeChatId;
+    if (id) {
+      lastSeenMsgCount = chatStore.messages.length;
+    }
+  });
+
   // Watch for incoming messages with easter egg metadata (from other user)
   $effect(() => {
     const len = chatStore.messages.length;
