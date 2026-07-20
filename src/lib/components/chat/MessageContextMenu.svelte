@@ -27,7 +27,6 @@
 
   let menuEl = $state<HTMLDivElement | null>(null);
   let positioned = $state(false);
-  let guardActive = $state(false);
 
   // Position the menu once it's in the DOM
   $effect(() => {
@@ -46,12 +45,13 @@
       const safeBottom = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sab') || '0');
 
       let left = x - rect.width / 2;
-      let top = y - rect.height - 12;
+      // Position menu well above the touch point to avoid accidental taps
+      let top = y - rect.height - 24;
 
       left = Math.max(pad, Math.min(left, vw - rect.width - pad));
 
       if (top < pad) {
-        top = y + 12;
+        top = y + 24;
       }
 
       if (top + rect.height > vh - safeBottom - pad) {
@@ -64,57 +64,50 @@
     });
   });
 
-  // Close on outside click — use mousedown (not pointerdown) to avoid interfering with touch
+  // Escape key to close — only this needs a document listener
   $effect(() => {
     if (!open) return;
-
-    // Guard: ignore outside clicks for 150ms after opening so the opening
-    // gesture (long-press → pointerup/mouseup/touchend) doesn't instantly close the menu.
-    guardActive = true;
-    const guardTimer = setTimeout(() => { guardActive = false; }, 150);
-
-    function handleClickOutside(e: MouseEvent) {
-      if (guardActive) return;
-      if (!menuEl) return;
-      if (!menuEl.contains(e.target as Node)) {
-        onClose();
-      }
-    }
-
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose();
     }
-
-    // Use mousedown in capture phase — fires before click, gives us a chance to close
-    // before any other click handler runs. We intentionally do NOT call preventDefault()
-    // so that the normal click event still fires on the target.
-    document.addEventListener('mousedown', handleClickOutside, true);
-    document.addEventListener('touchend', handleClickOutside, true);
     document.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      clearTimeout(guardTimer);
-      guardActive = false;
-      document.removeEventListener('mousedown', handleClickOutside, true);
-      document.removeEventListener('touchend', handleClickOutside, true);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
+    return () => document.removeEventListener('keydown', handleKeyDown);
   });
 
-  function handleReply(e: MouseEvent) { e.stopPropagation(); if (!msg) return; onReply(msg); onClose(); }
-  function handleCopy(e: MouseEvent) { e.stopPropagation(); if (!msg) return; onCopy(msg.c); onClose(); }
-  function handleDelete(e: MouseEvent) { e.stopPropagation(); if (!msg) return; onDelete(msg); onClose(); }
-  function handlePin(e: MouseEvent) { e.stopPropagation(); if (!msg) return; onPin?.(msg); onClose(); }
-  function handleStar(e: MouseEvent) { e.stopPropagation(); if (!msg) return; onStar?.(msg); onClose(); }
-  function handleEdit(e: MouseEvent) { e.stopPropagation(); if (!msg) return; onEdit?.(msg); onClose(); }
-  function handleReact(e: MouseEvent) { e.stopPropagation(); if (!msg) return; onReact?.(msg); onClose(); }
+  // Backdrop click closes the menu (renders synchronously, no timing issue)
+  function handleBackdropClick() {
+    onClose();
+  }
+
+  function handleReply() { if (!msg) return; onReply(msg); onClose(); }
+  function handleCopy() { if (!msg) return; onCopy(msg.c); onClose(); }
+  function handleDelete() { if (!msg) return; onDelete(msg); onClose(); }
+  function handlePin() { if (!msg) return; onPin?.(msg); onClose(); }
+  function handleStar() { if (!msg) return; onStar?.(msg); onClose(); }
+  function handleEdit() { if (!msg) return; onEdit?.(msg); onClose(); }
+  function handleReact() { if (!msg) return; onReact?.(msg); onClose(); }
 </script>
 
 {#if open}
+  <!--
+    Invisible full-screen backdrop: catches taps/clicks outside the menu.
+    Renders synchronously with the menu — no timing race with the opening gesture.
+  -->
+  <div
+    class="ctx-backdrop"
+    onclick={handleBackdropClick}
+    onpointerdown={(e) => {
+      // Prevent the pointer event from reaching anything behind the backdrop
+      // (stops the long-press's pointerup from triggering anything)
+      if ((e.target as HTMLElement).classList.contains('ctx-backdrop')) {
+        e.preventDefault();
+      }
+    }}
+  ></div>
+
   <div
     class="ctx-menu"
     class:ctx-menu-visible={positioned}
-    class:ctx-menu-locked={guardActive}
     style="position: fixed; z-index: 10000;"
     bind:this={menuEl}
     role="menu"
@@ -174,6 +167,14 @@
 {/if}
 
 <style>
+  .ctx-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    pointer-events: auto;
+    /* transparent — just catches taps */
+  }
+
   .ctx-menu {
     display: flex;
     flex-direction: column;
@@ -192,10 +193,6 @@
     transform: scale(0.9);
     transition: opacity 140ms ease, transform 280ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
     pointer-events: auto;
-  }
-
-  .ctx-menu-locked {
-    pointer-events: none !important;
   }
 
   .ctx-menu-visible {
