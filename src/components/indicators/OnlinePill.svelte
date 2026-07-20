@@ -8,6 +8,13 @@
 
   let { status, lastSeen }: Props = $props();
 
+  // Tick every 30s so "Last seen X ago" stays current
+  let tick = $state(0);
+  $effect(() => {
+    const t = setInterval(() => { tick++; }, 30_000);
+    return () => clearInterval(t);
+  });
+
   const config = $derived({
     online: {
       bg: 'rgba(16, 185, 129, 0.15)',
@@ -29,11 +36,12 @@
     },
   }[status]);
 
-  const relativeTime = $derived(
-    status === 'offline'
+  const relativeTime = $derived.by(() => {
+    void tick; // re-evaluate on tick
+    return status === 'offline'
       ? `Last seen ${formatDistanceToNow(lastSeen, { addSuffix: true })}`
-      : ''
-  );
+      : '';
+  });
 </script>
 
 <span

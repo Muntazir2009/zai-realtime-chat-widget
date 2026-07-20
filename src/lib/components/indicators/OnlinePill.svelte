@@ -8,7 +8,15 @@
 
   let { status, lastSeen }: Props = $props();
 
+  // Tick every 30s so "Last seen X ago" stays current
+  let tick = $state(0);
+  $effect(() => {
+    const t = setInterval(() => { tick++; }, 30_000);
+    return () => clearInterval(t);
+  });
+
   function formatLastSeen(ts: number): string {
+    void tick; // track tick so derived re-evaluates
     const now = Date.now();
     const diffMs = now - ts;
     const diffMin = Math.floor(diffMs / 60000);
