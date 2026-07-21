@@ -5,6 +5,7 @@
   import { chatStore } from '$lib/stores/chat.svelte';
   import { uiStore } from '$lib/stores/ui.svelte';
   import { presenceManager } from '$lib/managers/PresenceManager.svelte';
+  import { backGesture } from '$lib/actions/back-gesture';
   import ConnectionStatus from '$lib/components/indicators/ConnectionStatus.svelte';
 
   // Svelte action: after a CSS animation finishes, clear the applied
@@ -38,6 +39,7 @@
   let _prevView: string | null = null;
   let _prevTab: string | null = null;
   let viewKey = $state(0);
+  let skipConvEnterAnim = $state(false);
 
   onMount(async () => {
     if (!browser) return;
@@ -99,6 +101,12 @@
       chatStore.detachAllListeners();
       presenceManager.disconnect();
     }
+    // Push a history entry when entering a conversation so browser back works
+    if (v === 'conversation' && browser) {
+      history.pushState({ view: 'conversation' }, '');
+      // Reset skip flag after a tick so the enter animation can play normally
+      skipConvEnterAnim = false;
+    }
   });
 
   // Watch for tab changes to bump the key for animation
@@ -129,7 +137,21 @@
   <div class="h-full flex flex-col" style="background-color: var(--bg-page);">
     <div class="flex-1 min-h-0 has-nav" class:has-nav={showNav}>
       {#if view === 'conversation' && Conversation}
-        <div class="animate-conv-enter h-full" use:clearAnimAfterPlay>
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
+          class="{skipConvEnterAnim ? '' : 'animate-conv-enter'} h-full"
+          use:clearAnimAfterPlay
+          use:backGesture={{
+            onBack: () => {
+              // Skip the enter animation on next conversation open
+              // since we're animating the exit manually
+              chatStore.closeChat();
+              uiStore.setView('chatList');
+            },
+            edgeZone: 25,
+          }}
+          data-in-conversation=""
+        >
           <Conversation />
         </div>
       {:else}

@@ -1971,3 +1971,48 @@ input, textarea, [contenteditable="true"] {
   content-visibility: hidden;
   contain-intrinsic-size: 0 80px;
 }
+
+/* ============================================================
+   §VIII — Back Gesture (iOS-style swipe-to-go-back)
+   ============================================================ */
+
+/* Conversation container needs overflow hidden during swipe
+   to prevent horizontal scroll leaking */
+[data-in-conversation] {
+  overflow: hidden;
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* Haptic-like visual cue: a subtle left-edge glow that appears
+   when the finger enters the edge zone (purely decorative) */
+[data-in-conversation]::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--color-primary);
+  opacity: 0;
+  border-radius: 0 2px 2px 0;
+  z-index: 100;
+  pointer-events: none;
+  transition: opacity 200ms ease;
+}
+
+[data-in-conversation]:hover::before {
+  opacity: 0.3;
+}
+
+/* Override reduced-motion for back gesture (still allow it,
+   but make it instant rather than disabling entirely) */
+@media (prefers-reduced-motion: reduce) {
+  [data-in-conversation] {
+    transition-duration: 0.01ms !important;
+  }
+  .back-gesture-overlay {
+    transition: none !important;
+  }
+}
