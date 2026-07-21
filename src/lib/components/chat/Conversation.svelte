@@ -928,6 +928,20 @@
   // scrollToBottom defined above in scroll section
 
   function formatLastSeen(ts: number): string {
+    // Respect user preference for absolute vs relative time
+    if (prefsStore.showAbsoluteLastSeen) {
+      const d = new Date(ts);
+      const hour12 = !prefsStore.use24HourFormat;
+      const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12 });
+      const now = new Date();
+      const isToday = d.toDateString() === now.toDateString();
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1);
+      if (isToday) return `today at ${timeStr}`;
+      if (d.toDateString() === yesterday.toDateString()) return `yesterday at ${timeStr}`;
+      return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + `, ${timeStr}`;
+    }
+    // Relative time (default)
     const now = Date.now();
     const diff = now - ts;
     const mins = Math.floor(diff / 60000);
@@ -940,16 +954,19 @@
 
   function formatPinnedTime(ts: number): string {
     if (!ts) return '';
+    const hour12 = !prefsStore.use24HourFormat;
+    const d = new Date(ts);
+    const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12 });
     const now = Date.now();
     const diff = now - ts;
     const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'Just now';
-    if (mins < 60) return `${mins}m ago`;
+    if (mins < 1) return `Just now · ${timeStr}`;
+    if (mins < 60) return `${mins}m ago · ${timeStr}`;
     const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
+    if (hours < 24) return `${hours}h ago · ${timeStr}`;
     const days = Math.floor(hours / 24);
-    if (days < 7) return `${days}d ago`;
-    return new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric' });
+    if (days < 7) return `${days}d ago · ${timeStr}`;
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + `, ${timeStr}`;
   }
 
   // Close menu on any touch that isn't a deliberate tap on the menu button

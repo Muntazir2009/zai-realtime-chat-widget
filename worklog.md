@@ -1714,3 +1714,27 @@ Stage Summary:
 - Back gesture: swipe from left 25px edge → right → releases to go back to chat list
 - Browser back button now works when in a conversation (pushState on enter, popstate listener)
 - No new svelte-check errors (30 pre-existing errors in 33 files unchanged)
+---
+Task ID: time-last-seen-wire
+Agent: Main Agent
+Task: Wire absolute last-seen and 24h format settings into Conversation.svelte header
+
+Work Log:
+- Investigated all time formatting code across 12+ files
+- Found prefsStore already has `use24HourFormat` and `showAbsoluteLastSeen` with localStorage persistence
+- Found SettingsView.svelte already has toggle UI for both settings
+- Found OnlinePill.svelte already respects both settings
+- Found the ROOT CAUSE: Conversation.svelte's `formatLastSeen()` completely ignored both prefs — always showed relative "5m ago"
+- Fixed `formatLastSeen()` in Conversation.svelte to check `prefsStore.showAbsoluteLastSeen`:
+  - When absolute: shows "today at 3:45 PM", "yesterday at 10:00 AM", "Jan 15, 2:30 PM"
+  - When relative (default): shows "just now", "5m ago", "3h ago" (unchanged)
+- Also respects `prefsStore.use24HourFormat` for the hour display (12h vs 24h)
+- Fixed `formatPinnedTime()` to always include the actual time with proper 12h/24h format (e.g., "5m ago · 3:45 PM")
+- Verified no duplicate time display issue — the Conversation header is the only place last-seen text appears
+- Dev server starts clean with no errors
+
+Stage Summary:
+- `Conversation.svelte` formatLastSeen now respects `showAbsoluteLastSeen` and `use24HourFormat` prefs
+- `Conversation.svelte` formatPinnedTime now includes actual time with 12h/24h respect
+- Settings toggles in SettingsView were already wired to prefsStore — the only missing piece was the Conversation header consuming those prefs
+- Header displays: "Last seen today at 3:45 PM" (absolute) or "Last seen 5m ago" (relative)
