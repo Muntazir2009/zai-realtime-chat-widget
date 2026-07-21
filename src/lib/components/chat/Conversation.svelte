@@ -206,9 +206,12 @@
 
   let formattedLastSeen = $derived.by(() => {
     void presenceTick; // track tick so this re-evaluates
+    // Read prefs at top-level of derived so Svelte 5 tracks them for reactivity
+    const abs = prefsStore.showAbsoluteLastSeen;
+    const h24 = prefsStore.use24HourFormat;
     if (!otherPresence || !otherPresence.lastSeen) return null;
     if (otherPresence.status === 'online') return null;
-    return formatLastSeen(otherPresence.lastSeen);
+    return formatLastSeen(otherPresence.lastSeen, abs, h24);
   });
 
   // "Seen" indicator — shows when the other user's lastReadMessageId matches our last sent message
@@ -927,11 +930,11 @@
 
   // scrollToBottom defined above in scroll section
 
-  function formatLastSeen(ts: number): string {
+  function formatLastSeen(ts: number, absolute: boolean, h24: boolean): string {
     // Respect user preference for absolute vs relative time
-    if (prefsStore.showAbsoluteLastSeen) {
+    if (absolute) {
       const d = new Date(ts);
-      const hour12 = !prefsStore.use24HourFormat;
+      const hour12 = !h24;
       const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12 });
       const now = new Date();
       const isToday = d.toDateString() === now.toDateString();
