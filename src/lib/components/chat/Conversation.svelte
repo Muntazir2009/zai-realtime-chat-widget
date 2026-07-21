@@ -7,6 +7,7 @@
   import MediaGallery from '$lib/components/media/MediaGallery.svelte';
   import MediaComposer, { type MediaComposerFile } from '$lib/components/media/MediaComposer.svelte';
   import MessageContextMenu from './MessageContextMenu.svelte';
+  import MessageInfoSheet from './MessageInfoSheet.svelte';
   import ReactionPicker from './ReactionPicker.svelte';
   import InputBar from './InputBar.svelte';
   import ReplyPreview from './ReplyPreview.svelte';
@@ -35,6 +36,8 @@
   let isMuted = $state(false);
   let contextMenuMsg: Message | null = $state(null);
   let showContextMenu = $state(false);
+  let showInfoSheet = $state(false);
+  let infoSheetMsg: Message | null = $state(null);
   let contextMenuX = $state(0);
   let contextMenuY = $state(0);
   let lightboxImages = $state<Array<{url: string; caption?: string}>>([]);
@@ -1316,8 +1319,19 @@
         onStar={handleStarMessage}
         onEdit={handleEditMessage}
         onReact={(m) => { showContextMenu = false; contextMenuMsg = null; handleTapReaction(m); }}
+        onInfo={(m) => { infoSheetMsg = m; showInfoSheet = true; }}
       />
     </div>
+  {/if}
+
+  <!-- Message Info Sheet -->
+  {#if infoSheetMsg}
+    <MessageInfoSheet
+      open={showInfoSheet}
+      onClose={() => { showInfoSheet = false; infoSheetMsg = null; }}
+      msg={infoSheetMsg}
+      isOwn={infoSheetMsg.sid === authStore.user?.id}
+    />
   {/if}
 
   <!-- Reaction Picker (portaled to body) -->

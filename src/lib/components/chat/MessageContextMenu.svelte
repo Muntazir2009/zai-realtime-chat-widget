@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Message } from '$lib/types/index';
-  import { Reply, Copy, Trash2, Pin, Star, Pencil, SmilePlus } from 'lucide-svelte';
+  import { Reply, Copy, Trash2, Pin, Star, Pencil, SmilePlus, Info } from 'lucide-svelte';
 
   interface Props {
     open: boolean;
@@ -18,11 +18,12 @@
     onStar?: (msg: Message) => void;
     onEdit?: (msg: Message) => void;
     onReact?: (msg: Message) => void;
+    onInfo?: (msg: Message) => void;
   }
 
   let {
     open, onClose, msg, isOwn, isPinned = false, isStarred = false, x = 0, y = 0,
-    onReply, onCopy, onDelete, onPin, onStar, onEdit, onReact,
+    onReply, onCopy, onDelete, onPin, onStar, onEdit, onReact, onInfo,
   }: Props = $props();
 
   let menuEl = $state<HTMLDivElement | null>(null);
@@ -86,6 +87,7 @@
   function handleStar() { if (!msg) return; onStar?.(msg); onClose(); }
   function handleEdit() { if (!msg) return; onEdit?.(msg); onClose(); }
   function handleReact() { if (!msg) return; onReact?.(msg); onClose(); }
+  function handleInfo() { if (!msg) return; onInfo?.(msg); onClose(); }
 </script>
 
 {#if open}
@@ -155,6 +157,13 @@
     <button class="ctx-item" onclick={handleReact} role="menuitem">
       <SmilePlus size={16} />
       <span>React</span>
+    </button>
+
+    <div class="ctx-divider"></div>
+
+    <button class="ctx-item" onclick={handleInfo} role="menuitem">
+      <Info size={16} />
+      <span>Info</span>
     </button>
 
     <div class="ctx-divider"></div>
