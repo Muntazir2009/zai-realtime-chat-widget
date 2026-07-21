@@ -7,7 +7,7 @@
     Sparkles, LayoutGrid, Type,
     Camera, Pencil, X,
     // New icons for privacy & customisation
-    EyeOff, Zap, Link2, Image, Play, PlayCircle, Users, ArrowUpDown, Sparkles as SparkleIcon, Ghost, Timer, Gauge, Layers, Volume2
+    EyeOff, Zap, Link2, Image, Play, PlayCircle, Users, ArrowUpDown, Sparkles as SparkleIcon, Ghost, Timer, Gauge, Layers, Volume2, Globe
   } from 'lucide-svelte';
   import { themeManager } from '$lib/managers/ThemeManager.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
@@ -701,6 +701,64 @@
         <div class="privacy-notice">
           <Shield size={11} style="color: var(--text-tertiary); flex-shrink: 0; margin-top: 1px;" />
           <span>These settings only affect what others see about you. You can always see others' status regardless of your own settings.</span>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════
+         TIME & DATE
+         ════════════════════════════════ -->
+    <section class="settings-section" style="--delay: 70ms;">
+      <span class="section-label">Time & Date</span>
+      <div class="glass card">
+
+        <!-- 24-Hour Format -->
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="toggle-icon" style="background: color-mix(in srgb, #8b5cf6 12%, transparent);">
+              <Globe size={15} style="color: #8b5cf6;" />
+            </div>
+            <div>
+              <p class="toggle-title">24-Hour Time</p>
+              <p class="toggle-desc">Use 24h format (14:30) instead of 12h (2:30 PM)</p>
+            </div>
+          </div>
+          <button
+            class="toggle-track"
+            class:toggle-on={prefsStore.use24HourFormat}
+            onclick={() => prefsStore.setUse24HourFormat(!prefsStore.use24HourFormat)}
+            role="switch"
+            aria-checked={prefsStore.use24HourFormat}
+            aria-label="Toggle 24-hour time format"
+          >
+            <div class="toggle-thumb"></div>
+          </button>
+        </div>
+
+        <div class="toggle-divider"></div>
+
+        <!-- Show Absolute Last Seen -->
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="toggle-icon" style="background: color-mix(in srgb, #f59e0b 12%, transparent);">
+              <Clock size={15} style="color: #f59e0b;" />
+            </div>
+            <div>
+              <p class="toggle-title">Absolute Last Seen</p>
+              <p class="toggle-desc">Show exact time instead of "5 min ago"</p>
+            </div>
+          </div>
+          <button
+            class="toggle-track"
+            class:toggle-on={prefsStore.showAbsoluteLastSeen}
+            onclick={() => prefsStore.setShowAbsoluteLastSeen(!prefsStore.showAbsoluteLastSeen)}
+            role="switch"
+            aria-checked={prefsStore.showAbsoluteLastSeen}
+            aria-label="Toggle absolute last seen time"
+          >
+            <div class="toggle-thumb"></div>
+          </button>
         </div>
 
       </div>

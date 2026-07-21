@@ -341,8 +341,9 @@
   const timeStr = $derived.by(() => {
     if (prefsStore.timestampFormat === 'none') return '';
     const d = new Date(msg.ts);
+    const hour12 = !prefsStore.use24HourFormat;
     if (prefsStore.timestampFormat === 'absolute') {
-      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12 });
     }
     // relative
     const now = Date.now();
@@ -350,7 +351,7 @@
     if (diff < 60_000) return 'Just now';
     if (diff < 3600_000) return `${Math.floor(diff / 60_000)}m ago`;
     if (diff < 86400_000) return `${Math.floor(diff / 3600_000)}h ago`;
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12 });
   });
 
   // Compute delivery/read status for own messages

@@ -3,6 +3,7 @@
   import type { Message } from '$lib/types/index';
   import { chatStore } from '$lib/stores/chat.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
+  import { prefsStore } from '$lib/stores/prefs.svelte';
 
   interface Props {
     open: boolean;
@@ -24,6 +25,7 @@
   function formatFullDate(ts: number): string {
     void tick;
     const d = new Date(ts);
+    const hour12 = !prefsStore.use24HourFormat;
     return d.toLocaleString([], {
       weekday: 'long',
       year: 'numeric',
@@ -32,6 +34,7 @@
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
+      hour12,
     });
   }
 

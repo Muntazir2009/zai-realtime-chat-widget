@@ -37,6 +37,8 @@ interface Prefs {
   chatSortOrder: ChatSortOrder;
   showAvatarsInChat: boolean;
   showEasterEggs: boolean;
+  use24HourFormat: boolean;
+  showAbsoluteLastSeen: boolean;
 }
 
 const DEFAULT_PREFS: Prefs = {
@@ -57,6 +59,8 @@ const DEFAULT_PREFS: Prefs = {
   chatSortOrder: 'recent',
   showAvatarsInChat: true,
   showEasterEggs: true,
+  use24HourFormat: false,
+  showAbsoluteLastSeen: false,
 };
 
 function readPrefs(): Prefs {
@@ -97,6 +101,9 @@ class PrefsStore {
   chatSortOrder = $state(readPrefs().chatSortOrder);
   showAvatarsInChat = $state(readPrefs().showAvatarsInChat);
   showEasterEggs = $state(readPrefs().showEasterEggs);
+  // Time
+  use24HourFormat = $state(readPrefs().use24HourFormat);
+  showAbsoluteLastSeen = $state(readPrefs().showAbsoluteLastSeen);
 
   constructor() {
     if (typeof document !== 'undefined') {
@@ -127,6 +134,8 @@ class PrefsStore {
       chatSortOrder: this.chatSortOrder,
       showAvatarsInChat: this.showAvatarsInChat,
       showEasterEggs: this.showEasterEggs,
+      use24HourFormat: this.use24HourFormat,
+      showAbsoluteLastSeen: this.showAbsoluteLastSeen,
     });
   }
 
@@ -180,6 +189,10 @@ class PrefsStore {
   setSendReadReceipts(val: boolean): void { this.sendReadReceipts = val; this.persist(); }
   setSendTypingIndicators(val: boolean): void { this.sendTypingIndicators = val; this.persist(); }
   setNotificationSounds(val: boolean): void { this.notificationSounds = val; this.persist(); }
+
+  // Time setters
+  setUse24HourFormat(val: boolean): void { this.use24HourFormat = val; this.persist(); }
+  setShowAbsoluteLastSeen(val: boolean): void { this.showAbsoluteLastSeen = val; this.persist(); }
 
   // Appearance setters
   setEnterSend(val: boolean): void { this.enterSend = val; this.persist(); }

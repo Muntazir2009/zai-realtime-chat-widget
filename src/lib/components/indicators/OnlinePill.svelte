@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { formatDistanceToNow } from 'date-fns';
+  import { prefsStore } from '$lib/stores/prefs.svelte';
 
   interface Props {
     status: 'online' | 'offline' | 'away';
@@ -15,37 +15,57 @@
     return () => clearInterval(t);
   });
 
-  function formatLastSeen(ts: number): string {
+  function formatTimeOnly(ts: number): string {
+    const d = new Date(ts);
+    const hour12 = !prefsStore.use24HourFormat;
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12 });
+  }
+
+  function formatFullDateTime(ts: number): string {
+    const d = new Date(ts);
+    const hour12 = !prefsStore.use24HourFormat;
+    const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12 });
+    const now = new Date();
+    const isToday = d.toDateString() === now.toDateString();
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const isYesterday = d.toDateString() === yesterday.toDateString();
+
+    if (isToday) return `Today, ${timeStr}`;
+    if (isYesterday) return `Yesterday, ${timeStr}`;
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + `, ${timeStr}`;
+  }
+
+  function formatRelativeLastSeen(ts: number): string {
     void tick; // track tick so derived re-evaluates
     const now = Date.now();
     const diffMs = now - ts;
     const diffMin = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMin / 60);
-    const diffDays = Math.floor(diffHours / 24);
 
     if (diffMin < 1) return 'just now';
-    if (diffMin < 60) return `${diffMin} min ago`;
+    if (diffMin < 60) return `${diffMin}m ago`;
 
-    const d = new Date(ts);
-    let hours = d.getHours();
-    const minutes = d.getMinutes().toString().padStart(2, '0');
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    hours = hours % 12 || 12;
-    const timeStr = `${hours}:${minutes} ${ampm}`;
+    const diffHours = Math.floor(diffMin / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
 
-    if (diffHours < 24) return `today at ${timeStr}`;
-    if (diffHours < 48) return `yesterday at ${timeStr}`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) return `${diffDays}d ago`;
 
-    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    const month = months[d.getMonth()];
-    const day = d.getDate();
-    return `${month} ${day} at ${timeStr}`;
+    // Fall back to date for older
+    return new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric' });
   }
 
   const label = $derived.by(() => {
     if (status === 'online') return 'Online';
-    if (lastSeen > 0) return `Last seen ${formatLastSeen(lastSeen)}`;
-    return 'Offline';
+    if (lastSeen <= 0) return 'Offline';
+
+    if (prefsStore.showAbsoluteLastSeen) {
+      // Absolute mode: show the full date+time, no "Last seen" prefix
+      return formatFullDateTime(lastSeen);
+    }
+
+    // Relative mode: show "Last seen X ago" (clean, single time expression)
+    return `Last seen ${formatRelativeLastSeen(lastSeen)}`;
   });
 
   const dotColor = $derived(

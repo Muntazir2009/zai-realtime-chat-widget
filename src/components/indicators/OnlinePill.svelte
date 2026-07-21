@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { formatDistanceToNow } from 'date-fns';
+  import { prefsStore } from '$lib/stores/prefs.svelte';
 
   interface Props {
     status: 'online' | 'offline' | 'away';
@@ -8,7 +8,7 @@
 
   let { status, lastSeen }: Props = $props();
 
-  // Tick every 30s so "Last seen X ago" stays current
+  // Tick every 30s so time stays current
   let tick = $state(0);
   $effect(() => {
     const t = setInterval(() => { tick++; }, 30_000);
@@ -36,11 +36,31 @@
     },
   }[status]);
 
-  const relativeTime = $derived.by(() => {
-    void tick; // re-evaluate on tick
-    return status === 'offline'
-      ? `Last seen ${formatDistanceToNow(lastSeen, { addSuffix: true })}`
-      : '';
+  const displayText = $derived.by(() => {
+    void tick;
+    if (status !== 'offline' || lastSeen <= 0) return config.label;
+
+    const d = new Date(lastSeen);
+    const hour12 = !prefsStore.use24HourFormat;
+    const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12 });
+
+    if (prefsStore.showAbsoluteLastSeen) {
+      const now = new Date();
+      const isToday = d.toDateString() === now.toDateString();
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1);
+      if (isToday) return `Today, ${timeStr}`;
+      if (d.toDateString() === yesterday.toDateString()) return `Yesterday, ${timeStr}`;
+      return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + `, ${timeStr}`;
+    }
+
+    // Relative
+    const diffMin = Math.floor((Date.now() - lastSeen) / 60000);
+    if (diffMin < 1) return 'Last seen just now';
+    if (diffMin < 60) return `Last seen ${diffMin}m ago`;
+    const diffHours = Math.floor(diffMin / 60);
+    if (diffHours < 24) return `Last seen ${diffHours}h ago`;
+    return `Last seen ${Math.floor(diffHours / 24)}d ago`;
   });
 </script>
 
@@ -53,9 +73,5 @@
     class="inline-block w-[6px] h-[6px] rounded-full flex-shrink-0"
     style="background: {config.text};"
   ></span>
-  {#if status === 'offline'}
-    {relativeTime}
-  {:else}
-    {config.label}
-  {/if}
+  {displayText}
 </span>

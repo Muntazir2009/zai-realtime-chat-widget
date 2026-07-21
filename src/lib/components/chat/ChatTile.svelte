@@ -4,6 +4,7 @@
   import { Camera, Trash2, X } from 'lucide-svelte';
   import { chatStore } from '$lib/stores/chat.svelte';
   import { uiStore } from '$lib/stores/ui.svelte';
+  import { prefsStore } from '$lib/stores/prefs.svelte';
   import { draftStore } from '$lib/stores/draft.svelte';
 
   interface Props {
@@ -43,9 +44,10 @@
     const diff = Date.now() - ts;
     if (diff < 60_000) return 'Now';
     const d = new Date(ts);
+    const hour12 = !prefsStore.use24HourFormat;
     const now = new Date();
     const isToday = d.toDateString() === now.toDateString();
-    if (isToday) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (isToday) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12 });
     const yesterday = new Date(now);
     yesterday.setDate(yesterday.getDate() - 1);
     if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
