@@ -1682,3 +1682,35 @@ Stage Summary:
 - Clipboard copy fixed with fallback for non-HTTPS contexts
 - Context menu close-on-tap-outside works via document-level mousedown/touchend capture
 - Key insight: old `pointerdown` capture with `e.preventDefault()` was suppressing click events on mobile
+
+---
+Task ID: 6
+Agent: Main Agent
+Task: Implement iOS-style back gesture and browser back button support
+
+Work Log:
+- Created `src/lib/actions/back-gesture.ts` — Svelte action for swipe-from-left-edge to go back
+  - Only activates when touch starts within 25px of the left screen edge
+  - Follows the finger with dampened translateX (0.85x multiplier for weighted feel)
+  - Visual feedback: left-edge box-shadow grows with progress, dimming overlay
+  - Completes if drag ≥ 30% viewport width OR release velocity ≥ 0.3 px/ms
+  - Snaps back with spring animation (280ms cubic-bezier) if cancelled
+  - Exit animation: 240ms ease-out slide-off-screen + opacity fade
+  - Mouse fallback for desktop testing (mousedown/mousemove/mouseup)
+  - Ignores gesture when modals, bottom sheets, context menus, media gallery, or search are open
+- Updated `src/routes/+page.svelte`:
+  - Applied `use:backGesture` to conversation container div
+  - Added `data-in-conversation` attribute for CSS targeting and popstate detection
+  - Pushes `history.pushState` when entering conversation for browser back button
+  - popstate handler in the action calls `onBack()` when browser back is pressed
+  - Added `skipConvEnterAnim` state (currently unused but available for future skip-on-exit)
+- Updated `src/app.css`:
+  - `[data-in-conversation]` styles: overflow hidden, will-change, backface-visibility
+  - Subtle primary-color left-edge glow hint on hover (decorative)
+  - Reduced-motion override: gesture transitions become instant (0.01ms)
+
+Stage Summary:
+- 3 files modified, 396 insertions, pushed as 1d1865c2
+- Back gesture: swipe from left 25px edge → right → releases to go back to chat list
+- Browser back button now works when in a conversation (pushState on enter, popstate listener)
+- No new svelte-check errors (30 pre-existing errors in 33 files unchanged)
