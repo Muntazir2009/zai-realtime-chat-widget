@@ -6,6 +6,7 @@
   import { uiStore } from '$lib/stores/ui.svelte';
   import { presenceManager } from '$lib/managers/PresenceManager.svelte';
   import { backGesture } from '$lib/actions/back-gesture';
+  import { exitGesture } from '$lib/actions/exit-gesture';
   import ConnectionStatus from '$lib/components/indicators/ConnectionStatus.svelte';
 
   // Svelte action: after a CSS animation finishes, clear the applied
@@ -40,6 +41,7 @@
   let _prevTab: string | null = null;
   let viewKey = $state(0);
   let skipConvEnterAnim = $state(false);
+  let showExitOverlay = $state(false);
 
   onMount(async () => {
     if (!browser) return;
@@ -156,7 +158,14 @@
         </div>
       {:else}
         {#key tabKey}
-          <div class="animate-tab-enter-smooth h-full">
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div
+            class="animate-tab-enter-smooth h-full"
+            use:exitGesture={{
+              onExit: () => { showExitOverlay = true; },
+              edgeZone: 25,
+            }}
+          >
             {#if activeTab === 'dms' && ChatList}
               <ChatList />
             {:else if activeTab === 'global' && GlobalView}
@@ -173,6 +182,24 @@
       <BottomNavBar />
     {/if}
   </div>
+
+  <!-- Exit overlay: shown after swipe-from-right-edge exit gesture -->
+  {#if showExitOverlay}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="fixed inset-0 z-[9999] flex items-center justify-center"
+      style="background: var(--bg-page); animation: fadeIn 200ms ease forwards;"
+      onpointerdown={() => { showExitOverlay = false; }}
+    >
+      <div class="text-center" style="animation: scaleIn 200ms cubic-bezier(0.22, 1, 0.36, 1) forwards;">
+        <div class="w-16 h-16 rounded-3xl mx-auto mb-4 flex items-center justify-center" style="background: var(--glass-bg); border: 1px solid var(--border-subtle); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+        </div>
+        <p style="color: var(--text-secondary); font-size: 15px; font-weight: 500;">You're all caught up</p>
+        <p style="color: var(--text-tertiary); font-size: 13px; margin-top: 4px;">Tap anywhere to go back</p>
+      </div>
+    </div>
+  {/if}
 {/if}
 
 <ConnectionStatus />

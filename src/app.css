@@ -787,8 +787,8 @@ select {
 
 /* Refinement: smoother input focus */
 .glass-input:focus {
-  box-shadow: 0 0 0 2px var(--color-primary), 0 2px 8px rgba(5, 150, 105, 0.15);
-  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.06);
+  border-color: rgba(0, 0, 0, 0.12) !important;
 }
 
 /* Subtle shine animation for interactive elements */
@@ -917,10 +917,10 @@ input, textarea, [contenteditable="true"] {
 
 .glass-input-premium:focus {
   box-shadow:
-    0 0 0 3px rgba(5, 150, 105, 0.15),
-    0 0 12px rgba(5, 150, 105, 0.1),
-    inset 0 0 0 1px rgba(5, 150, 105, 0.2);
-  border-color: rgba(5, 150, 105, 0.5);
+    0 0 0 3px rgba(0, 0, 0, 0.06),
+    0 0 12px rgba(0, 0, 0, 0.04),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+  border-color: rgba(0, 0, 0, 0.15);
   background: var(--bg-surface);
   outline: none;
 }
@@ -1165,12 +1165,12 @@ input, textarea, [contenteditable="true"] {
 }
 
 .input-bar-glass:focus-within {
-  border-color: rgba(5, 150, 105, 0.4);
+  border-color: rgba(0, 0, 0, 0.12);
   box-shadow:
     0 -2px 12px rgba(0, 0, 0, 0.05),
     0 -1px 4px rgba(0, 0, 0, 0.03),
-    0 0 0 3px rgba(5, 150, 105, 0.1),
-    0 0 16px rgba(5, 150, 105, 0.08),
+    0 0 0 3px rgba(0, 0, 0, 0.04),
+    0 0 16px rgba(0, 0, 0, 0.03),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
@@ -1344,10 +1344,10 @@ input, textarea, [contenteditable="true"] {
 
 .dark .glass-input-premium:focus {
   box-shadow:
-    0 0 0 3px rgba(16, 185, 129, 0.18),
-    0 0 12px rgba(16, 185, 129, 0.12),
-    inset 0 0 0 1px rgba(16, 185, 129, 0.25);
-  border-color: rgba(16, 185, 129, 0.5);
+    0 0 0 3px rgba(255, 255, 255, 0.06),
+    0 0 12px rgba(255, 255, 255, 0.03),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
 .dark .elevation-1 {
@@ -1412,8 +1412,8 @@ input, textarea, [contenteditable="true"] {
   box-shadow:
     0 -2px 12px rgba(0, 0, 0, 0.2),
     0 -1px 4px rgba(0, 0, 0, 0.15),
-    0 0 0 3px rgba(16, 185, 129, 0.12),
-    0 0 16px rgba(16, 185, 129, 0.08),
+    0 0 0 3px rgba(255, 255, 255, 0.06),
+    0 0 16px rgba(255, 255, 255, 0.03),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
@@ -1449,9 +1449,9 @@ input, textarea, [contenteditable="true"] {
 
 .amoled .glass-input-premium:focus {
   box-shadow:
-    0 0 0 2px rgba(16, 185, 129, 0.2),
-    0 0 8px rgba(16, 185, 129, 0.08);
-  border-color: rgba(16, 185, 129, 0.4);
+    0 0 0 2px rgba(255, 255, 255, 0.06),
+    0 0 8px rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 .amoled .elevation-1 {
@@ -1493,8 +1493,8 @@ input, textarea, [contenteditable="true"] {
 .amoled .input-bar-glass:focus-within {
   box-shadow:
     0 -1px 8px rgba(0, 0, 0, 0.3),
-    0 0 0 2px rgba(16, 185, 129, 0.15);
-  border-color: rgba(16, 185, 129, 0.3);
+    0 0 0 2px rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 .amoled .header-glass {
@@ -1985,26 +1985,7 @@ input, textarea, [contenteditable="true"] {
   -webkit-backface-visibility: hidden;
 }
 
-/* Haptic-like visual cue: a subtle left-edge glow that appears
-   when the finger enters the edge zone (purely decorative) */
-[data-in-conversation]::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: var(--color-primary);
-  opacity: 0;
-  border-radius: 0 2px 2px 0;
-  z-index: 100;
-  pointer-events: none;
-  transition: opacity 200ms ease;
-}
-
-[data-in-conversation]:hover::before {
-  opacity: 0.3;
-}
+/* Edge glow removed — was a green left-border hint on [data-in-conversation] */
 
 /* Override reduced-motion for back gesture (still allow it,
    but make it instant rather than disabling entirely) */

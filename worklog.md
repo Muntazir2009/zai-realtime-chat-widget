@@ -1738,3 +1738,31 @@ Stage Summary:
 - `Conversation.svelte` formatPinnedTime now includes actual time with 12h/24h respect
 - Settings toggles in SettingsView were already wired to prefsStore — the only missing piece was the Conversation header consuming those prefs
 - Header displays: "Last seen today at 3:45 PM" (absolute) or "Last seen 5m ago" (relative)
+---
+Task ID: ui-fixes-green-glow-exit-gesture
+Agent: Main Agent
+Task: Fix green line/glow issues + add exit gesture on nav tabs
+
+Work Log:
+- Found green line on left side of chat: `[data-in-conversation]::before` pseudo-element in app.css (line 1990-2007) — was a decorative edge hint for the back gesture that showed `var(--color-primary)` (#059669 emerald) with opacity 0.3 on hover. Removed entirely.
+- Found green glow on input bar focus: multiple CSS rules using `var(--color-primary)` / `rgba(5, 150, 105, ...)` for focus box-shadow and border-color:
+  - `.glass-input:focus` (app.css line 789-792)
+  - `.input-bar-glass:focus-within` (app.css line 1167-1175)
+  - `.glass-input-premium:focus` + dark/amoled/crimson-dark variants (4 locations)
+  - `.input-row-focused` in InputBar.svelte (line 462-474)
+  - Changed ALL to use neutral black/white tones with very subtle opacity — no more green tint on focus
+- Created `/home/z/my-project/src/lib/actions/exit-gesture.ts` — new Svelte action for swipe-from-RIGHT-edge to exit. Mirrors backGesture but:
+  - Detects touch start within 25px of RIGHT edge (not left)
+  - Swipes content LEFT (translateX negative)
+  - On completion: slides entire tab view off-screen with dimming overlay
+  - Calls onExit callback which shows a "You're all caught up" overlay
+- Wired exit gesture into `+page.svelte` on the tab content container (only when NOT in conversation)
+- Added exit overlay UI: full-screen with chat icon, "You're all caught up", "Tap anywhere to go back"
+- Dev server starts clean with no errors
+
+Stage Summary:
+- Green left-edge line removed from conversation view
+- All green focus glows on input bar replaced with neutral/subtle shadows
+- Exit gesture (swipe from right edge) added to all nav tab views (DMs, Global, Settings)
+- Exit gesture does NOT trigger inside open conversations
+- Exit shows a friendly "You're all caught up" overlay, dismissible by tapping

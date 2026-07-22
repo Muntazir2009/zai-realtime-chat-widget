@@ -461,14 +461,14 @@
 
   .input-row-focused {
     background: color-mix(in srgb, var(--bg-surface) 90%, transparent);
-    border-color: color-mix(in srgb, var(--color-primary) 25%, transparent);
+    border-color: color-mix(in srgb, black 15%, transparent);
     border-bottom-color: color-mix(in srgb, black 12%, transparent);
     border-right-color: color-mix(in srgb, black 6%, transparent);
     box-shadow:
       inset 0 1px 0 color-mix(in srgb, white 22%, transparent),
       inset 0 -1px 0 color-mix(in srgb, black 5%, transparent),
       0 -1px 0 color-mix(in srgb, white 8%, transparent),
-      0 0 0 3px color-mix(in srgb, var(--color-primary) 10%, transparent),
+      0 0 0 3px color-mix(in srgb, black 5%, transparent),
       0 4px 12px color-mix(in srgb, black 7%, transparent),
       0 8px 28px color-mix(in srgb, black 4%, transparent);
   }
