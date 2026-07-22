@@ -217,6 +217,14 @@ class AppLockStore {
     await this.setSecret(newSecret);
   }
 
+  /** Change secret only after verifying the old one */
+  async changeSecretWithVerification(oldSecret: string, newSecret: string): Promise<boolean> {
+    const valid = await this.verifySecret(oldSecret);
+    if (!valid) return false;
+    await this.setSecret(newSecret);
+    return true;
+  }
+
   private persistSettings(): void {
     const uid = userId();
     if (!uid) return;

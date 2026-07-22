@@ -1821,3 +1821,62 @@ Stage Summary:
 - Premium lock screen with phone-style keypad, animations, haptics
 - Settings UI with all controls: enable, type, change, auto-lock, startup, lock now
 - No existing features modified — only additions
+---
+Task ID: App Lock UI Overhaul + Security Enhancements
+Agent: Main Agent
+Task: Redesign App Lock settings UI, add old password verification, add unlock animation
+
+Work Log:
+- Updated app-lock.svelte.ts: Added `changeSecretWithVerification(oldSecret, newSecret)` method
+- Updated SettingsView.svelte script section:
+  - Added lockOldFieldInput, lockSetupError, lockSetupShaking, showLockSecurityPanel state vars
+  - Changed lockSetupStep type to 'verify' | 'input' | 'confirm'
+  - Added lockSetupVerifyOld() function that verifies current PIN/password before allowing changes
+  - Added triggerLockShake() for error animation
+  - Added lockTypeLabel and lockTypeMaxLength derived values
+  - Updated openLockSetup to require verification step when mode='change'
+- Redesigned App Lock template section (Security Shield):
+  - Replaced old "App Lock" section with new "Security" section
+  - Added security-header with animated shield icon (checkmark when locked)
+  - Status text showing lock type protection
+  - Collapsible "Security Settings" panel
+  - Security chips for lock type and auto-lock options
+  - Security action rows for Change PIN/Password and Lock Now
+  - Lock on Startup toggle inside security panel
+- Redesigned lock setup dialog:
+  - Step indicator dots (verify → input → confirm)
+  - Dynamic icon changes (question mark for verify, lock for input/confirm)
+  - Step-appropriate titles and descriptions
+  - Error message display with fade animation
+  - Shake animation on incorrect verification
+  - maxlength uses lockTypeMaxLength derived
+- Added comprehensive CSS:
+  - .security-header, .security-shield, .security-shield-locked with glow effect
+  - .security-panel-toggle, .security-panel with fadeSlideIn animation
+  - .security-row, .security-row-header, .security-row-icon, .security-row-label
+  - .security-chips, .security-chip, .security-chip-active, .security-chip-sm
+  - .security-action-row, .security-row-divider
+  - .lock-dialog-card, .lock-dialog-shake animation
+  - .lock-step-dots, .lock-step-dot, .lock-step-dot-active, .lock-step-dot-done
+  - .lock-error-text with fade animation
+  - @keyframes lockDialogShake, lockErrorFade, checkDraw, fadeSlideIn
+- Rewrote LockScreen.svelte with premium unlock animation:
+  - New unlockPhase state: 'idle' → 'ripple' → 'dissolve'
+  - Phase 1: Success feedback (icon → checkmark, green glow, haptic)
+  - Phase 2: Radial green ripple expanding from center (unlockRippleExpand)
+  - Phase 3: Content slides up and fades (contentUnlock)
+  - Phase 4: Overlay dissolves (lockDissolve)
+  - PIN dots fade up on unlock (pin-dots-unlock)
+  - Password field fades up (password-wrap-unlock)
+  - Keypad fades down (keypad-unlock)
+  - Added .unlock-ripple element with radial expansion animation
+  - Fixed transition:scale to in:scale/out:scale for Svelte 5 compatibility
+  - Added svelte-ignore for TypeScript scale transition check
+
+Stage Summary:
+- App Lock settings now has a polished security shield UI with collapsible panel
+- Changing PIN/password requires verifying current secret first (security gate)
+- Lock setup dialog has 3-step flow with progress dots for change mode
+- LockScreen has cinematic unlock animation (ripple + content slide + dissolve)
+- All svelte-check errors in modified files are resolved (only warnings remain)
+- No new build-breaking errors introduced

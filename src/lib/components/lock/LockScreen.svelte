@@ -2,6 +2,7 @@
   // ============================================================
   // LockScreen — Flagship-quality lock screen overlay
   // Blocks all interaction until unlocked. Supports PIN 4/6 and password.
+  // Premium unlock animation: ripple pulse + scale + slide dissolve.
   // ============================================================
 
   import { appLockStore, type LockType } from '$lib/stores/app-lock.svelte';
@@ -11,6 +12,7 @@
   let shakeAnim = $state(false);
   let successAnim = $state(false);
   let pressedKey = $state<string | null>(null);
+  let unlockPhase: 'idle' | 'ripple' | 'dissolve' = $state('idle');
 
   const lockType = $derived(appLockStore.settings.lockType);
   const maxLength = $derived(lockType === 'pin4' ? 4 : lockType === 'pin6' ? 6 : 32);
@@ -33,7 +35,7 @@
   let dotJustFilled = $state(-1);
 
   function pressKey(key: string) {
-    if (isVerifying || successAnim) return;
+    if (isVerifying || successAnim || unlockPhase !== 'idle') return;
     if (pin.length >= maxLength) return;
 
     pin += key;
@@ -58,7 +60,7 @@
   }
 
   function backspace() {
-    if (isVerifying || successAnim) return;
+    if (isVerifying || successAnim || unlockPhase !== 'idle') return;
     if (pin.length === 0) return;
     pin = pin.slice(0, -1);
 
@@ -74,15 +76,29 @@
     try {
       const valid = await appLockStore.unlock(pin);
       if (valid) {
+        // Phase 1: Success micro-feedback (icon → checkmark, green pulse)
         successAnim = true;
         if (typeof navigator !== 'undefined' && navigator.vibrate) {
           navigator.vibrate([20, 50, 20]);
         }
+
+        // Phase 2: After brief pause, start unlock ripple
+        setTimeout(() => {
+          unlockPhase = 'ripple';
+        }, 350);
+
+        // Phase 3: Dissolve overlay (after ripple reaches edges)
+        setTimeout(() => {
+          unlockPhase = 'dissolve';
+        }, 650);
+
+        // Phase 4: Cleanup
         setTimeout(() => {
           pin = '';
           isVerifying = false;
           successAnim = false;
-        }, 600);
+          unlockPhase = 'idle';
+        }, 1000);
       } else {
         shakeAnim = true;
         if (typeof navigator !== 'undefined' && navigator.vibrate) {
@@ -105,7 +121,7 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (successAnim) return;
+    if (successAnim || unlockPhase !== 'idle') return;
 
     if (e.key >= '0' && e.key <= '9') {
       pressKey(e.key);
@@ -121,12 +137,18 @@
 
 <div
   class="lock-screen-overlay"
-  class:lock-success={successAnim}
+  class:lock-success-ripple={unlockPhase === 'ripple'}
+  class:lock-success-dissolve={unlockPhase === 'dissolve'}
 >
-  <div class="lock-screen-content" class:lock-shake={shakeAnim}>
+  <!-- Unlock ripple effect -->
+  {#if unlockPhase === 'ripple' || unlockPhase === 'dissolve'}
+    <div class="unlock-ripple"></div>
+  {/if}
+
+  <div class="lock-screen-content" class:lock-shake={shakeAnim} class:lock-content-unlock={unlockPhase !== 'idle'}>
     <!-- Lock icon -->
     <div class="lock-icon-wrap">
-      <div class="lock-icon">
+      <div class="lock-icon" class:lock-icon-success={successAnim}>
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           {#if successAnim}
             <path d="M20 6L9 17l-5-5" style="stroke-dasharray: 30; stroke-dashoffset: 0; animation: checkDraw 0.4s ease forwards;" />
@@ -139,7 +161,7 @@
     </div>
 
     <!-- Title -->
-    <h2 class="lock-title">
+    <h2 class="lock-title" class:lock-title-success={successAnim}>
       {#if successAnim}
         Unlocked
       {:else}
@@ -153,13 +175,15 @@
 
     <!-- PIN dots (for PIN modes) -->
     {#if !isPassword && dotCount > 0}
-      <div class="pin-dots">
+      <div class="pin-dots" class:pin-dots-unlock={successAnim}>
         {#each filledDots as filled, i}
+          <!-- svelte-ignore ts-2351 -->
           <div
             class="pin-dot"
             class:pin-dot-filled={filled}
             class:pin-dot-just={dotJustFilled === i}
-            transition:scale={{ duration: 150, start: filled ? 0.3 : 1 }}
+            in:scale={{ duration: 150, start: 0.3 }}
+            out:scale={{ duration: 150 }}
           ></div>
         {/each}
       </div>
@@ -167,14 +191,14 @@
 
     <!-- Password input (for password mode) -->
     {#if isPassword}
-      <div class="password-field-wrap">
+      <div class="password-field-wrap" class:password-wrap-unlock={successAnim}>
         <input
           type="password"
           class="password-field"
           placeholder="Enter password"
           bind:value={pin}
           maxlength={maxLength}
-          disabled={isVerifying || successAnim}
+          disabled={isVerifying || successAnim || unlockPhase !== 'idle'}
           onkeydown={(e) => { if (e.key === 'Enter') submitPin(); }}
         />
         {#if pin.length > 0}
@@ -187,7 +211,7 @@
 
     <!-- Keypad (not shown for password mode) -->
     {#if !isPassword}
-      <div class="keypad">
+      <div class="keypad" class:keypad-unlock={successAnim}>
         {#each ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'] as key, i}
           {#if key === 'del'}
             <button
@@ -263,8 +287,30 @@
     overflow: hidden;
   }
 
-  .lock-success {
-    animation: lockSuccessPulse 400ms ease forwards;
+  /* ── Unlock Ripple ── */
+  .unlock-ripple {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--color-primary, #059669) 8%, var(--bg-page, #f0fdf4));
+    transform: translate(-50%, -50%);
+    animation: unlockRippleExpand 400ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── Success: Ripple Phase ── */
+  .lock-success-ripple {
+    animation: none; /* stop fade-in */
+  }
+
+  /* ── Success: Dissolve Phase ── */
+  .lock-success-dissolve {
+    animation: lockDissolve 350ms ease-out forwards;
+    pointer-events: none;
   }
 
   /* ── Content container ── */
@@ -276,10 +322,16 @@
     max-width: 360px;
     padding: 24px;
     transform: translateY(0);
+    position: relative;
+    z-index: 1;
   }
 
   .lock-shake {
     animation: lockShake 400ms ease;
+  }
+
+  .lock-content-unlock {
+    animation: contentUnlock 600ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
   }
 
   /* ── Lock icon ── */
@@ -301,13 +353,17 @@
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
-                background 300ms ease;
+                background 300ms ease,
+                border-color 300ms ease,
+                box-shadow 300ms ease;
   }
 
-  .lock-success .lock-icon {
+  .lock-icon-success {
     background: color-mix(in srgb, var(--color-primary, #059669) 15%, var(--glass-bg, white));
     border-color: color-mix(in srgb, var(--color-primary, #059669) 30%, transparent);
     transform: scale(1.05);
+    box-shadow: 0 4px 32px color-mix(in srgb, var(--color-primary, #059669) 20%, transparent);
+    color: var(--color-primary, #059669);
   }
 
   /* ── Title ── */
@@ -320,7 +376,7 @@
     transition: color 200ms ease;
   }
 
-  .lock-success .lock-title {
+  .lock-title-success {
     color: var(--color-primary, #059669);
   }
 
@@ -349,6 +405,12 @@
     margin-bottom: 28px;
     height: 20px;
     align-items: center;
+    transition: opacity 300ms ease, transform 300ms ease;
+  }
+
+  .pin-dots-unlock {
+    opacity: 0;
+    transform: translateY(-8px);
   }
 
   .pin-dot {
@@ -377,6 +439,12 @@
     width: 100%;
     max-width: 260px;
     margin-bottom: 28px;
+    transition: opacity 300ms ease, transform 300ms ease;
+  }
+
+  .password-wrap-unlock {
+    opacity: 0;
+    transform: translateY(-8px);
   }
 
   .password-field {
@@ -428,6 +496,12 @@
     width: 100%;
     max-width: 280px;
     margin-bottom: 20px;
+    transition: opacity 300ms ease, transform 300ms ease;
+  }
+
+  .keypad-unlock {
+    opacity: 0;
+    transform: translateY(12px);
   }
 
   .key-btn {
@@ -525,7 +599,53 @@
     opacity: 0.6;
   }
 
-  /* ── Animations ── */
+  /* ══════════════════════════════
+     UNLOCK ANIMATIONS
+     ══════════════════════════════ */
+
+  /* Phase 1: Green pulse behind icon (from lock-icon-success) */
+  /* Phase 2: Radial ripple from center expanding outward */
+  @keyframes unlockRippleExpand {
+    0% {
+      width: 0;
+      height: 0;
+      opacity: 1;
+    }
+    100% {
+      width: 200vmax;
+      height: 200vmax;
+      opacity: 0;
+    }
+  }
+
+  /* Phase 3: Content scales up slightly + slides out of view */
+  @keyframes contentUnlock {
+    0% {
+      transform: translateY(0) scale(1);
+      opacity: 1;
+    }
+    40% {
+      transform: translateY(-10px) scale(1.02);
+      opacity: 1;
+    }
+    100% {
+      transform: translateY(-40px) scale(0.96);
+      opacity: 0;
+    }
+  }
+
+  /* Phase 4: Overlay dissolve */
+  @keyframes lockDissolve {
+    0% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      visibility: hidden;
+    }
+  }
+
+  /* ── Base Animations ── */
   @keyframes lockFadeIn {
     from { opacity: 0; }
     to { opacity: 1; }
@@ -539,12 +659,6 @@
     40% { transform: translateX(6px); }
     50% { transform: translateX(-4px); }
     60% { transform: translateX(2px); }
-  }
-
-  @keyframes lockSuccessPulse {
-    0% { background: var(--bg-page); }
-    50% { background: color-mix(in srgb, var(--color-primary, #059669) 8%, var(--bg-page)); }
-    100% { background: var(--bg-page); opacity: 0; }
   }
 
   @keyframes checkDraw {

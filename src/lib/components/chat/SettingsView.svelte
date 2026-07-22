@@ -26,18 +26,24 @@
   let lockSetupMode: 'enable' | 'change' = $state('enable');
   let lockInputValue = $state('');
   let lockConfirmValue = $state('');
-  let lockSetupStep: 'input' | 'confirm' = $state('input');
   let lockFieldInput = $state('');
+  let lockOldFieldInput = $state('');
+  // Steps: 'verify' (enter old secret) → 'input' (new secret) → 'confirm' (re-enter new secret)
+  let lockSetupStep: 'verify' | 'input' | 'confirm' = $state('input');
+  let lockSetupError = $state('');
+  let lockSetupShaking = $state(false);
+  let showLockSecurityPanel = $state(false);
 
-  // Sync the single input field to the correct variable
+  // Sync the single input field to the correct variable based on step
   $effect(() => {
-    if (lockSetupStep === 'input') lockFieldInput = lockInputValue;
+    if (lockSetupStep === 'verify') lockFieldInput = lockOldFieldInput;
+    else if (lockSetupStep === 'input') lockFieldInput = lockInputValue;
     else lockFieldInput = lockConfirmValue;
   });
 
   const lockTypes: { type: LockType; label: string; desc: string }[] = [
-    { type: 'pin4', label: '4-digit PIN', desc: 'Quick & simple' },
-    { type: 'pin6', label: '6-digit PIN', desc: 'More secure' },
+    { type: 'pin4', label: '4-Digit PIN', desc: 'Quick & simple' },
+    { type: 'pin6', label: '6-Digit PIN', desc: 'More secure' },
     { type: 'password', label: 'Password', desc: 'Letters, numbers & symbols' },
   ];
 
@@ -50,11 +56,25 @@
     { value: 'never', label: 'Never' },
   ];
 
+  const lockTypeLabel = $derived(
+    appLockStore.settings.lockType === 'password' ? 'password' :
+    appLockStore.settings.lockType === 'pin6' ? '6-digit PIN' : '4-digit PIN'
+  );
+
+  const lockTypeMaxLength = $derived(
+    appLockStore.settings.lockType === 'pin4' ? 4 :
+    appLockStore.settings.lockType === 'pin6' ? 6 : 32
+  );
+
   function openLockSetup(mode: 'enable' | 'change') {
     lockSetupMode = mode;
     lockInputValue = '';
     lockConfirmValue = '';
-    lockSetupStep = 'input';
+    lockOldFieldInput = '';
+    lockFieldInput = '';
+    lockSetupError = '';
+    // If changing, require old secret verification first
+    lockSetupStep = mode === 'change' ? 'verify' : 'input';
     showLockSetup = true;
   }
 
@@ -62,28 +82,58 @@
     showLockSetup = false;
     lockInputValue = '';
     lockConfirmValue = '';
+    lockOldFieldInput = '';
+    lockFieldInput = '';
+    lockSetupError = '';
+  }
+
+  function triggerLockShake() {
+    lockSetupShaking = true;
+    setTimeout(() => { lockSetupShaking = false; }, 400);
+  }
+
+  async function lockSetupVerifyOld() {
+    lockOldFieldInput = lockFieldInput;
+    lockSetupError = '';
+    if (lockOldFieldInput.length === 0) return;
+
+    const valid = await appLockStore.verifySecret(lockOldFieldInput);
+    if (!valid) {
+      lockSetupError = 'Incorrect ' + lockTypeLabel + '. Try again.';
+      triggerLockShake();
+      lockOldFieldInput = '';
+      lockFieldInput = '';
+      return;
+    }
+    // Old secret verified — move to input new secret
+    lockSetupStep = 'input';
+    lockFieldInput = '';
+    lockSetupError = '';
   }
 
   function lockSetupNext() {
     lockInputValue = lockFieldInput;
     if (lockInputValue.length === 0) return;
     lockSetupStep = 'confirm';
+    lockSetupError = '';
   }
 
   async function lockSetupConfirm() {
     lockConfirmValue = lockFieldInput;
     if (lockInputValue !== lockConfirmValue) {
-      toastStore.show('PINs do not match. Try again.', 'error');
+      lockSetupError = lockTypeLabel.charAt(0).toUpperCase() + lockTypeLabel.slice(1) + 's do not match. Try again.';
+      triggerLockShake();
       lockConfirmValue = '';
+      lockFieldInput = '';
       lockSetupStep = 'input';
       return;
     }
     try {
-      await appLockStore.changeSecret(lockInputValue);
       if (lockSetupMode === 'enable') {
         await appLockStore.enableLock(lockInputValue);
         toastStore.show('App Lock enabled', 'success');
       } else {
+        await appLockStore.changeSecret(lockInputValue);
         toastStore.show('Lock changed successfully', 'success');
       }
       closeLockSetup();
@@ -859,21 +909,36 @@
     </section>
 
     <!-- ════════════════════════════════
-         APP LOCK
+         APP LOCK — Security Shield
          ════════════════════════════════ -->
     <section class="settings-section" style="--delay: 75ms;">
-      <span class="section-label">App Lock</span>
+      <span class="section-label">Security</span>
       <div class="glass card">
 
-        <!-- Enable / Disable App Lock -->
-        <div class="toggle-row">
+        <!-- Security status header -->
+        <div class="security-header">
+          <div class="security-shield" class:security-shield-locked={appLockStore.settings.enabled}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              {#if appLockStore.settings.enabled}
+                <path d="M20 6L9 17l-5-5" style="stroke-dasharray: 30; animation: checkDraw 0.5s ease forwards;" />
+              {:else}
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              {/if}
+            </svg>
+          </div>
+          <div class="security-status-text">
+            <p class="security-status-title">{appLockStore.settings.enabled ? 'App Lock Active' : 'App Lock Off'}</p>
+            <p class="security-status-sub">{appLockStore.settings.enabled ? 'Your chats are protected with ' + lockTypeLabel : 'Protect your chats with a PIN or password'}</p>
+          </div>
+        </div>
+
+        <!-- Main toggle -->
+        <div class="toggle-row" style="margin-top: 12px;">
           <div class="toggle-info">
-            <div class="toggle-icon" style="background: color-mix(in srgb, #6366f1 12%, transparent);">
-              <Lock size={15} style="color: #6366f1;" />
-            </div>
             <div>
-              <p class="toggle-title">App Lock</p>
-              <p class="toggle-desc">{appLockStore.settings.enabled ? 'Enabled — requires PIN or password to access' : 'Require PIN or password to open app'}</p>
+              <p class="toggle-title">Enable App Lock</p>
+              <p class="toggle-desc">{appLockStore.settings.enabled ? 'Lock is active — disable to remove protection' : 'Require ' + lockTypeLabel + ' to open the app'}</p>
             </div>
           </div>
           <button
@@ -888,21 +953,35 @@
           </button>
         </div>
 
-        <!-- Lock type (only when enabled) -->
+        <!-- Security settings (only when enabled) -->
         {#if appLockStore.settings.enabled}
-          <div class="toggle-divider"></div>
-          <div class="toggle-row" style="cursor: default;">
-            <div class="toggle-info">
-              <div class="toggle-icon" style="background: color-mix(in srgb, #8b5cf6 10%, transparent);">
-                <Shield size={15} style="color: #8b5cf6;" />
-              </div>
-              <div style="width: 100%;">
-                <p class="toggle-title">Lock Type</p>
-                <div class="btn-group" style="margin-top: 8px;">
+          <button
+            class="security-panel-toggle"
+            onclick={() => showLockSecurityPanel = !showLockSecurityPanel}
+            aria-expanded={showLockSecurityPanel}
+          >
+            <span>Security Settings</span>
+            <ChevronDown
+              size={14}
+              style="color: var(--text-tertiary); transition: transform 300ms ease; transform: rotate({showLockSecurityPanel ? 180 : 0}deg);"
+            />
+          </button>
+
+          {#if showLockSecurityPanel}
+            <div class="security-panel" style="animation: fadeSlideIn 200ms ease forwards;">
+              <!-- Lock type -->
+              <div class="security-row">
+                <div class="security-row-header">
+                  <div class="security-row-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  </div>
+                  <p class="security-row-label">Lock Type</p>
+                </div>
+                <div class="security-chips">
                   {#each lockTypes as lt}
                     <button
-                      class="btn-option"
-                      class:btn-option-active={appLockStore.settings.lockType === lt.type}
+                      class="security-chip"
+                      class:security-chip-active={appLockStore.settings.lockType === lt.type}
                       onclick={() => appLockStore.updateSettings({ lockType: lt.type })}
                     >
                       {lt.label}
@@ -910,36 +989,35 @@
                   {/each}
                 </div>
               </div>
-            </div>
-          </div>
 
-          <div class="toggle-divider"></div>
+              <div class="security-row-divider"></div>
 
-          <!-- Change PIN / Password -->
-          <button class="settings-action-row" onclick={() => openLockSetup('change')}>
-            <div class="toggle-info">
-              <div class="toggle-icon" style="background: color-mix(in srgb, #f59e0b 12%, transparent);">
-                <Pencil size={14} style="color: #f59e0b;" />
-              </div>
-              <p class="toggle-title">Change {appLockStore.settings.lockType === 'password' ? 'Password' : 'PIN'}</p>
-            </div>
-            <ChevronRight size={16} style="color: var(--text-tertiary);" />
-          </button>
+              <!-- Change PIN / Password -->
+              <button class="security-action-row" onclick={() => openLockSetup('change')}>
+                <div class="security-row-header">
+                  <div class="security-row-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                  </div>
+                  <p class="security-row-label">Change {lockTypeLabel.charAt(0).toUpperCase() + lockTypeLabel.slice(1)}</p>
+                </div>
+                <ChevronRight size={14} style="color: var(--text-tertiary);" />
+              </button>
 
-          <!-- Auto-lock duration -->
-          <div class="toggle-divider"></div>
-          <div class="toggle-row" style="cursor: default;">
-            <div class="toggle-info">
-              <div class="toggle-icon" style="background: color-mix(in srgb, #0ea5e9 12%, transparent);">
-                <Timer size={15} style="color: #0ea5e9;" />
-              </div>
-              <div style="width: 100%;">
-                <p class="toggle-title">Auto-Lock</p>
-                <div class="btn-group" style="margin-top: 8px; flex-wrap: wrap; gap: 6px;">
+              <div class="security-row-divider"></div>
+
+              <!-- Auto-lock -->
+              <div class="security-row">
+                <div class="security-row-header">
+                  <div class="security-row-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  </div>
+                  <p class="security-row-label">Auto-Lock</p>
+                </div>
+                <div class="security-chips" style="flex-wrap: wrap;">
                   {#each autoLockOptions as opt}
                     <button
-                      class="btn-option btn-option-sm"
-                      class:btn-option-active={appLockStore.settings.autoLock === opt.value}
+                      class="security-chip security-chip-sm"
+                      class:security-chip-active={appLockStore.settings.autoLock === opt.value}
                       onclick={() => appLockStore.updateSettings({ autoLock: opt.value })}
                     >
                       {opt.label}
@@ -947,44 +1025,43 @@
                   {/each}
                 </div>
               </div>
-            </div>
-          </div>
 
-          <!-- Lock on startup -->
-          <div class="toggle-divider"></div>
-          <div class="toggle-row">
-            <div class="toggle-info">
-              <div class="toggle-icon" style="background: color-mix(in srgb, #10b981 12%, transparent);">
-                <Smartphone size={15} style="color: #10b981;" />
-              </div>
-              <div>
-                <p class="toggle-title">Lock on Startup</p>
-                <p class="toggle-desc">Require lock when reopening the app</p>
-              </div>
-            </div>
-            <button
-              class="toggle-track"
-              class:toggle-on={appLockStore.settings.lockOnStartup}
-              onclick={() => appLockStore.updateSettings({ lockOnStartup: !appLockStore.settings.lockOnStartup })}
-              role="switch"
-              aria-checked={appLockStore.settings.lockOnStartup}
-              aria-label="Toggle lock on startup"
-            >
-              <div class="toggle-thumb"></div>
-            </button>
-          </div>
+              <div class="security-row-divider"></div>
 
-          <!-- Lock Now button -->
-          <div class="toggle-divider"></div>
-          <button class="settings-action-row" onclick={lockNow}>
-            <div class="toggle-info">
-              <div class="toggle-icon" style="background: color-mix(in srgb, #ef4444 12%, transparent);">
-                <Lock size={14} style="color: #ef4444;" />
+              <!-- Lock on startup -->
+              <div class="security-row">
+                <div class="security-row-header">
+                  <div class="security-row-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                  </div>
+                  <p class="security-row-label">Lock on Startup</p>
+                </div>
+                <button
+                  class="toggle-track"
+                  class:toggle-on={appLockStore.settings.lockOnStartup}
+                  onclick={() => appLockStore.updateSettings({ lockOnStartup: !appLockStore.settings.lockOnStartup })}
+                  role="switch"
+                  aria-checked={appLockStore.settings.lockOnStartup}
+                  aria-label="Toggle lock on startup"
+                >
+                  <div class="toggle-thumb"></div>
+                </button>
               </div>
-              <p class="toggle-title" style="color: var(--color-danger);">Lock Now</p>
+
+              <div class="security-row-divider"></div>
+
+              <!-- Lock Now -->
+              <button class="security-action-row" onclick={lockNow}>
+                <div class="security-row-header">
+                  <div class="security-row-icon" style="background: color-mix(in srgb, #ef4444 12%, transparent);">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  </div>
+                  <p class="security-row-label" style="color: var(--color-danger);">Lock Now</p>
+                </div>
+                <ChevronRight size={14} style="color: var(--text-tertiary);" />
+              </button>
             </div>
-            <ChevronRight size={16} style="color: var(--text-tertiary);" />
-          </button>
+          {/if}
         {/if}
       </div>
     </section>
@@ -1398,20 +1475,52 @@
     aria-modal="true"
     aria-label="Set up App Lock"
   >
-    <div class="dialog-card" onclick={(e) => e.stopPropagation()} style="max-width: 340px;">
-      <div class="dialog-icon-wrap" style="background: color-mix(in srgb, #6366f1 15%, transparent);">
-        <Lock size={20} style="color: #6366f1;" />
+    <div class="dialog-card lock-dialog-card" class:lock-dialog-shake={lockSetupShaking} onclick={(e) => e.stopPropagation()} style="max-width: 360px;">
+      <!-- Step indicator dots -->
+      <div class="lock-step-dots">
+        {#if lockSetupMode === 'change'}
+          <div class="lock-step-dot" class:lock-step-dot-done={lockSetupStep === 'input' || lockSetupStep === 'confirm'}></div>
+        {/if}
+        <div class="lock-step-dot" class:lock-step-dot-active={lockSetupStep === 'verify' || lockSetupStep === 'input'}></div>
+        <div class="lock-step-dot" class:lock-step-dot-active={lockSetupStep === 'confirm'}></div>
       </div>
+
+      <!-- Lock icon with step-based color -->
+      <div class="dialog-icon-wrap" style="background: {lockSetupStep === 'verify' ? 'color-mix(in srgb, #f59e0b 15%, transparent)' : 'color-mix(in srgb, #6366f1 15%, transparent)'};">
+        {#if lockSetupStep === 'verify'}
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+        {:else}
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+        {/if}
+      </div>
+
       <h3 class="dialog-title">
-        {lockSetupMode === 'enable' ? 'Set Up App Lock' : 'Change Lock'}
+        {#if lockSetupStep === 'verify'}
+          Verify Current {lockTypeLabel.charAt(0).toUpperCase() + lockTypeLabel.slice(1)}
+        {:else if lockSetupStep === 'input'}
+          {lockSetupMode === 'enable' ? 'Set Up App Lock' : 'Enter New ' + lockTypeLabel.charAt(0).toUpperCase() + lockTypeLabel.slice(1)}
+        {:else}
+          Confirm {lockTypeLabel.charAt(0).toUpperCase() + lockTypeLabel.slice(1)}
+        {/if}
       </h3>
       <p class="dialog-message">
-        {#if lockSetupStep === 'input'}
-          Enter your {appLockStore.settings.lockType === 'pin4' ? '4-digit PIN' : appLockStore.settings.lockType === 'pin6' ? '6-digit PIN' : 'password'}
+        {#if lockSetupStep === 'verify'}
+          Enter your current {lockTypeLabel} to continue
+        {:else if lockSetupStep === 'input'}
+          Choose a {appLockStore.settings.lockType === 'pin4' ? '4-digit PIN' : appLockStore.settings.lockType === 'pin6' ? '6-digit PIN' : 'strong password'}
         {:else}
-          Confirm your {appLockStore.settings.lockType === 'password' ? 'password' : 'PIN'}
+          Re-enter your {lockTypeLabel} to confirm
         {/if}
       </p>
+
+      <!-- Error message -->
+      {#if lockSetupError}
+        <p class="lock-error-text">{lockSetupError}</p>
+      {/if}
 
       <div class="lock-setup-input-wrap">
         <input
@@ -1419,11 +1528,12 @@
           inputmode={appLockStore.settings.lockType === 'password' ? 'text' : 'numeric'}
           class="lock-setup-input"
           placeholder={appLockStore.settings.lockType === 'pin4' ? '••••' : appLockStore.settings.lockType === 'pin6' ? '••••••' : 'Enter password'}
-          maxlength={appLockStore.settings.lockType === 'pin4' ? 4 : appLockStore.settings.lockType === 'pin6' ? 6 : 32}
+          maxlength={lockTypeMaxLength}
           bind:value={lockFieldInput}
           onkeydown={(e) => {
             if (e.key === 'Enter') {
-              if (lockSetupStep === 'input') lockSetupNext();
+              if (lockSetupStep === 'verify') lockSetupVerifyOld();
+              else if (lockSetupStep === 'input') lockSetupNext();
               else lockSetupConfirm();
             }
           }}
@@ -1433,7 +1543,11 @@
 
       <div class="dialog-actions" style="margin-top: 16px;">
         <button class="dialog-cancel" onclick={closeLockSetup}>Cancel</button>
-        {#if lockSetupStep === 'input'}
+        {#if lockSetupStep === 'verify'}
+          <button class="dialog-confirm" onclick={lockSetupVerifyOld} disabled={lockFieldInput.length === 0}>
+            Verify
+          </button>
+        {:else if lockSetupStep === 'input'}
           <button class="dialog-confirm" onclick={lockSetupNext} disabled={lockFieldInput.length === 0}>
             Next
           </button>
@@ -2443,33 +2557,241 @@
     background: var(--input-bg);
   }
 
-  /* ── App Lock Setup ── */
-  .settings-action-row {
+  /* ── Security Shield / App Lock ── */
+  .security-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 4px 0;
+  }
+
+  .security-shield {
+    width: 48px;
+    height: 48px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: color-mix(in srgb, var(--text-tertiary, #94a3b8) 10%, transparent);
+    color: var(--text-tertiary, #94a3b8);
+    border: 1px solid var(--border-subtle, rgba(0,0,0,0.06));
+    flex-shrink: 0;
+    transition: all 400ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .security-shield-locked {
+    background: color-mix(in srgb, var(--color-primary, #059669) 12%, transparent);
+    color: var(--color-primary, #059669);
+    border-color: color-mix(in srgb, var(--color-primary, #059669) 20%, transparent);
+    box-shadow: 0 0 20px color-mix(in srgb, var(--color-primary, #059669) 15%, transparent);
+  }
+
+  .security-status-text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .security-status-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary, #0f172a);
+    margin: 0 0 2px;
+    letter-spacing: -0.01em;
+  }
+
+  .security-status-sub {
+    font-size: 12px;
+    color: var(--text-tertiary, #64748b);
+    margin: 0;
+    line-height: 1.4;
+  }
+
+  .security-panel-toggle {
     display: flex;
     align-items: center;
     justify-content: space-between;
     width: 100%;
-    padding: 12px 0;
+    padding: 10px 0 6px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: var(--text-secondary, #475569);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    transition: color 150ms ease;
+  }
+
+  .security-panel-toggle:hover {
+    color: var(--text-primary, #0f172a);
+  }
+
+  .security-panel {
+    padding: 12px 0 4px;
+    border-top: 1px solid var(--border-subtle, rgba(0,0,0,0.06));
+    margin-top: 4px;
+  }
+
+  .security-row {
+    padding: 10px 0;
+  }
+
+  .security-row-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .security-row-icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: color-mix(in srgb, #8b5cf6 10%, transparent);
+    flex-shrink: 0;
+  }
+
+  .security-row-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary, #0f172a);
+    margin: 0;
+  }
+
+  .security-chips {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .security-chip {
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 10px;
+    border: 1.5px solid var(--border-subtle, rgba(0,0,0,0.08));
+    background: var(--bg-elevated, var(--input-bg, #f0fdf4));
+    color: var(--text-secondary, #475569);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    transition: all 200ms cubic-bezier(0.22, 1, 0.36, 1);
+    outline: none;
+  }
+
+  .security-chip:hover {
+    border-color: var(--text-tertiary, #94a3b8);
+  }
+
+  .security-chip:active {
+    transform: scale(0.95);
+  }
+
+  .security-chip-active {
+    background: color-mix(in srgb, #6366f1 12%, var(--bg-elevated, #f0fdf4));
+    border-color: #6366f1;
+    color: #6366f1;
+    font-weight: 600;
+  }
+
+  .security-chip-sm {
+    height: 28px;
+    padding: 0 10px;
+    font-size: 11px;
+    border-radius: 8px;
+  }
+
+  .security-row-divider {
+    height: 1px;
+    background: var(--border-subtle, rgba(0,0,0,0.06));
+    margin: 2px 0;
+  }
+
+  .security-action-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 10px 0;
     border: none;
     background: none;
     cursor: pointer;
     text-align: left;
     color: inherit;
     transition: opacity 150ms ease;
+    outline: none;
   }
 
-  .settings-action-row:hover {
+  .security-action-row:hover {
     opacity: 0.8;
   }
 
-  .settings-action-row:active {
+  .security-action-row:active {
     opacity: 0.6;
   }
 
-  .btn-option-sm {
-    font-size: 11px;
-    padding: 4px 10px;
-    border-radius: 8px;
+  /* ── Lock Setup Dialog Enhancements ── */
+  .lock-dialog-card {
+    position: relative;
+  }
+
+  .lock-dialog-shake {
+    animation: lockDialogShake 400ms ease;
+  }
+
+  @keyframes lockDialogShake {
+    0%, 100% { transform: translateX(0); }
+    10% { transform: translateX(-10px); }
+    20% { transform: translateX(8px); }
+    30% { transform: translateX(-6px); }
+    40% { transform: translateX(4px); }
+    50% { transform: translateX(-2px); }
+    60% { transform: translateX(1px); }
+  }
+
+  .lock-step-dots {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .lock-step-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--border-subtle, rgba(0,0,0,0.1));
+    transition: all 300ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .lock-step-dot-active {
+    background: #6366f1;
+    box-shadow: 0 0 8px rgba(99, 102, 241, 0.4);
+    transform: scale(1.3);
+  }
+
+  .lock-step-dot-done {
+    background: var(--color-primary, #059669);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--color-primary) 40%, transparent);
+  }
+
+  .lock-error-text {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--color-danger, #ef4444);
+    margin: 8px 0 0;
+    text-align: center;
+    animation: lockErrorFade 200ms ease;
+  }
+
+  @keyframes lockErrorFade {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 
   .lock-setup-input-wrap {
@@ -2502,5 +2824,45 @@
     font-weight: 400;
     letter-spacing: 0.08em;
     font-size: 16px;
+  }
+
+  /* ── Legacy support ── */
+  .settings-action-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 12px 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+    text-align: left;
+    color: inherit;
+    transition: opacity 150ms ease;
+  }
+
+  .settings-action-row:hover {
+    opacity: 0.8;
+  }
+
+  .settings-action-row:active {
+    opacity: 0.6;
+  }
+
+  .btn-option-sm {
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 8px;
+  }
+
+  /* ── Animations ── */
+  @keyframes checkDraw {
+    from { stroke-dashoffset: 30; }
+    to { stroke-dashoffset: 0; }
+  }
+
+  @keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 </style>
