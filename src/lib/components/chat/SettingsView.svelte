@@ -27,6 +27,13 @@
   let lockInputValue = $state('');
   let lockConfirmValue = $state('');
   let lockSetupStep: 'input' | 'confirm' = $state('input');
+  let lockFieldInput = $state('');
+
+  // Sync the single input field to the correct variable
+  $effect(() => {
+    if (lockSetupStep === 'input') lockFieldInput = lockInputValue;
+    else lockFieldInput = lockConfirmValue;
+  });
 
   const lockTypes: { type: LockType; label: string; desc: string }[] = [
     { type: 'pin4', label: '4-digit PIN', desc: 'Quick & simple' },
@@ -58,11 +65,13 @@
   }
 
   function lockSetupNext() {
+    lockInputValue = lockFieldInput;
     if (lockInputValue.length === 0) return;
     lockSetupStep = 'confirm';
   }
 
   async function lockSetupConfirm() {
+    lockConfirmValue = lockFieldInput;
     if (lockInputValue !== lockConfirmValue) {
       toastStore.show('PINs do not match. Try again.', 'error');
       lockConfirmValue = '';
@@ -1411,7 +1420,7 @@
           class="lock-setup-input"
           placeholder={appLockStore.settings.lockType === 'pin4' ? '••••' : appLockStore.settings.lockType === 'pin6' ? '••••••' : 'Enter password'}
           maxlength={appLockStore.settings.lockType === 'pin4' ? 4 : appLockStore.settings.lockType === 'pin6' ? 6 : 32}
-          bind:value={lockSetupStep === 'input' ? lockInputValue : lockConfirmValue}
+          bind:value={lockFieldInput}
           onkeydown={(e) => {
             if (e.key === 'Enter') {
               if (lockSetupStep === 'input') lockSetupNext();
@@ -1425,11 +1434,11 @@
       <div class="dialog-actions" style="margin-top: 16px;">
         <button class="dialog-cancel" onclick={closeLockSetup}>Cancel</button>
         {#if lockSetupStep === 'input'}
-          <button class="dialog-confirm" onclick={lockSetupNext} disabled={lockInputValue.length === 0}>
+          <button class="dialog-confirm" onclick={lockSetupNext} disabled={lockFieldInput.length === 0}>
             Next
           </button>
         {:else}
-          <button class="dialog-confirm" onclick={lockSetupConfirm} disabled={lockConfirmValue.length === 0}>
+          <button class="dialog-confirm" onclick={lockSetupConfirm} disabled={lockFieldInput.length === 0}>
             Confirm
           </button>
         {/if}
