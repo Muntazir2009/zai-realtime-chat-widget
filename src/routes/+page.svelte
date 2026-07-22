@@ -7,7 +7,9 @@
   import { presenceManager } from '$lib/managers/PresenceManager.svelte';
   import { backGesture } from '$lib/actions/back-gesture';
   import { exitGesture } from '$lib/actions/exit-gesture';
+  import { appLockStore } from '$lib/stores/app-lock.svelte';
   import ConnectionStatus from '$lib/components/indicators/ConnectionStatus.svelte';
+  import LockScreen from '$lib/components/lock/LockScreen.svelte';
 
   // Svelte action: after a CSS animation finishes, clear the applied
   // transform/opacity so the element stops creating a new containing
@@ -42,6 +44,7 @@
   let viewKey = $state(0);
   let skipConvEnterAnim = $state(false);
   let showExitOverlay = $state(false);
+  let LockScreenComp: any = $state(null);
 
   onMount(async () => {
     if (!browser) return;
@@ -53,6 +56,7 @@
       globalComp,
       settingsComp,
       navComp,
+      lockComp,
     ] = await Promise.all([
       import('$lib/components/auth/AuthScreen.svelte'),
       import('$lib/components/chat/ChatList.svelte'),
@@ -60,6 +64,7 @@
       import('$lib/components/chat/GlobalView.svelte'),
       import('$lib/components/chat/SettingsView.svelte'),
       import('$lib/components/ui/BottomNavBar.svelte'),
+      import('$lib/components/lock/LockScreen.svelte'),
     ]);
 
     AuthScreen = authComp.default;
@@ -68,6 +73,7 @@
     GlobalView = globalComp.default;
     SettingsView = settingsComp.default;
     BottomNavBar = navComp.default;
+    LockScreenComp = lockComp.default;
     componentsReady = true;
 
     // If already authenticated, go to chat list
@@ -102,6 +108,11 @@
     if (v === 'auth') {
       chatStore.detachAllListeners();
       presenceManager.disconnect();
+      appLockStore.onLogout();
+    }
+    // Initialize app lock on first authenticated view
+    if (v === 'chatList' && authStore.user && !appLockStore.isInitialized) {
+      appLockStore.onLogin();
     }
     // Push a history entry when entering a conversation so browser back works
     if (v === 'conversation' && browser) {
@@ -203,3 +214,8 @@
 {/if}
 
 <ConnectionStatus />
+
+<!-- App Lock overlay: renders above everything when locked -->
+{#if authStore.isAuthenticated && appLockStore.isLocked && LockScreenComp}
+  <LockScreenComp />
+{/if}

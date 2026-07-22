@@ -1766,3 +1766,58 @@ Stage Summary:
 - Exit gesture (swipe from right edge) added to all nav tab views (DMs, Global, Settings)
 - Exit gesture does NOT trigger inside open conversations
 - Exit shows a friendly "You're all caught up" overlay, dismissible by tapping
+---
+Task ID: app-lock-system
+Agent: Main Agent
+Task: Implement App Lock System with PIN/password, auto-lock, RTDB sync, and premium lock screen UI
+
+Work Log:
+- Created `/src/lib/stores/app-lock.svelte.ts` — Svelte 5 runes class with:
+  - SHA-256 hashed PIN/password storage in localStorage (never sent to RTDB)
+  - Lock types: 4-digit PIN, 6-digit PIN, password
+  - Auto-lock with configurable durations: immediate, 30s, 1m, 5m, 15m, never
+  - Tab visibility change detection (locks on tab switch after threshold)
+  - Inactivity timer (user activity tracking via touch/mouse/keyboard events)
+  - Lock on startup option
+  - RTDB sync for settings only (enabled, lockType, autoLock, lockOnStartup) — secrets NEVER synced
+  - Lifecycle hooks: onLogin() / onLogout() for clean initialization
+
+- Created `/src/lib/components/lock/LockScreen.svelte` — Premium lock screen with:
+  - Fixed overlay at z-index 99999 (blocks all interaction)
+  - Phone-style circular keypad with letter sub-labels
+  - Animated PIN dots with scale transitions
+  - Password input mode with clear button
+  - Current time and date display
+  - Shake animation on wrong PIN
+  - Success animation with check icon and pulse
+  - Haptic feedback on press/wrong/correct
+  - Keyboard support (number keys, backspace, enter)
+  - Disabled fingerprint placeholder
+  - Responsive design (max-width 360px, centered)
+
+- Modified `/src/routes/+page.svelte`:
+  - Dynamically imports LockScreen component
+  - Renders LockScreen overlay when `appLockStore.isLocked` and user is authenticated
+  - Hooks appLockStore.onLogin() on first authenticated view
+  - Hooks appLockStore.onLogout() when returning to auth view
+
+- Modified `/src/lib/components/chat/SettingsView.svelte`:
+  - Added App Lock section between Time & Date and Customisation
+  - Enable/disable toggle with confirmation dialog for disable
+  - Lock type selector (4-digit PIN, 6-digit PIN, Password) as button group
+  - Change PIN/Password via modal with two-step input (enter → confirm)
+  - Auto-lock duration selector (6 options from immediate to never)
+  - Lock on Startup toggle
+  - Lock Now button for immediate lock
+  - All settings changes persist to localStorage and sync to RTDB
+
+- Dev server starts clean with no new errors
+
+Stage Summary:
+- Full App Lock system implemented: store, lock screen, settings, RTDB sync
+- Secrets stored only in localStorage (SHA-256 hashed), never in Firebase
+- Settings synced across devices via RTDB (enabled, lockType, autoLock, lockOnStartup)
+- Auto-lock triggers: tab switch, inactivity timeout, page refresh, startup
+- Premium lock screen with phone-style keypad, animations, haptics
+- Settings UI with all controls: enable, type, change, auto-lock, startup, lock now
+- No existing features modified — only additions
