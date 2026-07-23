@@ -1,8 +1,7 @@
 <script lang="ts">
   // ============================================================
-  // LockScreen — Flagship-quality lock screen overlay
-  // Blocks all interaction until unlocked. Supports PIN 4/6 and password.
-  // Premium unlock animation: ripple pulse + scale + slide dissolve.
+  // LockScreen — Flagship iPhone-style lock screen
+  // Premium liquid glass material with spring animations.
   // ============================================================
 
   import { appLockStore, type LockType } from '$lib/stores/app-lock.svelte';
@@ -13,25 +12,24 @@
   let successAnim = $state(false);
   let pressedKey = $state<string | null>(null);
   let unlockPhase: 'idle' | 'ripple' | 'dissolve' = $state('idle');
+  let errorGlow = $state(false);
+  let errorMsg = $state('');
 
   const lockType = $derived(appLockStore.settings.lockType);
   const maxLength = $derived(lockType === 'pin4' ? 4 : lockType === 'pin6' ? 6 : 32);
   const isPassword = $derived(lockType === 'password');
   const dotCount = $derived(lockType === 'pin4' ? 4 : lockType === 'pin6' ? 6 : 0);
 
-  // Biometric hint text
   const lockLabel = $derived(
     lockType === 'pin4' ? 'Enter 4-digit PIN' :
     lockType === 'pin6' ? 'Enter 6-digit PIN' :
     'Enter Password'
   );
 
-  // Filled dots (for PIN modes)
   let filledDots = $derived(
     !isPassword ? Array.from({ length: dotCount }, (_, i) => i < pin.length) : []
   );
 
-  // Transition state for each dot
   let dotJustFilled = $state(-1);
 
   function pressKey(key: string) {
@@ -42,18 +40,15 @@
     pressedKey = key;
     setTimeout(() => { pressedKey = null; }, 150);
 
-    // Animate the dot that just filled
     if (!isPassword) {
       dotJustFilled = pin.length - 1;
       setTimeout(() => { dotJustFilled = -1; }, 200);
     }
 
-    // Haptic
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
       navigator.vibrate(10);
     }
 
-    // Auto-submit when full
     if (pin.length >= maxLength) {
       submitPin();
     }
@@ -76,22 +71,17 @@
     try {
       const valid = await appLockStore.unlock(pin);
       if (valid) {
-        // Phase 1: Success micro-feedback (icon → checkmark, green pulse)
         successAnim = true;
+        errorMsg = '';
+        errorGlow = false;
         if (typeof navigator !== 'undefined' && navigator.vibrate) {
           navigator.vibrate([20, 50, 20]);
         }
 
-        // Phase 2: After brief pause, start unlock ripple
-        setTimeout(() => {
-          unlockPhase = 'ripple';
-        }, 350);
-
-        // Phase 3: Dissolve overlay (after ripple reaches edges)
-        setTimeout(() => {
-          unlockPhase = 'dissolve';
-        }, 650);
-
+        // Phase 2: Ripple
+        setTimeout(() => { unlockPhase = 'ripple'; }, 300);
+        // Phase 3: Dissolve
+        setTimeout(() => { unlockPhase = 'dissolve'; }, 600);
         // Phase 4: Cleanup
         setTimeout(() => {
           pin = '';
@@ -100,7 +90,10 @@
           unlockPhase = 'idle';
         }, 1000);
       } else {
+        // Wrong: shake + red glow + error message
         shakeAnim = true;
+        errorGlow = true;
+        errorMsg = 'Wrong ' + lockTypeLabel + '. Try again.';
         if (typeof navigator !== 'undefined' && navigator.vibrate) {
           navigator.vibrate([50, 30, 50, 30, 80]);
         }
@@ -108,15 +101,21 @@
           shakeAnim = false;
           pin = '';
           isVerifying = false;
-        }, 500);
+          errorGlow = false;
+          errorMsg = '';
+        }, 600);
       }
     } catch {
       shakeAnim = true;
+      errorGlow = true;
+      errorMsg = 'Verification failed. Try again.';
       setTimeout(() => {
         shakeAnim = false;
         pin = '';
         isVerifying = false;
-      }, 500);
+        errorGlow = false;
+        errorMsg = '';
+      }, 600);
     }
   }
 
@@ -140,13 +139,12 @@
   class:lock-success-ripple={unlockPhase === 'ripple'}
   class:lock-success-dissolve={unlockPhase === 'dissolve'}
 >
-  <!-- Unlock ripple effect -->
   {#if unlockPhase === 'ripple' || unlockPhase === 'dissolve'}
     <div class="unlock-ripple"></div>
   {/if}
 
   <div class="lock-screen-content" class:lock-shake={shakeAnim} class:lock-content-unlock={unlockPhase !== 'idle'}>
-    <!-- Lock icon -->
+    <!-- Lock icon — liquid glass -->
     <div class="lock-icon-wrap">
       <div class="lock-icon" class:lock-icon-success={successAnim}>
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -169,13 +167,13 @@
       {/if}
     </h2>
 
-    <!-- Subtitle: current time -->
+    <!-- Time / Date -->
     <p class="lock-time">{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
     <p class="lock-date">{new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}</p>
 
-    <!-- PIN dots (for PIN modes) -->
+    <!-- PIN dots -->
     {#if !isPassword && dotCount > 0}
-      <div class="pin-dots" class:pin-dots-unlock={successAnim}>
+      <div class="pin-dots" class:pin-dots-unlock={successAnim} class:pin-dots-error={errorGlow}>
         {#each filledDots as filled, i}
           <!-- svelte-ignore ts-2351 -->
           <div
@@ -189,9 +187,12 @@
       </div>
     {/if}
 
-    <!-- Password input (for password mode) -->
+    <!-- Error message -->
+    <p class="lock-error" class:lock-error-visible={errorMsg}>{errorMsg}</p>
+
+    <!-- Password input -->
     {#if isPassword}
-      <div class="password-field-wrap" class:password-wrap-unlock={successAnim}>
+      <div class="password-field-wrap" class:password-wrap-unlock={successAnim} class:password-wrap-error={errorGlow}>
         <input
           type="password"
           class="password-field"
@@ -209,7 +210,7 @@
       </div>
     {/if}
 
-    <!-- Keypad (not shown for password mode) -->
+    <!-- Keypad -->
     {#if !isPassword}
       <div class="keypad" class:keypad-unlock={successAnim}>
         {#each ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'] as key, i}
@@ -226,7 +227,6 @@
               </svg>
             </button>
           {:else if key === ''}
-            <!-- Spacer / fingerprint area -->
             <div class="key-spacer">
               <button
                 class="fingerprint-btn"
@@ -264,13 +264,14 @@
       </div>
     {/if}
 
-    <!-- Emergency / fallback -->
     <p class="lock-hint">Locked by App Lock</p>
   </div>
 </div>
 
 <style>
-  /* ── Overlay ── */
+  /* ══════════════════════════════
+     OVERLAY — iPhone-style open
+     ══════════════════════════════ */
   .lock-screen-overlay {
     position: fixed;
     inset: 0;
@@ -278,8 +279,13 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--bg-page, #f0fdf4);
-    animation: lockFadeIn 250ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-page, #f0fdf4) 97%, rgba(255,255,255,0.3)) 0%,
+      color-mix(in srgb, var(--bg-page, #f0fdf4) 100%, rgba(0,0,0,0.04)) 100%
+    );
+    animation: lockOpen 400ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    will-change: opacity, transform;
     user-select: none;
     -webkit-user-select: none;
     touch-action: manipulation;
@@ -287,7 +293,18 @@
     overflow: hidden;
   }
 
-  /* ── Unlock Ripple ── */
+  .lock-success-ripple {
+    animation: none;
+  }
+
+  .lock-success-dissolve {
+    animation: lockDissolve 400ms ease-out forwards;
+    pointer-events: none;
+  }
+
+  /* ══════════════════════════════
+     UNLOCK RIPPLE
+     ══════════════════════════════ */
   .unlock-ripple {
     position: absolute;
     top: 50%;
@@ -296,24 +313,16 @@
     height: 0;
     border-radius: 50%;
     background: color-mix(in srgb, var(--color-primary, #059669) 8%, var(--bg-page, #f0fdf4));
-    transform: translate(-50%, -50%);
+    transform: translate3d(-50%, -50%, 0);
     animation: unlockRippleExpand 400ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
     pointer-events: none;
     z-index: 0;
+    will-change: transform, opacity;
   }
 
-  /* ── Success: Ripple Phase ── */
-  .lock-success-ripple {
-    animation: none; /* stop fade-in */
-  }
-
-  /* ── Success: Dissolve Phase ── */
-  .lock-success-dissolve {
-    animation: lockDissolve 350ms ease-out forwards;
-    pointer-events: none;
-  }
-
-  /* ── Content container ── */
+  /* ══════════════════════════════
+     CONTENT
+     ══════════════════════════════ */
   .lock-screen-content {
     display: flex;
     flex-direction: column;
@@ -321,9 +330,10 @@
     width: 100%;
     max-width: 360px;
     padding: 24px;
-    transform: translateY(0);
+    transform: translate3d(0, 0, 0);
     position: relative;
     z-index: 1;
+    will-change: transform, opacity;
   }
 
   .lock-shake {
@@ -331,56 +341,75 @@
   }
 
   .lock-content-unlock {
-    animation: contentUnlock 600ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    animation: contentUnlock 500ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
   }
 
-  /* ── Lock icon ── */
+  /* ══════════════════════════════
+     LOCK ICON — LIQUID GLASS
+     ══════════════════════════════ */
   .lock-icon-wrap {
     margin-bottom: 20px;
   }
 
   .lock-icon {
-    width: 64px;
-    height: 64px;
-    border-radius: 20px;
+    width: 72px;
+    height: 72px;
+    border-radius: 22px;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--glass-bg, rgba(255,255,255,0.72));
-    border: 1px solid var(--border-subtle, rgba(0,0,0,0.06));
-    box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(40px) saturate(220%);
+    -webkit-backdrop-filter: blur(40px) saturate(220%);
+    border: 0.5px solid rgba(255, 255, 255, 0.4);
+    box-shadow:
+      0 8px 32px rgba(0,0,0,0.06),
+      0 0.5px 0 rgba(255,255,255,0.3) inset,
+      0 0 0 0.5px rgba(0,0,0,0.04);
     color: var(--text-primary, #0f172a);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1),
                 background 300ms ease,
                 border-color 300ms ease,
                 box-shadow 300ms ease;
+    will-change: transform;
+  }
+
+  :global(.dark) .lock-icon,
+  :global(.amoled) .lock-icon,
+  :global(.crimson-dark) .lock-icon {
+    background: rgba(22, 27, 34, 0.55);
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow:
+      0 8px 32px rgba(0,0,0,0.2),
+      0 0.5px 0 rgba(255,255,255,0.05) inset;
   }
 
   .lock-icon-success {
-    background: color-mix(in srgb, var(--color-primary, #059669) 15%, var(--glass-bg, white));
+    background: color-mix(in srgb, var(--color-primary, #059669) 15%, rgba(255, 255, 255, 0.55));
     border-color: color-mix(in srgb, var(--color-primary, #059669) 30%, transparent);
     transform: scale(1.05);
-    box-shadow: 0 4px 32px color-mix(in srgb, var(--color-primary, #059669) 20%, transparent);
+    box-shadow:
+      0 8px 40px color-mix(in srgb, var(--color-primary, #059669) 20%, transparent),
+      0 0.5px 0 rgba(255,255,255,0.2) inset;
     color: var(--color-primary, #059669);
   }
 
-  /* ── Title ── */
+  /* ══════════════════════════════
+     TITLE / TIME
+     ══════════════════════════════ */
   .lock-title {
     font-size: 20px;
     font-weight: 600;
     color: var(--text-primary, #0f172a);
     margin: 0 0 4px;
     letter-spacing: -0.02em;
-    transition: color 200ms ease;
+    transition: color 250ms ease;
   }
 
   .lock-title-success {
     color: var(--color-primary, #059669);
   }
 
-  /* ── Time / Date ── */
   .lock-time {
     font-size: 48px;
     font-weight: 700;
@@ -398,19 +427,27 @@
     font-weight: 500;
   }
 
-  /* ── PIN dots ── */
+  /* ══════════════════════════════
+     PIN DOTS
+     ══════════════════════════════ */
   .pin-dots {
     display: flex;
     gap: 16px;
-    margin-bottom: 28px;
+    margin-bottom: 20px;
     height: 20px;
     align-items: center;
     transition: opacity 300ms ease, transform 300ms ease;
+    will-change: opacity, transform;
   }
 
   .pin-dots-unlock {
     opacity: 0;
-    transform: translateY(-8px);
+    transform: translate3d(0, -8px, 0);
+  }
+
+  .pin-dots-error .pin-dot-filled {
+    background: var(--color-danger, #ef4444) !important;
+    transition: background 200ms ease;
   }
 
   .pin-dot {
@@ -422,6 +459,7 @@
     transition: transform 150ms cubic-bezier(0.34, 1.56, 0.64, 1),
                 opacity 150ms ease,
                 background 150ms ease;
+    will-change: transform, opacity;
   }
 
   .pin-dot-filled {
@@ -433,26 +471,50 @@
     transform: scale(1.35);
   }
 
-  /* ── Password field ── */
+  /* ══════════════════════════════
+     ERROR MESSAGE
+     ══════════════════════════════ */
+  .lock-error {
+    font-size: 13px;
+    color: var(--color-danger, #ef4444);
+    margin: 0 0 16px;
+    min-height: 18px;
+    opacity: 0;
+    transform: translate3d(0, -4px, 0);
+    transition: opacity 250ms ease, transform 250ms ease;
+    font-weight: 500;
+  }
+
+  .lock-error-visible {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+
+  /* ══════════════════════════════
+     PASSWORD FIELD — LIQUID GLASS
+     ══════════════════════════════ */
   .password-field-wrap {
     position: relative;
     width: 100%;
     max-width: 260px;
-    margin-bottom: 28px;
+    margin-bottom: 20px;
     transition: opacity 300ms ease, transform 300ms ease;
+    will-change: opacity, transform;
   }
 
   .password-wrap-unlock {
     opacity: 0;
-    transform: translateY(-8px);
+    transform: translate3d(0, -8px, 0);
   }
 
   .password-field {
     width: 100%;
     height: 52px;
     border-radius: 16px;
-    border: 1.5px solid var(--border-subtle, rgba(0,0,0,0.08));
-    background: var(--glass-bg, rgba(255,255,255,0.72));
+    border: 0.5px solid rgba(255, 255, 255, 0.35);
+    background: rgba(255, 255, 255, 0.5);
+    backdrop-filter: blur(40px) saturate(220%);
+    -webkit-backdrop-filter: blur(40px) saturate(220%);
     color: var(--text-primary, #0f172a);
     font-size: 18px;
     font-weight: 500;
@@ -460,15 +522,36 @@
     letter-spacing: 0.1em;
     padding: 0 44px 0 16px;
     outline: none;
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    box-shadow: 0 2px 12px rgba(0,0,0,0.04);
-    transition: border-color 200ms ease, box-shadow 200ms ease;
+    box-shadow:
+      0 4px 20px rgba(0,0,0,0.04),
+      0 0.5px 0 rgba(255,255,255,0.2) inset;
+    transition: border-color 250ms ease, box-shadow 250ms ease;
   }
 
   .password-field:focus {
     border-color: var(--text-secondary, #334155);
-    box-shadow: 0 0 0 3px rgba(0,0,0,0.04), 0 2px 12px rgba(0,0,0,0.06);
+    box-shadow:
+      0 0 0 3px rgba(0,0,0,0.04),
+      0 4px 20px rgba(0,0,0,0.06),
+      0 0.5px 0 rgba(255,255,255,0.2) inset;
+  }
+
+  .password-wrap-error .password-field {
+    border-color: var(--color-danger, #ef4444) !important;
+    box-shadow:
+      0 0 0 3px rgba(239, 68, 68, 0.15),
+      0 0 16px rgba(239, 68, 68, 0.1),
+      0 0.5px 0 rgba(255,255,255,0.2) inset !important;
+  }
+
+  :global(.dark) .password-field,
+  :global(.amoled) .password-field,
+  :global(.crimson-dark) .password-field {
+    background: rgba(22, 27, 34, 0.55);
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow:
+      0 4px 20px rgba(0,0,0,0.1),
+      0 0.5px 0 rgba(255,255,255,0.05) inset;
   }
 
   .password-clear {
@@ -488,7 +571,9 @@
     cursor: pointer;
   }
 
-  /* ── Keypad ── */
+  /* ══════════════════════════════
+     KEYPAD — LIQUID GLASS BUTTONS
+     ══════════════════════════════ */
   .keypad {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -497,44 +582,57 @@
     max-width: 280px;
     margin-bottom: 20px;
     transition: opacity 300ms ease, transform 300ms ease;
+    will-change: opacity, transform;
   }
 
   .keypad-unlock {
     opacity: 0;
-    transform: translateY(12px);
+    transform: translate3d(0, 12px, 0);
   }
 
   .key-btn {
     width: 100%;
     aspect-ratio: 1;
     border-radius: 50%;
-    border: none;
-    background: var(--glass-bg, rgba(255,255,255,0.72));
+    border: 0.5px solid rgba(255, 255, 255, 0.35);
+    background: rgba(255, 255, 255, 0.5);
     color: var(--text-primary, #0f172a);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid var(--border-subtle, rgba(0,0,0,0.06));
-    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    backdrop-filter: blur(20px) saturate(200%);
+    -webkit-backdrop-filter: blur(20px) saturate(200%);
+    box-shadow:
+      0 2px 12px rgba(0,0,0,0.04),
+      0 0.5px 0 rgba(255,255,255,0.2) inset;
     transition: transform 100ms cubic-bezier(0.34, 1.56, 0.64, 1),
                 background 100ms ease,
                 box-shadow 100ms ease;
     -webkit-tap-highlight-color: transparent;
+    will-change: transform;
   }
 
   .key-btn:hover {
-    background: color-mix(in srgb, var(--text-primary, #0f172a) 6%, var(--glass-bg, white));
+    background: color-mix(in srgb, var(--text-primary, #0f172a) 6%, rgba(255,255,255,0.5));
   }
 
   .key-btn:active,
   .key-btn-pressed {
     transform: scale(0.92);
-    background: color-mix(in srgb, var(--text-primary, #0f172a) 10%, var(--glass-bg, white));
+    background: color-mix(in srgb, var(--text-primary, #0f172a) 10%, rgba(255,255,255,0.5));
     box-shadow: 0 0 0 3px rgba(0,0,0,0.04);
+  }
+
+  :global(.dark) .key-btn,
+  :global(.amoled) .key-btn,
+  :global(.crimson-dark) .key-btn {
+    background: rgba(22, 27, 34, 0.55);
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow:
+      0 2px 12px rgba(0,0,0,0.1),
+      0 0.5px 0 rgba(255,255,255,0.05) inset;
   }
 
   .key-num {
@@ -600,11 +698,22 @@
   }
 
   /* ══════════════════════════════
-     UNLOCK ANIMATIONS
+     ANIMATIONS
      ══════════════════════════════ */
 
-  /* Phase 1: Green pulse behind icon (from lock-icon-success) */
-  /* Phase 2: Radial ripple from center expanding outward */
+  /* Open: spring scale + fade */
+  @keyframes lockOpen {
+    0% {
+      opacity: 0;
+      transform: scale(1.06);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  /* Unlock ripple */
   @keyframes unlockRippleExpand {
     0% {
       width: 0;
@@ -618,23 +727,23 @@
     }
   }
 
-  /* Phase 3: Content scales up slightly + slides out of view */
+  /* Content fade out */
   @keyframes contentUnlock {
     0% {
-      transform: translateY(0) scale(1);
+      transform: translate3d(0, 0, 0) scale(1);
       opacity: 1;
     }
-    40% {
-      transform: translateY(-10px) scale(1.02);
+    35% {
+      transform: translate3d(0, -8px, 0) scale(1.01);
       opacity: 1;
     }
     100% {
-      transform: translateY(-40px) scale(0.96);
+      transform: translate3d(0, -30px, 0) scale(0.97);
       opacity: 0;
     }
   }
 
-  /* Phase 4: Overlay dissolve */
+  /* Overlay dissolve */
   @keyframes lockDissolve {
     0% {
       opacity: 1;
@@ -645,20 +754,15 @@
     }
   }
 
-  /* ── Base Animations ── */
-  @keyframes lockFadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
-
+  /* Wrong password shake */
   @keyframes lockShake {
-    0%, 100% { transform: translateX(0); }
-    10% { transform: translateX(-12px); }
-    20% { transform: translateX(10px); }
-    30% { transform: translateX(-8px); }
-    40% { transform: translateX(6px); }
-    50% { transform: translateX(-4px); }
-    60% { transform: translateX(2px); }
+    0%, 100% { transform: translate3d(0, 0, 0); }
+    10% { transform: translate3d(-12px, 0, 0); }
+    20% { transform: translate3d(10px, 0, 0); }
+    30% { transform: translate3d(-8px, 0, 0); }
+    40% { transform: translate3d(6px, 0, 0); }
+    50% { transform: translate3d(-4px, 0, 0); }
+    60% { transform: translate3d(2px, 0, 0); }
   }
 
   @keyframes checkDraw {

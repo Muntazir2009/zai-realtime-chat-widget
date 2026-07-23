@@ -55,23 +55,25 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 4px 16px;
-    padding-bottom: max(4px, env(safe-area-inset-bottom, 0px) + 2px);
-    background: var(--glass-bg);
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
-    border-top: 1px solid var(--border-subtle);
-    box-shadow: 0 -1px 8px rgba(0, 0, 0, 0.03);
+    padding: 6px 16px;
+    padding-bottom: max(6px, env(safe-area-inset-bottom, 0px) + 4px);
+    background: transparent;
+    border-top: none;
+    box-shadow: none;
   }
 
   .nav-pill-track {
     display: flex;
     align-items: center;
     gap: 2px;
-    padding: 4px;
-    border-radius: var(--radius-pill);
-    background: var(--input-bg);
-    border: 1px solid var(--border-subtle);
+    padding: 5px;
+    border-radius: 24px;
+    background: rgba(255, 255, 255, 0.45);
+    backdrop-filter: blur(40px) saturate(220%);
+    -webkit-backdrop-filter: blur(40px) saturate(220%);
+    border: 0.5px solid rgba(255, 255, 255, 0.35);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08), 0 0.5px 0 rgba(255, 255, 255, 0.2) inset;
+    will-change: transform;
   }
 
   .nav-pill {
@@ -161,5 +163,13 @@
       transform: scale(1);
       opacity: 1;
     }
+  }
+
+  :global(.dark) .nav-pill-track,
+  :global(.amoled) .nav-pill-track,
+  :global(.crimson-dark) .nav-pill-track {
+    background: rgba(22, 27, 34, 0.55);
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2), 0 0.5px 0 rgba(255, 255, 255, 0.05) inset;
   }
 </style>

@@ -133,7 +133,7 @@
 </script>
 
 {#if view === 'loading'}
-  <div class="h-full flex items-center justify-center" style="background-color: var(--bg-page);">
+  <div class="h-full flex items-center justify-center">
     <div class="animate-scale-in text-center">
       <div class="w-12 h-12 rounded-2xl mx-auto mb-3 flex items-center justify-center" style="background: linear-gradient(135deg, var(--color-primary), color-mix(in srgb, var(--color-primary) 70%, #000));">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
@@ -147,7 +147,7 @@
   </div>
 {:else}
   <!-- Authenticated shell: content + bottom nav -->
-  <div class="h-full flex flex-col" style="background-color: var(--bg-page);">
+  <div class="h-full flex flex-col">
     <div class="flex-1 min-h-0 has-nav" class:has-nav={showNav}>
       {#if view === 'conversation' && Conversation}
         <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -199,7 +199,7 @@
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       class="fixed inset-0 z-[9999] flex items-center justify-center"
-      style="background: var(--bg-page); animation: fadeIn 200ms ease forwards;"
+      style="background: transparent; animation: fadeIn 200ms ease forwards;"
       onpointerdown={() => { showExitOverlay = false; }}
     >
       <div class="text-center" style="animation: scaleIn 200ms cubic-bezier(0.22, 1, 0.36, 1) forwards;">
