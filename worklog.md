@@ -1880,3 +1880,32 @@ Stage Summary:
 - LockScreen has cinematic unlock animation (ripple + content slide + dissolve)
 - All svelte-check errors in modified files are resolved (only warnings remain)
 - No new build-breaking errors introduced
+
+---
+Task ID: UI Refinements — Edge-to-Edge, Glass UI, Lock Animations
+Agent: Main Agent
+Task: True edge-to-edge layout, floating glass header/nav, remove search, premium lock screen
+
+Work Log:
+- Removed solid backgrounds: glass-header border/bg in app.css, page wrapper bg-color in +page.svelte, exit overlay bg
+- Updated .has-nav padding from 78px to 86px for floating nav clearance
+- Transformed conversation header into floating glass pill: added .header-glass-inner wrapper with backdrop-filter blur(40px), translucent background, inset light reflection border, dark mode variants
+- Transformed bottom nav into floating liquid-glass pill: transparent .nav-bar, glass .nav-pill-track with blur(40px), rounded 24px border, dark mode variants via :global() selectors
+- Removed all search: deleted Search import, 6 state vars, 4 derived, 5 functions, search button, search bar template (32 lines), search-match-highlight class on messages, all search CSS (~120 lines)
+- Rewrote LockScreen with premium iPhone-style animations:
+  - lockOpen spring animation (scale 1.06→1 + fade) replaces simple fadeIn
+  - Wrong password: red glow on PIN dots (.pin-dots-error), red border flash on password field (.password-wrap-error), smooth error message fade-in, shake animation using translate3d for GPU
+  - Unlock: refined timing (300ms success→ripple→600ms dissolve→1000ms cleanup), smooth scale-out content
+  - Liquid glass: all elements use rgba backgrounds + backdrop-filter blur(40px) saturate(220%) + inset light reflection borders
+  - Dark/amoled/crimson theme variants using :global() selectors
+  - GPU-accelerated: will-change on animated elements, translate3d for transforms
+  - Subtle gradient background instead of flat color
+  - Added lockTypeLabel helper derived for error messages
+
+Stage Summary:
+- Chat wallpaper now extends seamlessly behind header and bottom nav (edge-to-edge)
+- Header and nav are floating glass pills with premium blur/translucency
+- Search completely removed (no dead code remaining)
+- Lock screen has flagship-quality animations and liquid glass material
+- All animations use GPU-accelerated properties (transform + opacity only)
+- No svelte-check errors in any modified files
