@@ -391,9 +391,29 @@
   });
 
   // Detect if message is emoji-only for larger display
+  // Supports ZWJ sequences, skin-tone modifiers, keycaps, regional indicators, etc.
+  const emojiOnlyRegex = /^[\p{Emoji_Presentation}\p{Extended_Pictographic}\u{FE0F}\u{200D}\u{20E3}\u{200C}\u{1F3FB}-\u{1F3FF}\u{1F9B0}-\u{1F9D0}\u{E0020}-\u{E007F}]+$/u;
   const isEmojiOnly = $derived(
-    msg.t === 'text' && /^[\p{Emoji_Presentation}\p{Extended_Pictographic}\u{FE0F}\u{200D}\u{20E3}\u{200C}\u{1F3FB}\u{1F3FC}\u{1F3FD}\u{1F3FE}\u{1F3FF}\u{1F9B0}\u{1F9B1}\u{1F9B2}\u{1F9B3}\u{1F9B4}\u{1F9B5}\u{1F9B6}\u{1F9B7}\u{1F9B8}\u{1F9B9}\u{1F9BA}\u{1F9BB}\u{1F9BC}\u{1F9BD}]+$/u.test(msg.c.trim()) && msg.c.trim().length <= 20
+    msg.t === 'text' && emojiOnlyRegex.test(msg.c.trim()) && msg.c.trim().length <= 30
   );
+
+  // Discord-style markdown headings: # ## ### at message start
+  const headingLevel = $derived(() => {
+    if (msg.t !== 'text' || isEmojiOnly) return 0;
+    const text = msg.c;
+    if (/^###\s/.test(text)) return 3;
+    if (/^##\s/.test(text)) return 2;
+    if (/^#\s[^#]/.test(text)) return 1;
+    return 0;
+  });
+
+  // Strip the heading prefix for rendering
+  const displayText = $derived(() => {
+    if (headingLevel() === 3) return msg.c.replace(/^###\s/, '');
+    if (headingLevel() === 2) return msg.c.replace(/^##\s/, '');
+    if (headingLevel() === 1) return msg.c.replace(/^#\s/, '');
+    return msg.c;
+  });
 
   // Media quality-aware image source selection
   function getMediaSrc(): string {
@@ -496,7 +516,11 @@
 
     <!-- Content -->
     {#if msg.t === 'text'}
-      <p class="bbl-text {isEmojiOnly ? 'bbl-emoji-text' : ''}">{msg.c}</p>
+      {#if headingLevel() > 0}
+        <p class="bbl-text bbl-heading bbl-h{headingLevel()}">{displayText()}</p>
+      {:else}
+        <p class="bbl-text {isEmojiOnly ? 'bbl-emoji-text' : ''}">{msg.c}</p>
+      {/if}
       {#if urlMatch() && prefsStore.showLinkPreviews}
         <a href={urlMatch()!} target="_blank" rel="noopener noreferrer" class="link-card">
           <div class="link-icon-wrap">
@@ -889,6 +913,31 @@
     margin-top: 4px;
     font-size: 13px;
     opacity: 0.85;
+  }
+
+  /* === DISCORD-STYLE MARKDOWN HEADINGS === */
+  .bbl-heading {
+    white-space: pre-wrap;
+  }
+
+  .bbl-h1 {
+    font-size: 22px;
+    font-weight: 800;
+    line-height: 1.25;
+    letter-spacing: -0.02em;
+  }
+
+  .bbl-h2 {
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+  }
+
+  .bbl-h3 {
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1.35;
   }
 
   /* === IMAGE === */
