@@ -71,8 +71,11 @@
     background: rgba(255, 255, 255, 0.45);
     backdrop-filter: blur(40px) saturate(220%);
     -webkit-backdrop-filter: blur(40px) saturate(220%);
-    border: 0.5px solid rgba(255, 255, 255, 0.35);
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08), 0 0.5px 0 rgba(255, 255, 255, 0.2) inset;
+    border: 0.5px solid rgba(255, 255, 255, 0.5);
+    box-shadow:
+      0 4px 24px rgba(0, 0, 0, 0.08),
+      0 0.5px 0 rgba(255, 255, 255, 0.25) inset,
+      0 0 0 0.5px rgba(0, 0, 0, 0.03);
     will-change: transform;
   }
 
@@ -165,11 +168,30 @@
     }
   }
 
-  :global(.dark) .nav-pill-track,
-  :global(.amoled) .nav-pill-track,
+  :global(.dark) .nav-pill-track {
+    background: rgba(30, 36, 44, 0.6);
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow:
+      0 4px 24px rgba(0, 0, 0, 0.25),
+      0 0.5px 0 rgba(255, 255, 255, 0.08) inset,
+      0 0 0 0.5px rgba(255, 255, 255, 0.04);
+  }
+
+  :global(.amoled) .nav-pill-track {
+    background: rgba(18, 18, 22, 0.65);
+    border-color: rgba(255, 255, 255, 0.14);
+    box-shadow:
+      0 4px 24px rgba(0, 0, 0, 0.3),
+      0 0.5px 0 rgba(255, 255, 255, 0.1) inset,
+      0 0 0 0.5px rgba(255, 255, 255, 0.06);
+  }
+
   :global(.crimson-dark) .nav-pill-track {
-    background: rgba(22, 27, 34, 0.55);
-    border-color: rgba(255, 255, 255, 0.08);
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2), 0 0.5px 0 rgba(255, 255, 255, 0.05) inset;
+    background: rgba(26, 26, 36, 0.6);
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow:
+      0 4px 24px rgba(0, 0, 0, 0.3),
+      0 0.5px 0 rgba(255, 255, 255, 0.08) inset,
+      0 0 0 0.5px rgba(255, 255, 255, 0.04);
   }
 </style>

@@ -26,6 +26,12 @@
     'Enter Password'
   );
 
+  const lockTypeLabel = $derived(
+    lockType === 'pin4' ? 'PIN' :
+    lockType === 'pin6' ? 'PIN' :
+    'password'
+  );
+
   let filledDots = $derived(
     !isPassword ? Array.from({ length: dotCount }, (_, i) => i < pin.length) : []
   );
@@ -82,18 +88,19 @@
         setTimeout(() => { unlockPhase = 'ripple'; }, 300);
         // Phase 3: Dissolve
         setTimeout(() => { unlockPhase = 'dissolve'; }, 600);
-        // Phase 4: Cleanup
+        // Phase 4: Cleanup — dismiss the lock screen
         setTimeout(() => {
           pin = '';
           isVerifying = false;
           successAnim = false;
           unlockPhase = 'idle';
+          appLockStore.unlockComplete();
         }, 1000);
       } else {
         // Wrong: shake + red glow + error message
         shakeAnim = true;
         errorGlow = true;
-        errorMsg = 'Wrong ' + lockTypeLabel + '. Try again.';
+        errorMsg = 'Wrong ' + (lockType === 'password' ? 'password' : 'PIN') + '. Try again.';
         if (typeof navigator !== 'undefined' && navigator.vibrate) {
           navigator.vibrate([50, 30, 50, 30, 80]);
         }

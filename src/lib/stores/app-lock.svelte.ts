@@ -86,6 +86,7 @@ function userId(): string | null {
 class AppLockStore {
   // Reactive state
   isLocked = $state(false);
+  isUnlocking = $state(false);
   isInitialized = $state(false);
   settings: LockSettings = $state({ ...DEFAULT_SETTINGS });
 
@@ -172,7 +173,9 @@ class AppLockStore {
     const valid = await this.verifySecret(input);
     if (valid) {
       const uid = userId();
-      this.isLocked = false;
+      this.isUnlocking = true;
+      // isLocked stays true so the LockScreen stays mounted for animation.
+      // The caller (LockScreen) must call unlockComplete() after animation.
       if (uid) {
         writeLS(`${LOCKED_LS_KEY}_${uid}`, false);
         writeLS(`${SESSION_ACTIVE_LS_KEY}_${uid}`, Date.now());
@@ -180,6 +183,12 @@ class AppLockStore {
       this.resetInactivityTimer();
     }
     return valid;
+  }
+
+  /** Call after unlock animation finishes to fully dismiss the lock screen */
+  unlockComplete(): void {
+    this.isLocked = false;
+    this.isUnlocking = false;
   }
 
   /** Lock immediately (for "Lock Now" button in settings) */
