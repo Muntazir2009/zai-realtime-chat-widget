@@ -7,6 +7,7 @@
   import { presenceManager } from '$lib/managers/PresenceManager.svelte';
   import { backGesture } from '$lib/actions/back-gesture';
   import { appLockStore } from '$lib/stores/app-lock.svelte';
+  import { toastStore } from '$lib/stores/toast.svelte';
   import ConnectionStatus from '$lib/components/indicators/ConnectionStatus.svelte';
   import LockScreen from '$lib/components/lock/LockScreen.svelte';
 
@@ -41,6 +42,18 @@
   let viewKey = $state(0);
   let skipConvEnterAnim = $state(false);
   let LockScreenComp: any = $state(null);
+
+  // ── Double-back-to-exit state ──
+  let exitBackPending = $state(false);
+  let exitBackTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function resetExitBack() {
+    exitBackPending = false;
+    if (exitBackTimer) {
+      clearTimeout(exitBackTimer);
+      exitBackTimer = null;
+    }
+  }
 
   onMount(async () => {
     if (!browser) return;
@@ -95,49 +108,72 @@
     return meta?.wallpaper ?? null;
   });
 
-  let wallpaperStyle = $derived.by(() => {
-    const wp = chatWallpaper;
-    if (!wp) return '';
-    if (wp.startsWith('http')) return `background-image: url('${wp}'); background-size: cover; background-position: center;`;
-    return `background: ${wp};`;
-  });
-
   // Apply wallpaper as the BODY background when in a conversation with wallpaper.
   // This makes the body the single wallpaper source — the nav's backdrop-filter
   // blurs the body behind it, which IS the wallpaper. No duplicate layers.
   $effect(() => {
     if (!browser) return;
-    const style = wallpaperStyle;
-    if (style) {
-      document.body.style.background = style.replace(/;$/, '');
+    const wp = chatWallpaper;
+    if (wp) {
+      // Use individual CSS properties to avoid invalid shorthand values.
+      // For URL wallpapers, set backgroundImage directly (not via the
+      // background shorthand which would reject "background-image: url(...)").
+      // For gradient/color wallpapers, the raw CSS value is a valid background.
+      if (wp.startsWith('http')) {
+        document.body.style.backgroundImage = `url('${wp}')`;
+      } else {
+        document.body.style.background = wp;
+      }
       document.body.style.backgroundSize = 'cover';
       document.body.style.backgroundPosition = 'center';
       document.body.style.backgroundAttachment = 'fixed';
       document.body.style.backgroundColor = 'transparent';
+      // Make <html> transparent so its dark theme background doesn't
+      // bleed through the body's transparent background-color.
+      document.documentElement.style.backgroundColor = 'transparent';
     } else {
       // Reset to theme background
       document.body.style.background = '';
+      document.body.style.backgroundImage = '';
       document.body.style.backgroundSize = '';
       document.body.style.backgroundPosition = '';
       document.body.style.backgroundAttachment = '';
       document.body.style.backgroundColor = '';
+      document.documentElement.style.backgroundColor = '';
     }
   });
 
-  // ── Browser back: handle popstate for conversation → chat list ──
-  // On main tabs, do NOT intercept — let the browser exit naturally.
+  // ── Browser back: handle popstate ──
+  // Conversation → chat list.  Main tabs → double-back-to-exit toast.
   onMount(() => {
     if (!browser) return;
     function onPopState(_e: PopStateEvent) {
-      // If a conversation was pushed, popping should go back to chat list
+      // ── Conversation → chat list ──
       if (view === 'conversation' && _prevView === 'chatList') {
         chatStore.closeChat();
         uiStore.setView('chatList');
+        resetExitBack();
+        return;
       }
-      // On main tabs: do nothing — let the browser handle back (exit/navigate)
+
+      // ── Main tabs: double-back-to-exit ──
+      if (view !== 'conversation' && view !== 'loading' && view !== 'auth') {
+        if (exitBackPending) {
+          // Second back within ~2 s — allow browser to exit.
+          // Do NOT re-push a guard entry. The browser has already popped
+          // one entry; on mobile the next hardware Back will exit.
+          resetExitBack();
+          return;
+        }
+        // First back — cancel it by re-pushing a guard entry, show toast.
+        history.pushState({ mainTabGuard: true }, '');
+        exitBackPending = true;
+        exitBackTimer = setTimeout(resetExitBack, 2000);
+        toastStore.info('Press back again to exit', 2000);
+      }
     }
     window.addEventListener('popstate', onPopState);
-    return () => window.removeEventListener('popstate', onPopState);
+    return () => { window.removeEventListener('popstate', onPopState); resetExitBack(); };
   });
 
   // Watch for view changes to trigger side effects (load inbox, go online)
@@ -164,6 +200,16 @@
     if (v === 'conversation' && browser) {
       history.pushState({ view: 'conversation' }, '');
       skipConvEnterAnim = false;
+      resetExitBack();
+    }
+    // On main tabs, push a guard entry so Back fires popstate (instead of
+    // exiting immediately) giving us a chance to show the exit toast.
+    // v is guaranteed not 'loading' due to early return above
+    if (v !== 'conversation' && v !== 'auth' && browser) {
+      if (!window.history.state?.mainTabGuard && !window.history.state?.view) {
+        history.pushState({ mainTabGuard: true }, '');
+      }
+      resetExitBack();
     }
   });
 
