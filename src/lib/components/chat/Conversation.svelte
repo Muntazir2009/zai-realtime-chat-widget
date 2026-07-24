@@ -968,7 +968,7 @@
 
 <svelte:window ontouchstart={handleGlobalTouchStart} onkeydown={handleKeyDown} />
 
-<div class="conv-shell" style="background: var(--bg-page);">
+<div class="conv-shell" style="{chatWallpaper ? 'background: transparent;' : 'background: var(--bg-page);'}">
   {#if chatWallpaper}
     <div class="wallpaper-layer" style="{wallpaperStyle}; opacity: var(--wallpaper-opacity, 1);"></div>
   {/if}

@@ -130,6 +130,20 @@
   const showNav = $derived(view !== 'loading' && view !== 'auth');
   const tabKey = $derived(activeTab);
 
+  // Viewport-level wallpaper for true edge-to-edge (extends behind nav & header)
+  let chatWallpaper = $derived.by(() => {
+    if (view !== 'conversation' || !chatStore.activeChatId) return null as string | null;
+    const meta = chatStore.chats.get(chatStore.activeChatId);
+    return meta?.wallpaper ?? null;
+  });
+
+  let wallpaperStyle = $derived.by(() => {
+    const wp = chatWallpaper;
+    if (!wp) return '';
+    if (wp.startsWith('http')) return `background-image: url('${wp}'); background-size: cover; background-position: center;`;
+    return `background: ${wp};`;
+  });
+
   // Watch for view changes to trigger side effects (load inbox, go online)
   $effect(() => {
     const v = view;
@@ -182,8 +196,13 @@
     <AuthScreen />
   </div>
 {:else}
+  <!-- Viewport wallpaper layer (extends behind nav & header for true edge-to-edge) -->
+  {#if chatWallpaper}
+    <div class="wallpaper-viewport" style="{wallpaperStyle}; opacity: var(--wallpaper-opacity, 1);"></div>
+  {/if}
+
   <!-- Authenticated shell: content + bottom nav -->
-  <div class="h-full flex flex-col">
+  <div class="h-full flex flex-col" class:has-wallpaper={!!chatWallpaper}>
     <div class="flex-1 min-h-0 has-nav" class:has-nav={showNav}>
       {#if view === 'conversation' && Conversation}
         <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -262,6 +281,21 @@
 {/if}
 
 <style>
+  /* Viewport wallpaper: fixed, behind everything, full edge-to-edge */
+  .wallpaper-viewport {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  /* When wallpaper is present, make the main shell transparent so wallpaper shows through */
+  .has-wallpaper {
+    position: relative;
+    z-index: 1;
+    background: transparent !important;
+  }
+
   .exit-back-toast {
     position: fixed;
     bottom: 100px;

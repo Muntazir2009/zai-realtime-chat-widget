@@ -1933,3 +1933,35 @@ Stage Summary:
 - Bottom nav glass visible on all themes
 - Discord-style headings and improved big emoji display
 - Pushed as commits: ea86c748, 9e8d06d3, 44f7128a
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: Redesign App Lock Settings UI + True Edge-to-Edge Layout
+
+Work Log:
+- Analyzed entire SettingsView.svelte (2981 lines) and app-lock.svelte.ts store to understand existing security section structure
+- Analyzed +page.svelte routing, Conversation.svelte shell/header, BottomNavBar.svelte, and app.css for edge-to-edge issues
+- Identified root cause: conv-shell has `background: var(--bg-page)` (opaque), preventing wallpaper from extending behind nav/header. html/body background paints behind the fixed-position nav on dark themes.
+- Fixed edge-to-edge: Added viewport-level wallpaper div in +page.svelte (position: fixed, inset: 0, z-index: 0) that renders when in conversation view with wallpaper
+- Made main shell transparent when wallpaper present (`has-wallpaper` class with `background: transparent !important`)
+- Made conv-shell background conditional: transparent when wallpaper exists, var(--bg-page) otherwise
+- Redesigned entire Security section in SettingsView with premium iOS/Nothing OS inspired UI:
+  - Main card with orb icon, status text, and larger toggle
+  - Collapsible sub-cards for Lock Method, Auto Lock, Biometrics
+  - Lock Type: animated segmented control with smooth transitions and bottom indicator bar
+  - Auto Lock: radio list with checkmark for active selection (replaces space-consuming chip buttons)
+  - Lock on Startup: inline toggle inside Auto Lock section
+  - Biometric: clean single-row card with toggle (compact, no wasted space)
+  - Lock Now: prominent gradient accent button (not just another list item)
+  - Smooth expand/collapse animations (max-height + opacity transitions)
+  - Consistent icon sizes (32px), clean typography hierarchy
+  - Generous spacing between sections (28px gap in scroll)
+  - Removed old security panel/divider/chip-based UI entirely
+
+Stage Summary:
+- Edge-to-edge: wallpaper now extends behind bottom nav and conversation header (no more opaque parent backgrounds)
+- Settings UI completely redesigned with collapsible cards, segmented controls, radio lists, and prominent Lock Now button
+- All existing functionality preserved (lock type, auto lock, biometric, lock now, change secret, enable/disable)
+- Compilation verified: zero errors (only pre-existing a11y warnings)
+- Files modified: +page.svelte, Conversation.svelte, SettingsView.svelte

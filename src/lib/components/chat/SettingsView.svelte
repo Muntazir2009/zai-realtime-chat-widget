@@ -325,6 +325,9 @@
   // ── Customisation section (collapsed by default) ──
   let showCustomisation = $state(false);
 
+  // ── Auto Lock section collapse state ──
+  let showAutoLock = $state(false);
+
   // ── Advanced section (collapsed by default) ──
   let showAdvanced = $state(false);
 
@@ -953,16 +956,16 @@
     </section>
 
     <!-- ════════════════════════════════
-         APP LOCK — Security Shield
+         APP LOCK — Premium Security Card
          ════════════════════════════════ -->
     <section class="settings-section" style="--delay: 75ms;">
       <span class="section-label">Security</span>
-      <div class="glass card">
 
-        <!-- Security status header -->
-        <div class="security-header">
-          <div class="security-shield" class:security-shield-locked={appLockStore.settings.enabled}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <!-- Main Security Card: status + toggle -->
+      <div class="glass card security-main-card">
+        <div class="security-hero">
+          <div class="security-orb" class:security-orb-locked={appLockStore.settings.enabled}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
               {#if appLockStore.settings.enabled}
                 <path d="M20 6L9 17l-5-5" style="stroke-dasharray: 30; animation: checkDraw 0.5s ease forwards;" />
               {:else}
@@ -971,22 +974,12 @@
               {/if}
             </svg>
           </div>
-          <div class="security-status-text">
-            <p class="security-status-title">{appLockStore.settings.enabled ? 'App Lock Active' : 'App Lock Off'}</p>
-            <p class="security-status-sub">{appLockStore.settings.enabled ? 'Your chats are protected with ' + lockTypeLabel : 'Protect your chats with a PIN or password'}</p>
-          </div>
-        </div>
-
-        <!-- Main toggle -->
-        <div class="toggle-row" style="margin-top: 12px;">
-          <div class="toggle-info">
-            <div>
-              <p class="toggle-title">Enable App Lock</p>
-              <p class="toggle-desc">{appLockStore.settings.enabled ? 'Lock is active — disable to remove protection' : 'Require ' + lockTypeLabel + ' to open the app'}</p>
-            </div>
+          <div class="security-hero-text">
+            <p class="security-hero-title">{appLockStore.settings.enabled ? 'App Lock Active' : 'App Lock Off'}</p>
+            <p class="security-hero-sub">{appLockStore.settings.enabled ? 'Protected with ' + lockTypeLabel : 'Tap to protect your chats'}</p>
           </div>
           <button
-            class="toggle-track"
+            class="toggle-track toggle-track-lg"
             class:toggle-on={appLockStore.settings.enabled}
             onclick={toggleAppLock}
             role="switch"
@@ -996,92 +989,112 @@
             <div class="toggle-thumb"></div>
           </button>
         </div>
+      </div>
 
-        <!-- Security settings (only when enabled) -->
-        {#if appLockStore.settings.enabled}
-          <button
-            class="security-panel-toggle"
-            onclick={() => showLockSecurityPanel = !showLockSecurityPanel}
-            aria-expanded={showLockSecurityPanel}
-          >
-            <span>Security Settings</span>
-            <ChevronDown
-              size={14}
-              style="color: var(--text-tertiary); transition: transform 300ms ease; transform: rotate({showLockSecurityPanel ? 180 : 0}deg);"
-            />
-          </button>
+      <!-- Collapsible sections — only when lock is enabled -->
+      {#if appLockStore.settings.enabled}
+        <div class="security-collapsible-group">
 
-          {#if showLockSecurityPanel}
-            <div class="security-panel" style="animation: fadeSlideIn 200ms ease forwards;">
-              <!-- Lock type -->
-              <div class="security-row">
-                <div class="security-row-header">
-                  <div class="security-row-icon">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                  </div>
-                  <p class="security-row-label">Lock Type</p>
+          <!-- ▼ Lock Method -->
+          <div class="glass card security-sub-card">
+            <button
+              class="sec-collapse-toggle"
+              onclick={() => showLockSecurityPanel = !showLockSecurityPanel}
+              aria-expanded={showLockSecurityPanel}
+            >
+              <div class="sec-collapse-left">
+                <div class="sec-collapse-icon" style="background: color-mix(in srgb, #8b5cf6 12%, transparent);">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                 </div>
-                <div class="security-chips">
-                  {#each lockTypes as lt}
-                    <button
-                      class="security-chip"
-                      class:security-chip-active={appLockStore.settings.lockType === lt.type}
-                      onclick={() => appLockStore.updateSettings({ lockType: lt.type })}
-                    >
-                      {lt.label}
-                    </button>
-                  {/each}
+                <div>
+                  <p class="sec-collapse-title">Lock Method</p>
+                  <p class="sec-collapse-sub">{lockTypeLabel}</p>
                 </div>
               </div>
+              <ChevronDown
+                size={16}
+                style="color: var(--text-tertiary); transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1); transform: rotate({showLockSecurityPanel ? 180 : 0}deg);"
+              />
+            </button>
 
-              <div class="security-row-divider"></div>
+            <div class="sec-collapse-body" class:sec-collapse-open={showLockSecurityPanel}>
+              <!-- Animated segmented control for lock type -->
+              <div class="lock-type-segmented">
+                {#each lockTypes as lt}
+                  {@const isActive = appLockStore.settings.lockType === lt.type}
+                  <button
+                    class="lt-segment"
+                    class:lt-segment-active={isActive}
+                    onclick={() => appLockStore.updateSettings({ lockType: lt.type })}
+                  >
+                    <span class="lt-segment-label">{lt.label}</span>
+                    {#if isActive}
+                      <span class="lt-segment-indicator"></span>
+                    {/if}
+                  </button>
+                {/each}
+              </div>
 
               <!-- Change PIN / Password -->
-              <button class="security-action-row" onclick={() => openLockSetup('change')}>
-                <div class="security-row-header">
-                  <div class="security-row-icon">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
-                  </div>
-                  <p class="security-row-label">Change {lockTypeLabel.charAt(0).toUpperCase() + lockTypeLabel.slice(1)}</p>
+              <button class="sec-action-btn" onclick={() => openLockSetup('change')}>
+                <div class="sec-action-left">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                  <span>Change {lockTypeLabel.charAt(0).toUpperCase() + lockTypeLabel.slice(1)}</span>
                 </div>
                 <ChevronRight size={14} style="color: var(--text-tertiary);" />
               </button>
+            </div>
+          </div>
 
-              <div class="security-row-divider"></div>
-
-              <!-- Auto-lock -->
-              <div class="security-row">
-                <div class="security-row-header">
-                  <div class="security-row-icon">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                  </div>
-                  <p class="security-row-label">Auto-Lock</p>
+          <!-- ▼ Auto Lock -->
+          <div class="glass card security-sub-card">
+            <button
+              class="sec-collapse-toggle"
+              onclick={() => showAutoLock = !showAutoLock}
+              aria-expanded={showAutoLock}
+            >
+              <div class="sec-collapse-left">
+                <div class="sec-collapse-icon" style="background: color-mix(in srgb, #0ea5e9 12%, transparent);">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                 </div>
-                <div class="security-chips" style="flex-wrap: wrap;">
-                  {#each autoLockOptions as opt}
-                    <button
-                      class="security-chip security-chip-sm"
-                      class:security-chip-active={appLockStore.settings.autoLock === opt.value}
-                      onclick={() => appLockStore.updateSettings({ autoLock: opt.value })}
-                    >
-                      {opt.label}
-                    </button>
-                  {/each}
+                <div>
+                  <p class="sec-collapse-title">Auto Lock</p>
+                  <p class="sec-collapse-sub">{autoLockOptions.find(o => o.value === appLockStore.settings.autoLock)?.label ?? '1 minute'}</p>
                 </div>
               </div>
+              <ChevronDown
+                size={16}
+                style="color: var(--text-tertiary); transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1); transform: rotate({showAutoLock ? 180 : 0}deg);"
+              />
+            </button>
 
-              <div class="security-row-divider"></div>
+            <div class="sec-collapse-body" class:sec-collapse-open={showAutoLock}>
+              <div class="autolock-options">
+                {#each autoLockOptions as opt}
+                  {@const isActive = appLockStore.settings.autoLock === opt.value}
+                  <button
+                    class="autolock-option"
+                    class:autolock-option-active={isActive}
+                    onclick={() => appLockStore.updateSettings({ autoLock: opt.value })}
+                  >
+                    <span class="autolock-option-label">{opt.label}</span>
+                    {#if isActive}
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                    {:else}
+                      <span class="autolock-option-radio"></span>
+                    {/if}
+                  </button>
+                {/each}
+              </div>
 
-              <!-- Lock on startup -->
-              <div class="security-row">
-                <div class="security-row-header">
-                  <div class="security-row-icon">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
-                  </div>
-                  <p class="security-row-label">Lock on Startup</p>
+              <!-- Lock on Startup (inside auto lock section) -->
+              <div class="sec-inline-toggle">
+                <div class="sec-inline-info">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                  <span>Lock on Startup</span>
                 </div>
                 <button
-                  class="toggle-track"
+                  class="toggle-track toggle-track-sm"
                   class:toggle-on={appLockStore.settings.lockOnStartup}
                   onclick={() => appLockStore.updateSettings({ lockOnStartup: !appLockStore.settings.lockOnStartup })}
                   role="switch"
@@ -1091,63 +1104,60 @@
                   <div class="toggle-thumb"></div>
                 </button>
               </div>
+            </div>
+          </div>
 
-              <div class="security-row-divider"></div>
-
-              <!-- Lock Now -->
-              <button class="security-action-row" onclick={lockNow}>
-                <div class="security-row-header">
-                  <div class="security-row-icon" style="background: color-mix(in srgb, #ef4444 12%, transparent);">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <!-- ▼ Biometric Unlock -->
+          {#if bioAvail}
+            <div class="glass card security-sub-card">
+              <div class="sec-biometric-row">
+                <div class="sec-biometric-left">
+                  <div class="sec-collapse-icon" style="background: color-mix(in srgb, var(--color-primary) 12%, transparent);">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4" />
+                      <path d="M14 13.12c0 2.38 0 6.38-1 8.88" />
+                      <path d="M17.29 21.02c.12-.6.43-2.3.5-3.02" />
+                      <path d="M2 12a10 10 0 0 1 18-6" />
+                      <path d="M2 16h.01" />
+                      <path d="M21.8 16c.2-2 .131-5.354 0-6" />
+                      <path d="M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2" />
+                      <path d="M8.65 22c.21-.66.45-1.32.57-2" />
+                      <path d="M9 6.8a6 6 0 0 1 9 5.2v2" />
+                    </svg>
                   </div>
-                  <p class="security-row-label" style="color: var(--color-danger);">Lock Now</p>
-                </div>
-                <ChevronRight size={14} style="color: var(--text-tertiary);" />
-              </button>
-
-              <!-- Biometric Unlock (shown when lock enabled + biometric available) -->
-              {#if bioAvail}
-                <div class="security-row-divider"></div>
-                <div class="security-row">
-                  <div style="flex: 1; min-width: 0;">
-                    <div class="security-row-header">
-                      <div class="security-row-icon" style="background: color-mix(in srgb, var(--color-primary) 12%, transparent);">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4" />
-                          <path d="M14 13.12c0 2.38 0 6.38-1 8.88" />
-                          <path d="M17.29 21.02c.12-.6.43-2.3.5-3.02" />
-                          <path d="M2 12a10 10 0 0 1 18-6" />
-                          <path d="M2 16h.01" />
-                          <path d="M21.8 16c.2-2 .131-5.354 0-6" />
-                          <path d="M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2" />
-                          <path d="M8.65 22c.21-.66.45-1.32.57-2" />
-                          <path d="M9 6.8a6 6 0 0 1 9 5.2v2" />
-                        </svg>
-                      </div>
-                      <p class="security-row-label">Biometric Unlock</p>
-                    </div>
-                    <p class="security-row-desc">Use fingerprint or face to unlock</p>
-                    {#if bioError}
-                      <p style="font-size: 11px; color: var(--color-danger); margin-top: 4px;">{bioError}</p>
-                    {/if}
+                  <div>
+                    <p class="sec-biometric-title">Fingerprint</p>
+                    <p class="sec-biometric-sub">Use fingerprint or face to unlock</p>
                   </div>
-                  <button
-                    class="toggle-track"
-                    class:toggle-on={appLockStore.settings.biometricEnabled}
-                    disabled={bioBusy}
-                    onclick={() => toggleBiometric(!appLockStore.settings.biometricEnabled)}
-                    role="switch"
-                    aria-checked={appLockStore.settings.biometricEnabled}
-                    aria-label="Toggle biometric unlock"
-                  >
-                    <div class="toggle-thumb"></div>
-                  </button>
                 </div>
+                <button
+                  class="toggle-track toggle-track-sm"
+                  class:toggle-on={appLockStore.settings.biometricEnabled}
+                  disabled={bioBusy}
+                  onclick={() => toggleBiometric(!appLockStore.settings.biometricEnabled)}
+                  role="switch"
+                  aria-checked={appLockStore.settings.biometricEnabled}
+                  aria-label="Toggle biometric unlock"
+                >
+                  <div class="toggle-thumb"></div>
+                </button>
+              </div>
+              {#if bioError}
+                <p class="sec-biometric-error">{bioError}</p>
               {/if}
             </div>
           {/if}
-        {/if}
-      </div>
+
+          <!-- Lock Now — prominent action -->
+          <button class="lock-now-btn" onclick={lockNow}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            Lock Now
+          </button>
+        </div>
+      {/if}
     </section>
 
     <!-- ════════════════════════════════
@@ -1751,7 +1761,7 @@
     padding: 8px 16px 100px;
     display: flex;
     flex-direction: column;
-    gap: 24px;
+    gap: 28px;
   }
 
   /* ════════════════════════════════
@@ -2977,5 +2987,405 @@
   @keyframes fadeSlideIn {
     from { opacity: 0; transform: translateY(-6px); }
     to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ════════════════════════════════
+     PREMIUM SECURITY SECTION
+     ════════════════════════════════ */
+
+  /* Main security card — hero status */
+  .security-main-card {
+    padding: 20px;
+  }
+
+  .security-hero {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .security-orb {
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: color-mix(in srgb, var(--text-tertiary, #94a3b8) 10%, transparent);
+    color: var(--text-tertiary, #94a3b8);
+    border: 1px solid var(--border-subtle, rgba(0,0,0,0.06));
+    transition: all 400ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .security-orb-locked {
+    background: color-mix(in srgb, var(--color-primary, #059669) 12%, transparent);
+    color: var(--color-primary, #059669);
+    border-color: color-mix(in srgb, var(--color-primary, #059669) 20%, transparent);
+    box-shadow: 0 0 24px color-mix(in srgb, var(--color-primary, #059669) 12%, transparent);
+  }
+
+  .security-hero-text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .security-hero-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 2px;
+    letter-spacing: -0.01em;
+  }
+
+  .security-hero-sub {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    margin: 0;
+    line-height: 1.4;
+  }
+
+  /* Larger toggle for the hero card */
+  .toggle-track-lg {
+    width: 52px;
+    height: 30px;
+    min-width: 52px;
+    border-radius: 15px;
+  }
+
+  .toggle-track-lg .toggle-thumb {
+    top: 3px;
+    left: 3px;
+    width: 24px;
+    height: 24px;
+  }
+
+  .toggle-track-lg.toggle-on .toggle-thumb {
+    transform: translateX(22px);
+  }
+
+  /* Smaller toggle for sub-cards */
+  .toggle-track-sm {
+    width: 40px;
+    height: 24px;
+    min-width: 40px;
+    border-radius: 12px;
+  }
+
+  .toggle-track-sm .toggle-thumb {
+    top: 2px;
+    left: 2px;
+    width: 20px;
+    height: 20px;
+  }
+
+  .toggle-track-sm.toggle-on .toggle-thumb {
+    transform: translateX(16px);
+  }
+
+  /* Collapsible group container */
+  .security-collapsible-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  /* Sub-cards */
+  .security-sub-card {
+    padding: 14px 16px;
+    border-radius: 16px;
+  }
+
+  /* Collapsible toggle (section header) */
+  .sec-collapse-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .sec-collapse-toggle:active {
+    opacity: 0.7;
+  }
+
+  .sec-collapse-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .sec-collapse-icon {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .sec-collapse-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.3;
+    margin: 0;
+  }
+
+  .sec-collapse-sub {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    line-height: 1.3;
+    margin: 1px 0 0;
+  }
+
+  .chevron-rotated {
+    transform: rotate(180deg) !important;
+  }
+
+  /* Collapsible body with smooth animation */
+  .sec-collapse-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 400ms cubic-bezier(0.22, 1, 0.36, 1), opacity 250ms ease;
+    opacity: 0;
+    margin-top: 0;
+  }
+
+  .sec-collapse-open {
+    max-height: 500px;
+    opacity: 1;
+    margin-top: 14px;
+  }
+
+  /* Lock Type — animated segmented control */
+  .lock-type-segmented {
+    display: flex;
+    gap: 6px;
+    background: var(--bg-elevated, var(--input-bg));
+    padding: 4px;
+    border-radius: 14px;
+    position: relative;
+  }
+
+  .lt-segment {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 8px 12px;
+    border-radius: 11px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 280ms cubic-bezier(0.22, 1, 0.36, 1);
+    -webkit-tap-highlight-color: transparent;
+    position: relative;
+    z-index: 1;
+  }
+
+  .lt-segment:active {
+    transform: scale(0.96);
+  }
+
+  .lt-segment-active {
+    background: var(--color-primary);
+    color: var(--color-primary-foreground);
+    box-shadow: 0 2px 12px color-mix(in srgb, var(--color-primary) 28%, transparent);
+    font-weight: 600;
+  }
+
+  .lt-segment-label {
+    position: relative;
+    z-index: 1;
+  }
+
+  .lt-segment-indicator {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 16px;
+    height: 3px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.5);
+    animation: segIndicatorIn 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  @keyframes segIndicatorIn {
+    from { width: 0; opacity: 0; }
+    to { width: 16px; opacity: 1; }
+  }
+
+  /* Action button inside collapsible */
+  .sec-action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 10px 4px 2px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 500;
+    transition: opacity 150ms ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .sec-action-btn:active {
+    opacity: 0.6;
+  }
+
+  .sec-action-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  /* Auto-lock options — radio list */
+  .autolock-options {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .autolock-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 11px 8px;
+    border-radius: 10px;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 200ms ease;
+    -webkit-tap-highlight-color: transparent;
+    width: 100%;
+    text-align: left;
+  }
+
+  .autolock-option:active {
+    background: var(--input-bg);
+  }
+
+  .autolock-option-active {
+    background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+    color: var(--color-primary);
+    font-weight: 600;
+  }
+
+  .autolock-option-label {
+    flex: 1;
+  }
+
+  .autolock-option-radio {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border-subtle);
+    flex-shrink: 0;
+    display: block;
+  }
+
+  /* Inline toggle inside collapsible */
+  .sec-inline-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 4px 0;
+    margin-top: 8px;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .sec-inline-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  /* Biometric row */
+  .sec-biometric-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .sec-biometric-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .sec-biometric-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+    line-height: 1.3;
+  }
+
+  .sec-biometric-sub {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    margin: 1px 0 0;
+    line-height: 1.3;
+  }
+
+  .sec-biometric-error {
+    font-size: 11px;
+    color: var(--color-danger);
+    margin-top: 8px;
+    padding-left: 44px;
+  }
+
+  /* Lock Now — prominent accent button */
+  .lock-now-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 50px;
+    padding: 0 20px;
+    border-radius: 16px;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 15%, transparent), color-mix(in srgb, var(--color-primary) 8%, transparent));
+    color: var(--color-primary);
+    border: 1.5px solid color-mix(in srgb, var(--color-primary) 20%, transparent);
+    cursor: pointer;
+    transition: all 250ms cubic-bezier(0.22, 1, 0.36, 1);
+    -webkit-tap-highlight-color: transparent;
+    margin-top: 2px;
+  }
+
+  .lock-now-btn:active {
+    transform: scale(0.97);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 22%, transparent), color-mix(in srgb, var(--color-primary) 12%, transparent));
+    box-shadow: 0 4px 16px color-mix(in srgb, var(--color-primary) 15%, transparent);
   }
 </style>
