@@ -1992,3 +1992,32 @@ Stage Summary:
 - Safe-area insets are transparent (nav has padding-bottom with safe-area but transparent background)
 - Wallpaper extends from top edge through header, messages, input bar, nav, safe-area, to bottom edge with no visual interruption
 - No chat functionality, routing, or message rendering was modified
+
+---
+Task ID: 2-d
+Agent: Main Agent
+Task: Fix two regressions — duplicated wallpaper and unsafe App Lock type switching
+
+Work Log:
+- **Issue 1: Duplicated wallpaper**: The previous edge-to-edge fix added a wallpaper-viewport div inside +page.svelte's shell, while Conversation.svelte already had its own wallpaper-layer. This created two separate rendering surfaces with the same image, causing a visible seam.
+  - Removed the wallpaper-viewport div from +page.svelte entirely
+  - Changed Conversation.svelte's .wallpaper-layer from `position: absolute` to `position: fixed` so it covers the full viewport (including behind the nav)
+  - Stripped body/html backgrounds via wallpaper-active class (kept from previous fix)
+  - Now there is ONE wallpaper layer only, and the nav's backdrop-filter blurs that single layer
+
+- **Issue 2: Unsafe lock type switching**: The segmented control (4-Digit PIN / 6-Digit PIN / Password) was calling `appLockStore.updateSettings({ lockType: lt.type })` directly on tap, which instantly changed the lock type without verifying the current credential — potentially locking users out.
+  - Added `pendingLockType` state to track the target type during the change flow
+  - Added `lockSetupMode: 'change-type'` mode to the setup dialog
+  - Added `effectiveLockType` derived (pendingLockType ?? current type) for dialog UI
+  - Added `currentTypeLabel` for verification step descriptions
+  - Added `activeInputLockType` — switches between current type (verify step) and target type (input/confirm steps)
+  - Segmented control now calls `openLockSetup('change-type', targetType)` instead of `updateSettings`
+  - The full flow: Verify current credential → Enter new credential for target type → Confirm → Only then atomically update type + secret
+  - Added `changeTypeAndSecret()` method to appLockStore for atomic type+secret update
+  - Cancelling, pressing back, or entering mismatched credentials discards all pending changes
+  - Updated step indicator dots to show verify step for 'change-type' mode
+
+Stage Summary:
+- Files modified: src/routes/+page.svelte (removed duplicate wallpaper, simplified CSS), src/lib/components/chat/Conversation.svelte (wallpaper-layer → position:fixed), src/lib/components/chat/SettingsView.svelte (secure lock type switching), src/lib/stores/app-lock.svelte.ts (added changeTypeAndSecret method)
+- Build passes, no runtime errors
+- No chat functionality, routing, message rendering, uploads, or reactions were modified

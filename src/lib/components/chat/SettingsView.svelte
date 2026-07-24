@@ -24,7 +24,7 @@
 
   // ── App Lock state ──
   let showLockSetup = $state(false);
-  let lockSetupMode: 'enable' | 'change' = $state('enable');
+  let lockSetupMode: 'enable' | 'change' | 'change-type' = $state('enable');
   let lockInputValue = $state('');
   let lockConfirmValue = $state('');
   let lockFieldInput = $state('');
@@ -33,6 +33,8 @@
   let lockSetupStep: 'verify' | 'input' | 'confirm' = $state('input');
   let lockSetupError = $state('');
   let lockSetupShaking = $state(false);
+  // Pending lock type — stored during 'change-type' flow, applied only after full confirmation
+  let pendingLockType: LockType | null = $state(null);
   let showLockSecurityPanel = $state(false);
   let bioAvail = $state(false);
   let bioBusy = $state(false);
@@ -61,30 +63,49 @@
     { value: 'never', label: 'Never' },
   ];
 
+  // The "effective" lock type used by the setup dialog — if a type change is
+  // pending it shows the TARGET type, otherwise the current type.
+  const effectiveLockType = $derived(pendingLockType ?? appLockStore.settings.lockType);
+
   const lockTypeLabel = $derived(
+    effectiveLockType === 'password' ? 'password' :
+    effectiveLockType === 'pin6' ? '6-digit PIN' : '4-digit PIN'
+  );
+
+  const lockTypeMaxLength = $derived(
+    effectiveLockType === 'pin4' ? 4 :
+    effectiveLockType === 'pin6' ? 6 : 32
+  );
+
+  // Current (actual) lock type label — used for verification step descriptions
+  const currentTypeLabel = $derived(
     appLockStore.settings.lockType === 'password' ? 'password' :
     appLockStore.settings.lockType === 'pin6' ? '6-digit PIN' : '4-digit PIN'
   );
 
-  const lockTypeMaxLength = $derived(
-    appLockStore.settings.lockType === 'pin4' ? 4 :
-    appLockStore.settings.lockType === 'pin6' ? 6 : 32
+  // The lock type that controls the input field during setup:
+  // During 'verify' step → use current type (verifying old credential)
+  // During 'input'/'confirm' → use effective type (target of the change)
+  const activeInputLockType = $derived(
+    lockSetupStep === 'verify' ? appLockStore.settings.lockType : effectiveLockType
   );
 
-  function openLockSetup(mode: 'enable' | 'change') {
+  function openLockSetup(mode: 'enable' | 'change' | 'change-type', targetType?: LockType) {
     lockSetupMode = mode;
+    pendingLockType = mode === 'change-type' ? (targetType ?? null) : null;
     lockInputValue = '';
     lockConfirmValue = '';
     lockOldFieldInput = '';
     lockFieldInput = '';
     lockSetupError = '';
-    // If changing, require old secret verification first
-    lockSetupStep = mode === 'change' ? 'verify' : 'input';
+    // Both 'change' and 'change-type' require old secret verification first
+    lockSetupStep = (mode === 'change' || mode === 'change-type') ? 'verify' : 'input';
     showLockSetup = true;
   }
 
   function closeLockSetup() {
     showLockSetup = false;
+    pendingLockType = null;  // Discard any pending type change
     lockInputValue = '';
     lockConfirmValue = '';
     lockOldFieldInput = '';
@@ -104,7 +125,7 @@
 
     const valid = await appLockStore.verifySecret(lockOldFieldInput);
     if (!valid) {
-      lockSetupError = 'Incorrect ' + lockTypeLabel + '. Try again.';
+      lockSetupError = 'Incorrect ' + currentTypeLabel + '. Try again.';
       triggerLockShake();
       lockOldFieldInput = '';
       lockFieldInput = '';
@@ -137,13 +158,18 @@
       if (lockSetupMode === 'enable') {
         await appLockStore.enableLock(lockInputValue);
         toastStore.show('App Lock enabled', 'success');
+      } else if (lockSetupMode === 'change-type' && pendingLockType) {
+        // Changing lock type AND credential atomically
+        await appLockStore.changeTypeAndSecret(pendingLockType, lockInputValue);
+        toastStore.show('Lock method changed to ' + (pendingLockType === 'pin4' ? '4-Digit PIN' : pendingLockType === 'pin6' ? '6-Digit PIN' : 'Password'), 'success');
       } else {
         await appLockStore.changeSecret(lockInputValue);
         toastStore.show('Lock changed successfully', 'success');
       }
-      closeLockSetup();
+      closeLockSetup();  // This also clears pendingLockType
     } catch {
       toastStore.show('Failed to set lock', 'error');
+      closeLockSetup();  // Discard everything on failure
     }
   }
 
@@ -1018,14 +1044,18 @@
             </button>
 
             <div class="sec-collapse-body" class:sec-collapse-open={showLockSecurityPanel}>
-              <!-- Animated segmented control for lock type -->
+              <!-- Animated segmented control for lock type — requires verification to change -->
               <div class="lock-type-segmented">
                 {#each lockTypes as lt}
                   {@const isActive = appLockStore.settings.lockType === lt.type}
                   <button
                     class="lt-segment"
                     class:lt-segment-active={isActive}
-                    onclick={() => appLockStore.updateSettings({ lockType: lt.type })}
+                    onclick={() => {
+                      if (isActive) return;
+                      // Don't change immediately — open secure change-type flow
+                      openLockSetup('change-type', lt.type);
+                    }}
                   >
                     <span class="lt-segment-label">{lt.label}</span>
                     {#if isActive}
@@ -1572,7 +1602,7 @@
     <div class="dialog-card lock-dialog-card" class:lock-dialog-shake={lockSetupShaking} onclick={(e) => e.stopPropagation()} style="max-width: 360px;">
       <!-- Step indicator dots -->
       <div class="lock-step-dots">
-        {#if lockSetupMode === 'change'}
+        {#if lockSetupMode === 'change' || lockSetupMode === 'change-type'}
           <div class="lock-step-dot" class:lock-step-dot-done={lockSetupStep === 'input' || lockSetupStep === 'confirm'}></div>
         {/if}
         <div class="lock-step-dot" class:lock-step-dot-active={lockSetupStep === 'verify' || lockSetupStep === 'input'}></div>
@@ -1594,7 +1624,7 @@
 
       <h3 class="dialog-title">
         {#if lockSetupStep === 'verify'}
-          Verify Current {lockTypeLabel.charAt(0).toUpperCase() + lockTypeLabel.slice(1)}
+          Verify Current {currentTypeLabel.charAt(0).toUpperCase() + currentTypeLabel.slice(1)}
         {:else if lockSetupStep === 'input'}
           {lockSetupMode === 'enable' ? 'Set Up App Lock' : 'Enter New ' + lockTypeLabel.charAt(0).toUpperCase() + lockTypeLabel.slice(1)}
         {:else}
@@ -1603,9 +1633,9 @@
       </h3>
       <p class="dialog-message">
         {#if lockSetupStep === 'verify'}
-          Enter your current {lockTypeLabel} to continue
+          Enter your current {currentTypeLabel} to continue
         {:else if lockSetupStep === 'input'}
-          Choose a {appLockStore.settings.lockType === 'pin4' ? '4-digit PIN' : appLockStore.settings.lockType === 'pin6' ? '6-digit PIN' : 'strong password'}
+          Choose a {effectiveLockType === 'pin4' ? '4-digit PIN' : effectiveLockType === 'pin6' ? '6-digit PIN' : 'strong password'}
         {:else}
           Re-enter your {lockTypeLabel} to confirm
         {/if}
@@ -1618,10 +1648,10 @@
 
       <div class="lock-setup-input-wrap">
         <input
-          type={appLockStore.settings.lockType === 'password' ? 'text' : 'tel'}
-          inputmode={appLockStore.settings.lockType === 'password' ? 'text' : 'numeric'}
+          type={activeInputLockType === 'password' ? 'text' : 'tel'}
+          inputmode={activeInputLockType === 'password' ? 'text' : 'numeric'}
           class="lock-setup-input"
-          placeholder={appLockStore.settings.lockType === 'pin4' ? '••••' : appLockStore.settings.lockType === 'pin6' ? '••••••' : 'Enter password'}
+          placeholder={activeInputLockType === 'pin4' ? '••••' : activeInputLockType === 'pin6' ? '••••••' : 'Enter password'}
           maxlength={lockTypeMaxLength}
           bind:value={lockFieldInput}
           onkeydown={(e) => {

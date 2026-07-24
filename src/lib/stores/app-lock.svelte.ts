@@ -277,6 +277,15 @@ class AppLockStore {
     await this.setSecret(newSecret);
   }
 
+  /** Change both the lock type AND secret atomically (used for type-switch flow) */
+  async changeTypeAndSecret(newType: LockType, newSecret: string): Promise<void> {
+    // Update type first so setSecret records the correct type in secrets
+    this.settings = { ...this.settings, lockType: newType };
+    await this.setSecret(newSecret);
+    this.persistSettings();
+    this.pushSettingsToRTDB();
+  }
+
   async changeSecretWithVerification(oldSecret: string, newSecret: string): Promise<boolean> {
     const valid = await this.verifySecret(oldSecret);
     if (!valid) return false;
