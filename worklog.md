@@ -1909,3 +1909,27 @@ Stage Summary:
 - Lock screen has flagship-quality animations and liquid glass material
 - All animations use GPU-accelerated properties (transform + opacity only)
 - No svelte-check errors in any modified files
+---
+Task ID: 2
+Agent: Main Agent
+Task: Fix lock screen animation + bottom nav glass, add Discord-style headings + big emoji, biometric auth, auto-lock fix, back-to-exit
+
+Work Log:
+- Fixed lock screen animation: appLockStore.unlock() was setting isLocked=false immediately, destroying LockScreen before animation could play. Added isUnlocking state + unlockComplete() method.
+- Fixed bottom nav solid black on dark themes: separated dark/amoled/crimson-dark glass pill styles with lighter backgrounds and stronger borders.
+- Added Discord-style # ## ### markdown headings in messages with proper sizing (22px/18px/16px).
+- Improved emoji-only regex to support wider range of Unicode, ZWJ sequences, skin tone modifiers. Raised char limit 20→30.
+- Created biometric.ts utility using WebAuthn platform authenticator (ES256, localStorage-only credential storage).
+- Rewrote app-lock store: removed inactivity timer + activity tracking, replaced with visibility-based auto-lock (WhatsApp/Telegram style). Auto-lock only triggers when app goes to background, never during active use.
+- Added biometric enable/disable to lock settings, synced via RTDB (credential data never synced).
+- Rewrote LockScreen: biometric auto-prompt on mount, pulsing ring animation, fingerprint button functional when available, keypad dims during biometric attempt, shared triggerUnlockSuccess().
+- Added Biometric Unlock toggle in SettingsView security panel with re-auth confirmation dialog.
+- Added press-back-to-exit toast on main tabs view (2-second double-press window).
+
+Stage Summary:
+- Lock screen now has full cinematic unlock animation (icon pulse → ripple → dissolve → unmount)
+- Auto-lock never interrupts active use — only triggers on visibility change
+- Biometric auth fully integrated (WebAuthn, Android fingerprint, Face Unlock)
+- Bottom nav glass visible on all themes
+- Discord-style headings and improved big emoji display
+- Pushed as commits: ea86c748, 9e8d06d3, 44f7128a
