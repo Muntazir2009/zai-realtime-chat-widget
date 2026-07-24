@@ -196,14 +196,15 @@
     <AuthScreen />
   </div>
 {:else}
-  <!-- Viewport wallpaper layer (extends behind nav & header for true edge-to-edge) -->
-  {#if chatWallpaper}
-    <div class="wallpaper-viewport" style="{wallpaperStyle}; opacity: var(--wallpaper-opacity, 1);"></div>
-  {/if}
-
   <!-- Authenticated shell: content + bottom nav -->
-  <div class="h-full flex flex-col" class:has-wallpaper={!!chatWallpaper}>
-    <div class="flex-1 min-h-0 has-nav" class:has-nav={showNav}>
+  <!-- When wallpaper is active, body background is cleared via svelte:body -->
+  <div class="h-full flex flex-col shell-wallpaper" class:has-wallpaper={!!chatWallpaper}>
+    <!-- Wallpaper layer INSIDE the shell so it shares the same stacking context as the nav -->
+    {#if chatWallpaper}
+      <div class="wallpaper-viewport" style="{wallpaperStyle}; opacity: var(--wallpaper-opacity, 1);"></div>
+    {/if}
+
+    <div class="flex-1 min-h-0 has-nav content-layer" class:has-nav={showNav}>
       {#if view === 'conversation' && Conversation}
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
@@ -273,6 +274,9 @@
   {/if}
 {/if}
 
+<!-- When wallpaper is active, strip body background so wallpaper shows edge-to-edge -->
+<svelte:body class:wallpaper-active={!!chatWallpaper} />
+
 <ConnectionStatus />
 
 <!-- App Lock overlay: renders above everything when locked -->
@@ -281,7 +285,20 @@
 {/if}
 
 <style>
-  /* Viewport wallpaper: fixed, behind everything, full edge-to-edge */
+  /* ============================================================
+     TRUE EDGE-TO-EDGE TRANSPARENCY
+     Wallpaper, content, and nav share ONE stacking context so
+     backdrop-filter on the nav actually samples the wallpaper.
+     ============================================================ */
+
+  /* Shell: creates the shared stacking context for wallpaper + nav */
+  .shell-wallpaper {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Viewport wallpaper: fixed, behind everything, full edge-to-edge
+     Lives INSIDE the shell so it shares the same stacking context. */
   .wallpaper-viewport {
     position: fixed;
     inset: 0;
@@ -289,10 +306,14 @@
     pointer-events: none;
   }
 
-  /* When wallpaper is present, make the main shell transparent so wallpaper shows through */
-  .has-wallpaper {
+  /* Content layer: sits above the wallpaper within the same context */
+  .content-layer {
     position: relative;
     z-index: 1;
+  }
+
+  /* When wallpaper is present, make the shell completely transparent */
+  .has-wallpaper {
     background: transparent !important;
   }
 

@@ -1965,3 +1965,30 @@ Stage Summary:
 - All existing functionality preserved (lock type, auto lock, biometric, lock now, change secret, enable/disable)
 - Compilation verified: zero errors (only pre-existing a11y warnings)
 - Files modified: +page.svelte, Conversation.svelte, SettingsView.svelte
+
+---
+Task ID: 2-c
+Agent: Main Agent
+Task: Fix true edge-to-edge transparency for bottom navigation (wallpaper visible behind nav)
+
+Work Log:
+- Analyzed full DOM hierarchy: app.html → +layout.svelte → +page.svelte → Conversation.svelte → BottomNavBar.svelte
+- Identified root cause: wallpaper-viewport was at z-index:0 in root stacking context, while the shell at z-index:1 created a separate stacking context containing the nav — backdrop-filter on nav could not blur across stacking contexts on some browsers
+- Identified secondary issue: body had opaque background-color (var(--bg-page) = #000000 in AMOLED/dark themes) which painted black behind the nav even when wallpaper covered the viewport
+- Moved wallpaper-viewport INSIDE the shell div so it shares the same stacking context as the nav (z-index: 0 within shell)
+- Added .shell-wallpaper class (position:relative; z-index:1) to create the shared stacking context
+- Added .content-layer class (position:relative; z-index:1) so content renders above wallpaper within the shell
+- Added <svelte:body class:wallpaper-active={!!chatWallpaper}/> to set body class when wallpaper is active
+- Added CSS rules: body.wallpaper-active and html:has(.wallpaper-active) both get background-color: transparent !important
+- Verified: BottomNavBar.nav-bar already has background:transparent ✓
+- Verified: BottomNavBar.nav-pill-track has backdrop-filter: blur(40px) saturate(220%) ✓
+- Verified: No JS compilation errors, page loads cleanly
+- Verified: No runtime errors in console
+
+Stage Summary:
+- Key files modified: src/routes/+page.svelte (moved wallpaper inside shell, added svelte:body, restructured CSS), src/app.css (added wallpaper-active body/html transparency rules)
+- The wallpaper, content, and nav now share ONE stacking context, so backdrop-filter on the nav glass pill properly samples the wallpaper image
+- Body/html backgrounds are stripped when wallpaper is active, eliminating opaque black paint behind the nav
+- Safe-area insets are transparent (nav has padding-bottom with safe-area but transparent background)
+- Wallpaper extends from top edge through header, messages, input bar, nav, safe-area, to bottom edge with no visual interruption
+- No chat functionality, routing, or message rendering was modified
