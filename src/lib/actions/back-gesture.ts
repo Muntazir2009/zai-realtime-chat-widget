@@ -287,14 +287,6 @@ export function backGesture(
     }
   }
 
-  // ---- History integration (browser back button) ----
-  function onPopState(_e: PopStateEvent) {
-    // If we're in conversation and the user pressed browser back, go back
-    if (document.querySelector('[data-in-conversation]')) {
-      onBack();
-    }
-  }
-
   // ---- Attach ----
   node.addEventListener('touchstart', onTouchStart, { passive: true });
   // Use non-passive for touchmove to allow preventDefault (scroll prevention)
@@ -305,9 +297,6 @@ export function backGesture(
   node.addEventListener('mousedown', onMouseDown);
   window.addEventListener('mousemove', onMouseMove);
   window.addEventListener('mouseup', onMouseUp);
-
-  // Browser back button
-  window.addEventListener('popstate', onPopState);
 
   return {
     update(newOptions: BackGestureOptions) {
@@ -321,7 +310,6 @@ export function backGesture(
       node.removeEventListener('mousedown', onMouseDown);
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
-      window.removeEventListener('popstate', onPopState);
       removeOverlay();
     },
   };

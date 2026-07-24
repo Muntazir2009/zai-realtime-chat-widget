@@ -408,19 +408,6 @@ body {
   overscroll-behavior: contain;
 }
 
-/* When wallpaper is active, strip ALL opaque backgrounds from html & body
-   so the wallpaper renders edge-to-edge behind the nav & safe-area.
-   The wallpaper-viewport (position:fixed; inset:0) covers the full viewport
-   including safe-area insets, so html/body backgrounds must be transparent. */
-html:has(.wallpaper-active) {
-  background-color: transparent !important;
-  background-image: none !important;
-}
-body.wallpaper-active {
-  background-color: transparent !important;
-  background-image: none !important;
-}
-
 /* Prevent iOS zoom on input focus */
 input,
 textarea,

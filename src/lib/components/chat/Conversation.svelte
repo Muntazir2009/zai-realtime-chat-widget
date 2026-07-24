@@ -969,9 +969,6 @@
 <svelte:window ontouchstart={handleGlobalTouchStart} onkeydown={handleKeyDown} />
 
 <div class="conv-shell" style="{chatWallpaper ? 'background: transparent;' : 'background: var(--bg-page);'}">
-  {#if chatWallpaper}
-    <div class="wallpaper-layer" style="{wallpaperStyle}; opacity: var(--wallpaper-opacity, 1);"></div>
-  {/if}
   {#if triggerEasterEgg > 0 && prefsStore.showEasterEggs}
     <EasterEggFx trigger={triggerEasterEgg} effectType={currentEffectType} />
   {/if}
@@ -1408,14 +1405,6 @@
     -webkit-user-select: none;
     user-select: none;
     overflow: hidden;
-  }
-
-  .wallpaper-layer {
-    position: fixed;
-    inset: 0;
-    z-index: 0;
-    pointer-events: none;
-    transition: opacity 300ms ease;
   }
 
   /* === PREMIUM HEADER — Floating Glass Pill === */

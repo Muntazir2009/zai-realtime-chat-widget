@@ -497,3 +497,10 @@ https://svelte.dev/e/a11y_click_events_have_key_events
 https://svelte.dev/e/a11y_click_events_have_key_events
 5:20:24 PM [vite-plugin-svelte] src/lib/components/chat/ChatTile.svelte:297:2 Unused CSS selector ".tile-preview-icon"
 https://svelte.dev/e/css_unused_selector
+7:32:30 PM [vite] (client) Forced re-optimization of dependencies
+
+  VITE v6.4.3  ready in 1430 ms
+
+  ➜  Local:   http://localhost:3000/
+  ➜  Network: http://21.0.18.53:3000/
+Using secrets defined in .env
