@@ -2,9 +2,12 @@
   // ============================================================
   // LockScreen — Flagship iPhone-style lock screen
   // Premium liquid glass material with spring animations.
+  // Biometric authentication support.
   // ============================================================
 
   import { appLockStore, type LockType } from '$lib/stores/app-lock.svelte';
+  import { isBiometricAvailable } from '$lib/utils/biometric';
+  import { onMount } from 'svelte';
 
   let pin: string = $state('');
   let isVerifying = $state(false);
@@ -14,6 +17,11 @@
   let unlockPhase: 'idle' | 'ripple' | 'dissolve' = $state('idle');
   let errorGlow = $state(false);
   let errorMsg = $state('');
+
+  // Biometric state
+  let bioState: 'idle' | 'attempting' | 'success' | 'failed' | 'cancelled' | 'unavailable' = $state('idle');
+  let bioAttempted = $state(false);
+  let lockIconPulse = $state(false);
 
   const lockType = $derived(appLockStore.settings.lockType);
   const maxLength = $derived(lockType === 'pin4' ? 4 : lockType === 'pin6' ? 6 : 32);
@@ -38,8 +46,69 @@
 
   let dotJustFilled = $state(-1);
 
+  // ── Biometric auto-prompt ──
+
+  onMount(() => {
+    setTimeout(async () => {
+      if (bioAttempted) return;
+      if (!appLockStore.settings.biometricEnabled) return;
+      const available = await isBiometricAvailable();
+      if (available) {
+        await attemptBiometricUnlock();
+      } else {
+        bioState = 'unavailable';
+      }
+    }, 250);
+  });
+
+  // ── Biometric flow ──
+
+  async function attemptBiometricUnlock() {
+    if (bioState === 'attempting' || successAnim || unlockPhase !== 'idle') return;
+    bioState = 'attempting';
+    bioAttempted = true;
+    const result = await appLockStore.unlockViaBiometric();
+    if (result === 'success') {
+      bioState = 'success';
+      triggerUnlockSuccess();
+    } else if (result === 'security_change') {
+      bioState = 'unavailable';
+      errorMsg = 'Biometric data changed. Use PIN/password.';
+      setTimeout(() => { errorMsg = ''; }, 3000);
+    } else {
+      bioState = 'cancelled';
+    }
+  }
+
+  // ── Shared unlock success animation ──
+
+  function triggerUnlockSuccess() {
+    successAnim = true;
+    errorMsg = '';
+    errorGlow = false;
+
+    lockIconPulse = true;
+    setTimeout(() => { lockIconPulse = false; }, 300);
+
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate([20, 50, 20]);
+    }
+
+    setTimeout(() => { unlockPhase = 'ripple'; }, 300);
+    setTimeout(() => { unlockPhase = 'dissolve'; }, 600);
+    setTimeout(() => {
+      pin = '';
+      isVerifying = false;
+      successAnim = false;
+      unlockPhase = 'idle';
+      bioState = 'idle';
+      bioAttempted = false;
+      appLockStore.unlockComplete();
+    }, 1000);
+  }
+
   function pressKey(key: string) {
-    if (isVerifying || successAnim || unlockPhase !== 'idle') return;
+    if (isVerifying || successAnim || unlockPhase !== 'idle' || bioState === 'attempting') return;
     if (pin.length >= maxLength) return;
 
     pin += key;
@@ -61,7 +130,7 @@
   }
 
   function backspace() {
-    if (isVerifying || successAnim || unlockPhase !== 'idle') return;
+    if (isVerifying || successAnim || unlockPhase !== 'idle' || bioState === 'attempting') return;
     if (pin.length === 0) return;
     pin = pin.slice(0, -1);
 
@@ -77,27 +146,8 @@
     try {
       const valid = await appLockStore.unlock(pin);
       if (valid) {
-        successAnim = true;
-        errorMsg = '';
-        errorGlow = false;
-        if (typeof navigator !== 'undefined' && navigator.vibrate) {
-          navigator.vibrate([20, 50, 20]);
-        }
-
-        // Phase 2: Ripple
-        setTimeout(() => { unlockPhase = 'ripple'; }, 300);
-        // Phase 3: Dissolve
-        setTimeout(() => { unlockPhase = 'dissolve'; }, 600);
-        // Phase 4: Cleanup — dismiss the lock screen
-        setTimeout(() => {
-          pin = '';
-          isVerifying = false;
-          successAnim = false;
-          unlockPhase = 'idle';
-          appLockStore.unlockComplete();
-        }, 1000);
+        triggerUnlockSuccess();
       } else {
-        // Wrong: shake + red glow + error message
         shakeAnim = true;
         errorGlow = true;
         errorMsg = 'Wrong ' + (lockType === 'password' ? 'password' : 'PIN') + '. Try again.';
@@ -153,7 +203,10 @@
   <div class="lock-screen-content" class:lock-shake={shakeAnim} class:lock-content-unlock={unlockPhase !== 'idle'}>
     <!-- Lock icon — liquid glass -->
     <div class="lock-icon-wrap">
-      <div class="lock-icon" class:lock-icon-success={successAnim}>
+      <div class="lock-icon" class:lock-icon-success={successAnim} class:bio-attempting={bioState === 'attempting'} class:lock-icon-pulse={lockIconPulse}>
+        {#if bioState === 'attempting'}
+          <div class="bio-ring"></div>
+        {/if}
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           {#if successAnim}
             <path d="M20 6L9 17l-5-5" style="stroke-dasharray: 30; stroke-dashoffset: 0; animation: checkDraw 0.4s ease forwards;" />
@@ -174,13 +227,18 @@
       {/if}
     </h2>
 
+    <!-- Biometric indicator -->
+    {#if bioState === 'attempting'}
+      <p class="bio-indicator">Authenticating...</p>
+    {/if}
+
     <!-- Time / Date -->
     <p class="lock-time">{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
     <p class="lock-date">{new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}</p>
 
     <!-- PIN dots -->
     {#if !isPassword && dotCount > 0}
-      <div class="pin-dots" class:pin-dots-unlock={successAnim} class:pin-dots-error={errorGlow}>
+      <div class="pin-dots" class:pin-dots-unlock={successAnim} class:pin-dots-error={errorGlow} class:keypad-dimmed={bioState === 'attempting'}>
         {#each filledDots as filled, i}
           <!-- svelte-ignore ts-2351 -->
           <div
@@ -199,14 +257,14 @@
 
     <!-- Password input -->
     {#if isPassword}
-      <div class="password-field-wrap" class:password-wrap-unlock={successAnim} class:password-wrap-error={errorGlow}>
+      <div class="password-field-wrap" class:password-wrap-unlock={successAnim} class:password-wrap-error={errorGlow} class:keypad-dimmed={bioState === 'attempting'}>
         <input
           type="password"
           class="password-field"
           placeholder="Enter password"
           bind:value={pin}
           maxlength={maxLength}
-          disabled={isVerifying || successAnim || unlockPhase !== 'idle'}
+          disabled={isVerifying || successAnim || unlockPhase !== 'idle' || bioState === 'attempting'}
           onkeydown={(e) => { if (e.key === 'Enter') submitPin(); }}
         />
         {#if pin.length > 0}
@@ -219,7 +277,7 @@
 
     <!-- Keypad -->
     {#if !isPassword}
-      <div class="keypad" class:keypad-unlock={successAnim}>
+      <div class="keypad" class:keypad-unlock={successAnim} class:keypad-dimmed={bioState === 'attempting'}>
         {#each ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'] as key, i}
           {#if key === 'del'}
             <button
@@ -237,8 +295,11 @@
             <div class="key-spacer">
               <button
                 class="fingerprint-btn"
-                aria-label="Not available"
-                disabled
+                class:fingerprint-btn-active={appLockStore.settings.biometricEnabled}
+                class:fingerprint-btn-pulse={bioState === 'attempting'}
+                aria-label="Unlock with biometric"
+                disabled={!appLockStore.settings.biometricEnabled || bioState === 'attempting'}
+                onclick={() => attemptBiometricUnlock()}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4" />
@@ -379,6 +440,7 @@
                 border-color 300ms ease,
                 box-shadow 300ms ease;
     will-change: transform;
+    position: relative;
   }
 
   :global(.dark) .lock-icon,
@@ -399,6 +461,27 @@
       0 8px 40px color-mix(in srgb, var(--color-primary, #059669) 20%, transparent),
       0 0.5px 0 rgba(255,255,255,0.2) inset;
     color: var(--color-primary, #059669);
+  }
+
+  .lock-icon-pulse {
+    animation: iconPulse 300ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Biometric pulsing ring */
+  .bio-attempting {
+    border-color: color-mix(in srgb, var(--color-primary, #059669) 40%, transparent);
+    box-shadow:
+      0 8px 32px color-mix(in srgb, var(--color-primary, #059669) 12%, transparent),
+      0 0.5px 0 rgba(255,255,255,0.3) inset;
+  }
+
+  .bio-ring {
+    position: absolute;
+    inset: -6px;
+    border-radius: 26px;
+    border: 2px solid color-mix(in srgb, var(--color-primary, #059669) 35%, transparent);
+    animation: bioRingPulse 1.5s ease-in-out infinite;
+    pointer-events: none;
   }
 
   /* ══════════════════════════════
@@ -432,6 +515,16 @@
     color: var(--text-tertiary, #64748b);
     margin: 4px 0 24px;
     font-weight: 500;
+  }
+
+  /* Biometric indicator text */
+  .bio-indicator {
+    font-size: 13px;
+    color: var(--color-primary, #059669);
+    font-weight: 500;
+    margin: 2px 0 0;
+    animation: bioIndicatorFade 300ms ease forwards;
+    letter-spacing: 0.01em;
   }
 
   /* ══════════════════════════════
@@ -682,6 +775,7 @@
     justify-content: center;
   }
 
+  /* ── Fingerprint button ── */
   .fingerprint-btn {
     width: 40px;
     height: 40px;
@@ -694,6 +788,37 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: opacity 200ms ease, background 200ms ease, color 200ms ease, transform 200ms ease;
+  }
+
+  .fingerprint-btn-active {
+    opacity: 1;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.45);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    color: var(--color-primary, #059669);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+  }
+
+  :global(.dark) .fingerprint-btn-active,
+  :global(.amoled) .fingerprint-btn-active,
+  :global(.crimson-dark) .fingerprint-btn-active {
+    background: rgba(22, 27, 34, 0.5);
+  }
+
+  .fingerprint-btn-active:hover {
+    transform: scale(1.05);
+  }
+
+  .fingerprint-btn-pulse {
+    animation: fingerprintPulse 1.2s ease-in-out infinite;
+  }
+
+  /* ── Keypad dimmed during biometric ── */
+  .keypad-dimmed {
+    opacity: 0.45;
+    pointer-events: auto;
   }
 
   /* ── Hint ── */
@@ -708,7 +833,6 @@
      ANIMATIONS
      ══════════════════════════════ */
 
-  /* Open: spring scale + fade */
   @keyframes lockOpen {
     0% {
       opacity: 0;
@@ -720,7 +844,6 @@
     }
   }
 
-  /* Unlock ripple */
   @keyframes unlockRippleExpand {
     0% {
       width: 0;
@@ -734,7 +857,6 @@
     }
   }
 
-  /* Content fade out */
   @keyframes contentUnlock {
     0% {
       transform: translate3d(0, 0, 0) scale(1);
@@ -750,7 +872,6 @@
     }
   }
 
-  /* Overlay dissolve */
   @keyframes lockDissolve {
     0% {
       opacity: 1;
@@ -761,19 +882,51 @@
     }
   }
 
-  /* Wrong password shake */
   @keyframes lockShake {
     0%, 100% { transform: translate3d(0, 0, 0); }
-    10% { transform: translate3d(-12px, 0, 0); }
-    20% { transform: translate3d(10px, 0, 0); }
-    30% { transform: translate3d(-8px, 0, 0); }
-    40% { transform: translate3d(6px, 0, 0); }
-    50% { transform: translate3d(-4px, 0, 0); }
-    60% { transform: translate3d(2px, 0, 0); }
+    10% { transform: translate3d(-14px, 0, 0); }
+    20% { transform: translate3d(12px, 0, 0); }
+    30% { transform: translate3d(-10px, 0, 0); }
+    40% { transform: translate3d(8px, 0, 0); }
+    50% { transform: translate3d(-6px, 0, 0); }
+    60% { transform: translate3d(3px, 0, 0); }
   }
 
   @keyframes checkDraw {
     from { stroke-dashoffset: 30; }
     to { stroke-dashoffset: 0; }
+  }
+
+  @keyframes iconPulse {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.12); }
+    100% { transform: scale(1.05); }
+  }
+
+  @keyframes bioRingPulse {
+    0%, 100% {
+      opacity: 0.4;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.8;
+      transform: scale(1.08);
+    }
+  }
+
+  @keyframes bioIndicatorFade {
+    0% { opacity: 0; transform: translateY(-4px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes fingerprintPulse {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.7;
+      transform: scale(0.92);
+    }
   }
 </style>

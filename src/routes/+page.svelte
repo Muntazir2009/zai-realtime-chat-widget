@@ -44,7 +44,43 @@
   let viewKey = $state(0);
   let skipConvEnterAnim = $state(false);
   let showExitOverlay = $state(false);
+  let exitBackPressTime = $state(0);  // Timestamp of first back press
+  let showExitToast = $state(false);
+  let exitBackTimer: ReturnType<typeof setTimeout> | null = null;
   let LockScreenComp: any = $state(null);
+
+  function handleBack() {
+    const now = Date.now();
+    if (view === 'conversation') {
+      // In conversation: go back to chat list
+      chatStore.closeChat();
+      uiStore.setView('chatList');
+      return;
+    }
+    // In main tabs: press-back-to-exit
+    if (now - exitBackPressTime < 2000) {
+      // Second press within 2s — exit
+      showExitToast = false;
+      if (exitBackTimer) { clearTimeout(exitBackTimer); exitBackTimer = null; }
+      // Try to close the window/tab
+      window.close();
+      // If window.close() doesn't work (most browsers), navigate away
+      setTimeout(() => {
+        if (!window.closed) {
+          window.location.href = 'about:blank';
+        }
+      }, 100);
+    } else {
+      // First press — show toast
+      exitBackPressTime = now;
+      showExitToast = true;
+      if (exitBackTimer) clearTimeout(exitBackTimer);
+      exitBackTimer = setTimeout(() => {
+        showExitToast = false;
+        exitBackPressTime = 0;
+      }, 2000);
+    }
+  }
 
   onMount(async () => {
     if (!browser) return;
@@ -155,12 +191,7 @@
           class="{skipConvEnterAnim ? '' : 'animate-conv-enter'} h-full"
           use:clearAnimAfterPlay
           use:backGesture={{
-            onBack: () => {
-              // Skip the enter animation on next conversation open
-              // since we're animating the exit manually
-              chatStore.closeChat();
-              uiStore.setView('chatList');
-            },
+            onBack: handleBack,
             edgeZone: 25,
           }}
           data-in-conversation=""
@@ -211,6 +242,16 @@
       </div>
     </div>
   {/if}
+
+  <!-- Press back again to exit toast -->
+  {#if showExitToast}
+    <div class="exit-back-toast" style="animation: fadeSlideIn 200ms ease forwards;">
+      <span style="display: flex; align-items: center; gap: 6px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        Press back again to exit
+      </span>
+    </div>
+  {/if}
 {/if}
 
 <ConnectionStatus />
@@ -219,3 +260,25 @@
 {#if authStore.isAuthenticated && appLockStore.isLocked && LockScreenComp}
   <LockScreenComp />
 {/if}
+
+<style>
+  .exit-back-toast {
+    position: fixed;
+    bottom: 100px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 10px 20px;
+    border-radius: 100px;
+    border: 1px solid var(--border-subtle);
+    box-shadow: var(--glass-shadow);
+    z-index: 9998;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+</style>

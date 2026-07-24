@@ -1,13 +1,28 @@
 // ============================================================
 // App Lock Store — Svelte 5 runes class
-// Manages optional app lock (PIN / password / pattern).
+// Manages optional app lock (PIN / password / biometric).
 // Secrets stored ONLY in localStorage (hashed with SHA-256).
-// Lock settings (enabled, type, auto-lock) synced via RTDB.
+// Biometric credentials stored ONLY in localStorage (WebAuthn).
+// Lock settings (enabled, type, auto-lock, biometricEnabled)
+// synced via RTDB.
+//
+// AUTO-LOCK BEHAVIOUR (WhatsApp/Telegram style):
+//   The auto-lock timer NEVER runs while the app is visible.
+//   It only activates when the app goes to the BACKGROUND
+//   (visibilitychange → hidden).  When the app returns to
+//   the foreground, the elapsed background time is checked
+//   against the configured threshold.
 // ============================================================
 
 import { browser } from '$app/environment';
 import { authStore } from './auth.svelte.js';
 import * as rtdb from '$lib/firebase/rtdb.js';
+import {
+  isBiometricAvailable,
+  registerBiometric,
+  authenticateBiometric,
+  clearBiometric as clearBiometricCred,
+} from '$lib/utils/biometric.js';
 
 // ── Types ──
 
@@ -19,6 +34,7 @@ export interface LockSettings {
   lockType: LockType;
   autoLock: AutoLockDuration;
   lockOnStartup: boolean;
+  biometricEnabled: boolean;
 }
 
 export interface LockSecrets {
@@ -34,7 +50,6 @@ const SETTINGS_RTDB_KEY = 'app_lock_settings';
 const SETTINGS_LS_KEY = 'app-lock-settings';
 const SECRETS_LS_KEY = 'app-lock-secrets';
 const LOCKED_LS_KEY = 'app-lock-locked';
-const SESSION_ACTIVE_LS_KEY = 'app-lock-session';
 
 const AUTO_LOCK_MS: Record<AutoLockDuration, number> = {
   'immediate': 0,
@@ -50,6 +65,7 @@ const DEFAULT_SETTINGS: LockSettings = {
   lockType: 'pin4',
   autoLock: '1m',
   lockOnStartup: true,
+  biometricEnabled: false,
 };
 
 // ── Helpers ──
@@ -90,13 +106,10 @@ class AppLockStore {
   isInitialized = $state(false);
   settings: LockSettings = $state({ ...DEFAULT_SETTINGS });
 
-  // Internal
-  private _inactivityTimer: ReturnType<typeof setTimeout> | null = null;
-  private _lastActivity = Date.now();
+  // Internal — auto-lock tracks background time only
+  private _backgroundedAt: number | null = null;
   private _settingsUnsub: (() => void) | null = null;
   private _visibilityHandler: (() => void) | null = null;
-  private _beforeUnloadHandler: (() => void) | null = null;
-  private _activityHandler: (() => void) | null = null;
 
   constructor() {
     if (browser) {
@@ -121,10 +134,8 @@ class AppLockStore {
 
     this.isInitialized = true;
 
-    // Start listeners
+    // Start visibility listener (auto-lock only triggers on background)
     this.startVisibilityListener();
-    this.startActivityTracking();
-    this.startAutoLockTimer();
     this.syncSettingsFromRTDB();
   }
 
@@ -178,9 +189,8 @@ class AppLockStore {
       // The caller (LockScreen) must call unlockComplete() after animation.
       if (uid) {
         writeLS(`${LOCKED_LS_KEY}_${uid}`, false);
-        writeLS(`${SESSION_ACTIVE_LS_KEY}_${uid}`, Date.now());
       }
-      this.resetInactivityTimer();
+      this._backgroundedAt = null; // Reset background timer on successful unlock
     }
     return valid;
   }
@@ -196,29 +206,70 @@ class AppLockStore {
     this.lock();
   }
 
+  // ── Biometric unlock ──
+
+  async unlockViaBiometric(): Promise<'success' | 'failed' | 'cancelled' | 'unavailable' | 'security_change'> {
+    const uid = userId();
+    if (!uid) return 'unavailable';
+
+    const result = await authenticateBiometric(uid);
+    if (result === 'success') {
+      this.isUnlocking = true;
+      if (uid) {
+        writeLS(`${LOCKED_LS_KEY}_${uid}`, false);
+      }
+      this._backgroundedAt = null;
+    } else if (result === 'security_change') {
+      // Device security changed — disable biometric, clear credentials
+      this.updateSettings({ biometricEnabled: false });
+      clearBiometricCred(uid);
+    }
+    return result;
+  }
+
+  async enableBiometric(): Promise<void> {
+    const uid = userId();
+    if (!uid) return;
+    const registered = await registerBiometric(uid);
+    if (registered) {
+      this.updateSettings({ biometricEnabled: true });
+    }
+  }
+
+  disableBiometric(): void {
+    const uid = userId();
+    this.updateSettings({ biometricEnabled: false });
+    if (uid) {
+      clearBiometricCred(uid);
+    }
+  }
+
+  /** Check if biometric is available (for UI decisions) */
+  async checkBiometricAvailable(): Promise<boolean> {
+    return isBiometricAvailable();
+  }
+
   // ── Settings ──
 
   updateSettings(partial: Partial<LockSettings>): void {
     this.settings = { ...this.settings, ...partial };
     this.persistSettings();
     this.pushSettingsToRTDB();
-    // Restart auto-lock timer with new duration
-    this.resetInactivityTimer();
   }
 
   async enableLock(secret: string): Promise<void> {
     await this.setSecret(secret);
     this.updateSettings({ enabled: true });
-    // Don't lock immediately on enable — only on next trigger
   }
 
   disableLock(): void {
     this.clearSecret();
-    this.updateSettings({ enabled: false });
+    this.updateSettings({ enabled: false, biometricEnabled: false });
     this.isLocked = false;
     const uid = userId();
     if (uid) {
       writeLS(`${LOCKED_LS_KEY}_${uid}`, false);
+      clearBiometricCred(uid);
     }
   }
 
@@ -226,7 +277,6 @@ class AppLockStore {
     await this.setSecret(newSecret);
   }
 
-  /** Change secret only after verifying the old one */
   async changeSecretWithVerification(oldSecret: string, newSecret: string): Promise<boolean> {
     const valid = await this.verifySecret(oldSecret);
     if (!valid) return false;
@@ -251,18 +301,17 @@ class AppLockStore {
       rtdb.onValue(settingsRef, (snap: any) => {
         const val = snap?.val?.() ?? null;
         if (val && typeof val === 'object') {
-          // Merge RTDB settings (server is source of truth for enabled/lockType/autoLock)
           const remote: Partial<LockSettings> = {
             enabled: val.enabled ?? this.settings.enabled,
             lockType: val.lockType ?? this.settings.lockType,
             autoLock: val.autoLock ?? this.settings.autoLock,
             lockOnStartup: val.lockOnStartup ?? this.settings.lockOnStartup,
+            biometricEnabled: val.biometricEnabled ?? this.settings.biometricEnabled,
           };
           this.settings = { ...DEFAULT_SETTINGS, ...remote };
           this.persistSettings();
-          // If RTDB says locked, lock locally
           if (remote.enabled && !this.hasSecret()) {
-            // Lock enabled from another device but no local secret — show setup
+            // Lock enabled from another device but no local secret
           }
         }
       }).then((unsub) => {
@@ -284,6 +333,7 @@ class AppLockStore {
         lockType: this.settings.lockType,
         autoLock: this.settings.autoLock,
         lockOnStartup: this.settings.lockOnStartup,
+        biometricEnabled: this.settings.biometricEnabled,
         updatedAt: Date.now(),
       });
     } catch (err) {
@@ -291,93 +341,61 @@ class AppLockStore {
     }
   }
 
-  // ── Auto-lock: visibility & inactivity ──
+  // ── Auto-lock: visibility-based ONLY (WhatsApp/Telegram style) ──
+  //
+  // NEVER interrupts active use. Only triggers when:
+  //   1. App goes to background (visibilityState → hidden)
+  //   2. Timer configured as 'immediate' → locks right away
+  //   3. When app returns to foreground, elapsed background time
+  //      is compared against the threshold.
 
   private startVisibilityListener(): void {
     if (!browser) return;
 
     this._visibilityHandler = () => {
       if (document.visibilityState === 'visible') {
-        this.checkAutoLock();
-        this.resetInactivityTimer();
+        // App returning to foreground — check if should lock
+        this.checkBackgroundAutoLock();
       } else {
-        // Page hidden — reset timer, will check on return
-        this.clearInactivityTimer();
+        // App going to background — record timestamp
+        if (this.settings.enabled && this.hasSecret() && !this.isLocked) {
+          this._backgroundedAt = Date.now();
+
+          // 'immediate' locks right when backgrounded
+          if (this.settings.autoLock === 'immediate') {
+            this.lock();
+          }
+        }
       }
     };
 
     document.addEventListener('visibilitychange', this._visibilityHandler);
   }
 
-  private startActivityTracking(): void {
-    if (!browser) return;
+  private checkBackgroundAutoLock(): void {
+    if (!this.settings.enabled || !this.hasSecret() || this.isLocked) return;
+    if (this.settings.autoLock === 'never') return;
 
-    this._activityHandler = () => {
-      this._lastActivity = Date.now();
-    };
+    // 'immediate' was already handled on hidden
+    if (this.settings.autoLock === 'immediate') return;
 
-    const events = ['touchstart', 'touchmove', 'mousedown', 'mousemove', 'keydown', 'scroll'] as const;
-    for (const event of events) {
-      document.addEventListener(event, this._activityHandler, { passive: true });
-    }
-  }
-
-  private checkAutoLock(): void {
-    if (!this.settings.enabled || !this.hasSecret()) return;
-    if (!this.isLocked) {
-      const uid = userId();
-      // Check if enough time has passed since last activity
-      const elapsed = Date.now() - this._lastActivity;
+    // Check how long the app was in the background
+    if (this._backgroundedAt !== null) {
+      const elapsed = Date.now() - this._backgroundedAt;
       const threshold = AUTO_LOCK_MS[this.settings.autoLock];
-      const sessionKey = `${SESSION_ACTIVE_LS_KEY}_${uid}`;
-      const sessionStart = readLS<number | null>(sessionKey, null);
 
-      // If auto-lock is not 'never' and elapsed time exceeds threshold
-      if (threshold !== Infinity && elapsed >= threshold) {
+      if (elapsed >= threshold) {
         this.lock();
       }
-
-      // Also check session start from localStorage (for tab switches)
-      if (sessionStart) {
-        const sessionElapsed = Date.now() - sessionStart;
-        if (threshold !== Infinity && sessionElapsed >= threshold) {
-          this.lock();
-        }
-        // Update session
-        writeLS(sessionKey, Date.now());
-      }
     }
-  }
 
-  private startAutoLockTimer(): void {
-    this.resetInactivityTimer();
-  }
-
-  private resetInactivityTimer(): void {
-    this.clearInactivityTimer();
-    if (!this.settings.enabled || this.settings.autoLock === 'never') return;
-
-    const ms = AUTO_LOCK_MS[this.settings.autoLock];
-    if (ms === 0 || ms === Infinity) return;
-
-    this._inactivityTimer = setTimeout(() => {
-      if (!this.isLocked && this.settings.enabled && this.hasSecret()) {
-        this.lock();
-      }
-    }, ms);
-  }
-
-  private clearInactivityTimer(): void {
-    if (this._inactivityTimer) {
-      clearTimeout(this._inactivityTimer);
-      this._inactivityTimer = null;
-    }
+    // Reset background timestamp
+    this._backgroundedAt = null;
   }
 
   // ── Cleanup ──
 
   destroy(): void {
-    this.clearInactivityTimer();
     if (this._settingsUnsub) {
       this._settingsUnsub();
       this._settingsUnsub = null;
@@ -386,13 +404,6 @@ class AppLockStore {
       document.removeEventListener('visibilitychange', this._visibilityHandler);
       this._visibilityHandler = null;
     }
-    if (this._activityHandler) {
-      const events = ['touchstart', 'touchmove', 'mousedown', 'mousemove', 'keydown', 'scroll'] as const;
-      for (const event of events) {
-        document.removeEventListener(event, this._activityHandler);
-      }
-      this._activityHandler = null;
-    }
   }
 
   /** Call when user logs out — clear lock state */
@@ -400,12 +411,14 @@ class AppLockStore {
     this.destroy();
     this.isLocked = false;
     this.isInitialized = false;
+    this._backgroundedAt = null;
   }
 
   /** Call when user logs in — re-initialize */
   onLogin(): void {
     this.isInitialized = false;
     this.isLocked = false;
+    this._backgroundedAt = null;
     if (browser) {
       this.hydrate();
     }

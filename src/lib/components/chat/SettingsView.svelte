@@ -19,6 +19,7 @@
   import { networkManager } from '$lib/managers/NetworkManager.svelte';
   import { prefsStore, type FontSize, type BubbleStyle, type TimestampFormat, type AnimationSpeed, type MediaQuality, type ChatSortOrder } from '$lib/stores/prefs.svelte';
   import { appLockStore, type LockType, type AutoLockDuration } from '$lib/stores/app-lock.svelte';
+  import { isBiometricAvailable, registerBiometric, clearBiometric } from '$lib/utils/biometric';
   import type { ThemeMode } from '$lib/types/index';
 
   // ── App Lock state ──
@@ -33,6 +34,10 @@
   let lockSetupError = $state('');
   let lockSetupShaking = $state(false);
   let showLockSecurityPanel = $state(false);
+  let bioAvail = $state(false);
+  let bioBusy = $state(false);
+  let bioError = $state();
+  let showBioConfirm = $state(false);
 
   // Sync the single input field to the correct variable based on step
   $effect(() => {
@@ -162,6 +167,45 @@
   function lockNow() {
     appLockStore.lockNow();
     toastStore.show('App locked', 'success');
+  }
+
+  // ── Biometric state ──
+  $effect(() => {
+    if (showLockSecurityPanel && appLockStore.settings.enabled) {
+      isBiometricAvailable().then(v => { bioAvail = v; });
+    }
+  });
+
+  async function toggleBiometric(enable: boolean) {
+    if (enable) {
+      if (!appLockStore.settings.enabled) return;
+      bioBusy = true;
+      bioError = '';
+      try {
+        const uid = authStore.user?.id;
+        if (!uid) return;
+        const registered = await registerBiometric(uid);
+        if (registered) {
+          appLockStore.updateSettings({ biometricEnabled: true });
+        } else {
+          bioError = 'Biometric registration failed. Try again.';
+        }
+      } catch {
+        bioError = 'Biometric registration failed. Try again.';
+      } finally {
+        bioBusy = false;
+      }
+    } else {
+      showBioConfirm = true;
+    }
+  }
+
+  async function confirmDisableBio() {
+    const uid = authStore.user?.id;
+    if (!uid) return;
+    appLockStore.updateSettings({ biometricEnabled: false });
+    clearBiometric(uid);
+    showBioConfirm = false;
   }
 
   // ── Dialog state ──
@@ -1060,6 +1104,46 @@
                 </div>
                 <ChevronRight size={14} style="color: var(--text-tertiary);" />
               </button>
+
+              <!-- Biometric Unlock (shown when lock enabled + biometric available) -->
+              {#if bioAvail}
+                <div class="security-row-divider"></div>
+                <div class="security-row">
+                  <div style="flex: 1; min-width: 0;">
+                    <div class="security-row-header">
+                      <div class="security-row-icon" style="background: color-mix(in srgb, var(--color-primary) 12%, transparent);">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4" />
+                          <path d="M14 13.12c0 2.38 0 6.38-1 8.88" />
+                          <path d="M17.29 21.02c.12-.6.43-2.3.5-3.02" />
+                          <path d="M2 12a10 10 0 0 1 18-6" />
+                          <path d="M2 16h.01" />
+                          <path d="M21.8 16c.2-2 .131-5.354 0-6" />
+                          <path d="M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2" />
+                          <path d="M8.65 22c.21-.66.45-1.32.57-2" />
+                          <path d="M9 6.8a6 6 0 0 1 9 5.2v2" />
+                        </svg>
+                      </div>
+                      <p class="security-row-label">Biometric Unlock</p>
+                    </div>
+                    <p class="security-row-desc">Use fingerprint or face to unlock</p>
+                    {#if bioError}
+                      <p style="font-size: 11px; color: var(--color-danger); margin-top: 4px;">{bioError}</p>
+                    {/if}
+                  </div>
+                  <button
+                    class="toggle-track"
+                    class:toggle-on={appLockStore.settings.biometricEnabled}
+                    disabled={bioBusy}
+                    onclick={() => toggleBiometric(!appLockStore.settings.biometricEnabled)}
+                    role="switch"
+                    aria-checked={appLockStore.settings.biometricEnabled}
+                    aria-label="Toggle biometric unlock"
+                  >
+                    <div class="toggle-thumb"></div>
+                  </button>
+                </div>
+              {/if}
             </div>
           {/if}
         {/if}
@@ -1556,6 +1640,28 @@
             Confirm
           </button>
         {/if}
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Biometric disable confirmation -->
+{#if showBioConfirm}
+  <div
+    class="dialog-overlay"
+    onclick={() => showBioConfirm = false}
+    role="dialog"
+    aria-modal="true"
+    style="animation: fadeIn 200ms ease forwards;"
+  >
+    <div class="dialog-card" style="animation: lockDialogShake 0s; max-width: 320px;" onclick={(e) => e.stopPropagation()}>
+      <h3 class="dialog-title">Disable Biometric Unlock?</h3>
+      <p class="dialog-desc" style="font-size: 13px; color: var(--text-secondary); margin-top: 8px; line-height: 1.5;">
+        You'll need to enter your {lockTypeLabel} to unlock the app. Enable biometrics again anytime in settings.
+      </p>
+      <div class="dialog-actions" style="margin-top: 16px;">
+        <button class="dialog-cancel" onclick={() => showBioConfirm = false}>Cancel</button>
+        <button class="dialog-confirm" onclick={confirmDisableBio} style="background: var(--color-danger);">Disable</button>
       </div>
     </div>
   </div>
@@ -2659,6 +2765,13 @@
     font-weight: 500;
     color: var(--text-primary, #0f172a);
     margin: 0;
+  }
+
+  .security-row-desc {
+    font-size: 11px;
+    color: var(--text-tertiary, #64748b);
+    margin-top: 2px;
+    font-weight: 400;
   }
 
   .security-chips {
