@@ -2021,3 +2021,32 @@ Stage Summary:
 - Files modified: src/routes/+page.svelte (removed duplicate wallpaper, simplified CSS), src/lib/components/chat/Conversation.svelte (wallpaper-layer → position:fixed), src/lib/components/chat/SettingsView.svelte (secure lock type switching), src/lib/stores/app-lock.svelte.ts (added changeTypeAndSecret method)
 - Build passes, no runtime errors
 - No chat functionality, routing, message rendering, uploads, or reactions were modified
+
+---
+Task ID: 2-e
+Agent: Main Agent
+Task: Fix Android back trapping and single-wallpaper transparency
+
+Work Log:
+- **Issue 1: Android Back Trapping**: The app trapped users by consuming all popstate events and using window.close()/about:blank to "exit". Fixed:
+  - Removed popstate handler from back-gesture.ts entirely (gesture action only handles swipe)
+  - Added page-level popstate handler in +page.svelte that only intercepts when in conversation→chatlist
+  - On main tabs (chats/global/settings), popstate is NOT intercepted — browser exits naturally
+  - Removed exitGesture action from tab container
+  - Removed exit overlay, exit toast, and all associated state (showExitOverlay, exitBackPressTime, showExitToast, exitBackTimer)
+  - handleBack() now simply calls history.back() when in conversation
+
+- **Issue 2: Single Wallpaper Transparency**: The nav's backdrop-filter was blurring a black body background instead of the wallpaper. Multiple failed approaches tried adding wallpaper layers. Final fix:
+  - Set the wallpaper as the BODY's own background via a $effect that writes document.body.style
+  - When wallpaper is active: body gets the wallpaper image as background with background-attachment:fixed
+  - When no wallpaper: body style resets, CSS var(--bg-page) takes over
+  - Removed the wallpaper-layer div from Conversation.svelte entirely
+  - Removed wallpaper-layer CSS from Conversation.svelte
+  - Removed wallpaper-active CSS rules from app.css (no longer needed)
+  - Removed svelte:body wallpaper-active class (no longer needed)
+  - Now there is exactly ONE wallpaper — the body itself — and the nav's backdrop-filter blurs it directly
+
+Stage Summary:
+- Files modified: src/routes/+page.svelte (rewrote back handling, body wallpaper effect, removed exit UI), src/lib/actions/back-gesture.ts (removed popstate handler), src/lib/components/chat/Conversation.svelte (removed wallpaper-layer div+CSS), src/app.css (removed wallpaper-active rules)
+- Browser back now works correctly: conversation→chatlist via popstate, main tabs→exit naturally
+- Single wallpaper on body, no seams, no duplicates, no black rectangles behind nav
