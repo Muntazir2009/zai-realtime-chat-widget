@@ -2050,3 +2050,25 @@ Stage Summary:
 - Files modified: src/routes/+page.svelte (rewrote back handling, body wallpaper effect, removed exit UI), src/lib/actions/back-gesture.ts (removed popstate handler), src/lib/components/chat/Conversation.svelte (removed wallpaper-layer div+CSS), src/app.css (removed wallpaper-active rules)
 - Browser back now works correctly: conversation→chatlist via popstate, main tabs→exit naturally
 - Single wallpaper on body, no seams, no duplicates, no black rectangles behind nav
+
+---
+Task ID: 2-regression-fix
+Agent: Main Agent
+Task: Fix two regression bugs — (1) Android back/exit behavior, (2) Bottom nav transparency
+
+Work Log:
+- Traced full layout hierarchy: html → body → +layout.svelte (no bg) → +page.svelte (flex-col wrapper) → has-nav div (padding-bottom 86px) → BottomNavBar
+- Identified ROOT CAUSE of black background behind nav: The $effect in +page.svelte applied wallpaper to body using `document.body.style.background = style` where `style` for URL wallpapers was `"background-image: url('...'); background-size: cover; background-position: center;"` — this is an INVALID CSS shorthand value. The `background` property rejects `background-image:` prefix. Result: browser discards the entire value, body gets `background-color: transparent` but NO background-image. The `<html>` element retains `background-color: var(--bg-page)` (dark/black in dark themes). The nav's `backdrop-filter: blur()` then blurs the dark html background → black rectangle.
+- Fixed by: (a) Using `document.body.style.backgroundImage = url(...)` for URL wallpapers instead of the invalid shorthand, (b) Setting `document.documentElement.style.backgroundColor = 'transparent'` when wallpaper is active so the dark html background doesn't bleed through body's transparent bg-color.
+- Removed unused `wallpaperStyle` derived variable (was no longer used after fix).
+- Traced all history API usage: `+page.svelte` pushes state on conversation enter, `ReactionPicker.svelte` pushes/replaces state on open/close.
+- Identified ROOT CAUSE of back trapping: On main tabs, no guard history entry existed. Browser Back would exit on first press OR the popstate handler did nothing and SvelteKit re-rendered the same page. No double-back-to-exit pattern existed.
+- Fixed by: (a) Adding `mainTabGuard` history entry push when entering main tabs (chatList/settings/global), (b) Adding `exitBackPending` state + `resetExitBack()` function, (c) In popstate handler: first back on main tabs → push guard entry + show "Press back again to exit" toast (2s duration), second back within 2s → allow natural exit, (d) Resetting exit state on conversation entry.
+- Added `toastStore` import for the exit toast.
+- Verified app loads and hydrates correctly in browser (30 stylesheets loaded, CSS variables active).
+
+Stage Summary:
+- **Issue 2 FIXED**: Bottom nav transparency — wallpaper now properly renders on body via `backgroundImage` property (not invalid shorthand), html element made transparent when wallpaper active. No black rectangle behind nav. Nav's backdrop-filter blurs actual wallpaper.
+- **Issue 1 FIXED**: Android back/exit — double-back-to-exit toast on main tabs, proper conversation→chatlist navigation, guard history entries prevent accidental exit.
+- No files other than `src/routes/+page.svelte` were modified.
+- No wallpaper rendering logic was changed — only the CSS property used to apply it.
