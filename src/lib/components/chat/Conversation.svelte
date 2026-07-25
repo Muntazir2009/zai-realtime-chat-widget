@@ -1200,16 +1200,19 @@
     />
   {/if}
 
-  <!-- Media Composer Overlay -->
+  <!-- Media Composer Overlay (portaled to body to escape overflow:hidden) -->
   {#if showComposer && composerFiles.length > 0}
-    <MediaComposer
-      files={composerFiles}
-      onClose={handleComposerClose}
-      onSend={handleComposerSend}
-      onAddMore={handleComposerAddMore}
-      onRemoveFile={handleComposerRemoveFile}
-    />
-    <!-- Hidden input for adding more files -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div use:portal>
+      <MediaComposer
+        files={composerFiles}
+        onClose={handleComposerClose}
+        onSend={handleComposerSend}
+        onAddMore={handleComposerAddMore}
+        onRemoveFile={handleComposerRemoveFile}
+      />
+    </div>
+    <!-- Hidden input for adding more files (kept in DOM tree, not portaled) -->
     <input
       bind:this={addMoreInputEl}
       type="file"

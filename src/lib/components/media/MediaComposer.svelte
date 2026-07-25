@@ -603,6 +603,7 @@
     transition: opacity 250ms ease;
     user-select: none;
     -webkit-user-select: none;
+    pointer-events: auto; /* Override portal wrapper's pointer-events: none */
   }
 
   .mc-backdrop-mounted {
