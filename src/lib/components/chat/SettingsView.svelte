@@ -18,7 +18,7 @@
   import { presenceManager } from '$lib/managers/PresenceManager.svelte';
   import { networkManager } from '$lib/managers/NetworkManager.svelte';
   import { cacheUserProfiles } from '$lib/managers/CacheManager';
-  import { prefsStore, type FontSize, type BubbleStyle, type TimestampFormat, type AnimationSpeed, type MediaQuality, type ChatSortOrder, type InputBarStyle } from '$lib/stores/prefs.svelte';
+  import { prefsStore, type FontSize, type BubbleStyle, type TimestampFormat, type AnimationSpeed, type MediaQuality, type ChatSortOrder, type InputBarStyle, type GlassEffect } from '$lib/stores/prefs.svelte';
   import { appLockStore, type LockType, type AutoLockDuration } from '$lib/stores/app-lock.svelte';
   import { isBiometricAvailable, registerBiometric, clearBiometric } from '$lib/utils/biometric';
   import type { ThemeMode, User } from '$lib/types/index';
@@ -292,6 +292,12 @@
   const inputBarStyles: { style: InputBarStyle; label: string; icon: typeof Circle }[] = [
     { style: 'opaque', label: 'Opaque', icon: Square },
     { style: 'glass', label: 'Liquid Glass', icon: Sparkles },
+  ];
+
+  // ── Glass effects ──
+  const glassEffects: { effect: GlassEffect; label: string; icon: typeof Circle }[] = [
+    { effect: 'standard', label: 'Standard', icon: Circle },
+    { effect: 'liquid', label: 'Liquid Glass', icon: Sparkles },
   ];
 
   // ── Accent color presets ──
@@ -830,6 +836,22 @@
             >
               <s.icon size={13} />
               {s.label}
+            </button>
+          {/each}
+        </div>
+
+        <!-- Glass Effects -->
+        <div class="option-row-header"><Sparkles size={12} /> Glass Effects</div>
+        <div class="btn-group">
+          {#each glassEffects as g (g.effect)}
+            {@const isActive = prefsStore.glassEffect === g.effect}
+            <button
+              class="btn-option"
+              class:btn-option-active={isActive}
+              onclick={() => prefsStore.setGlassEffect(g.effect)}
+            >
+              <g.icon size={13} />
+              {g.label}
             </button>
           {/each}
         </div>

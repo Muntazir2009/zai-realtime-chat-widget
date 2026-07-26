@@ -16,6 +16,7 @@ export type AnimationSpeed = 'reduced' | 'normal' | 'enhanced';
 export type MediaQuality = 'low' | 'medium' | 'high';
 export type ChatSortOrder = 'recent' | 'unread' | 'alphabetical';
 export type InputBarStyle = 'opaque' | 'glass';
+export type GlassEffect = 'standard' | 'liquid';
 
 interface Prefs {
   // Privacy & Realtime
@@ -28,6 +29,7 @@ interface Prefs {
   compactMode: boolean;
   enterSend: boolean;
   inputBarStyle: InputBarStyle;
+  glassEffect: GlassEffect;
   // Customisation
   timestampFormat: TimestampFormat;
   animationSpeed: AnimationSpeed;
@@ -52,6 +54,7 @@ const DEFAULT_PREFS: Prefs = {
   compactMode: false,
   enterSend: true,
   inputBarStyle: 'opaque',
+  glassEffect: 'standard',
   timestampFormat: 'relative',
   animationSpeed: 'normal',
   showLinkPreviews: true,
@@ -94,6 +97,7 @@ class PrefsStore {
   compactMode = $state(readPrefs().compactMode);
   enterSend = $state(readPrefs().enterSend);
   inputBarStyle = $state(readPrefs().inputBarStyle);
+  glassEffect = $state(readPrefs().glassEffect);
   // Customisation
   timestampFormat = $state(readPrefs().timestampFormat);
   animationSpeed = $state(readPrefs().animationSpeed);
@@ -116,6 +120,12 @@ class PrefsStore {
       this.applyAnimationSpeed(this.animationSpeed);
       this.applyWallpaperOpacity(this.chatWallpaperOpacity);
       this.applyCompactMode(this.compactMode);
+      // Apply glass effect class on load
+      if (typeof document !== 'undefined') {
+        const root = document.documentElement;
+        root.classList.toggle('nav-liquid-glass', this.glassEffect === 'liquid');
+        root.classList.toggle('nav-standard-glass', this.glassEffect === 'standard');
+      }
     }
   }
 
@@ -129,6 +139,7 @@ class PrefsStore {
       compactMode: this.compactMode,
       enterSend: this.enterSend,
       inputBarStyle: this.inputBarStyle,
+      glassEffect: this.glassEffect,
       timestampFormat: this.timestampFormat,
       animationSpeed: this.animationSpeed,
       showLinkPreviews: this.showLinkPreviews,
@@ -205,6 +216,15 @@ class PrefsStore {
   setBubbleStyle(style: BubbleStyle): void { this.bubbleStyle = style; this.applyBubbleStyle(style); this.persist(); }
   setCompactMode(val: boolean): void { this.compactMode = val; this.applyCompactMode(val); this.persist(); }
   setInputBarStyle(style: InputBarStyle): void { this.inputBarStyle = style; this.persist(); }
+  setGlassEffect(effect: GlassEffect): void {
+    this.glassEffect = effect;
+    this.persist();
+    if (typeof document !== 'undefined') {
+      const root = document.documentElement;
+      root.classList.toggle('nav-liquid-glass', effect === 'liquid');
+      root.classList.toggle('nav-standard-glass', effect === 'standard');
+    }
+  }
 
   // Customisation setters
   setTimestampFormat(fmt: TimestampFormat): void { this.timestampFormat = fmt; this.persist(); }

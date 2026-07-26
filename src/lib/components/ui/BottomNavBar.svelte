@@ -2,6 +2,7 @@
   import { Globe, MessageCircle, Settings } from 'lucide-svelte';
   import { uiStore, type TabId } from '$lib/stores/ui.svelte';
   import { chatStore } from '$lib/stores/chat.svelte';
+  import { prefsStore } from '$lib/stores/prefs.svelte';
   import { onMount, onDestroy } from 'svelte';
 
   let totalUnread = $derived(
@@ -24,46 +25,41 @@
   let longPressedTab = $state<TabId | null>(null);
 
   // ── Animation state (high-frequency, NOT reactive — direct DOM writes) ──
-  // Indicator spring — X only (size is CONSTANT across all tabs)
   let indX = 0;          // current translateX
   let indVX = 0;         // velocity X
   let targetX = 0;       // target translateX
-  // Indicator is a FIXED-SIZE squircle (44px). It never resizes between tabs —
-  // it only translates horizontally to sit behind the active icon.
 
   // Drag state
-  let isDragging = false;        // plain let — not reactive, only read in RAF loop
-  let isGrabbed = false;         // plain let — visual grab state
+  let isDragging = false;
+  let isGrabbed = false;
   let indPointerId: number | null = null;
   let indDragEngaged = false;
   let dragStartX = 0;
   let dragStartIndX = 0;
   let lastDragX = 0;
   let lastDragT = 0;
-  let dragVX = 0;        // measured pointer velocity (px per ms)
+  let dragVX = 0;
   let rafId: number | null = null;
   let rippleId = 0;
 
   // ── Cached layout (avoids per-frame getBoundingClientRect) ──
   let cachedCenters: { centerX: number }[] = [];
 
-  // Spring constants — tuned for premium, slightly bouncy feel
-  const STIFFNESS = 0.20;
-  const DAMPING = 0.74;
-  const VELOCITY_FACTOR = 0.55;  // how much release velocity carries into the spring
-  const MAGNETIC_STRENGTH = 0.18;
-  const MAGNETIC_MAX = 4;        // px max tab shift (subtle for compact size)
-  const LONG_PRESS_MS = 500;
-  const DRAG_THRESHOLD = 5;      // px movement before drag engages
-  const TAP_THRESHOLD = 4;       // px movement before a tab tap is cancelled
+  // Spring constants — faster response, premium feel
+  const STIFFNESS = 0.24;       // was 0.20 — snappier
+  const DAMPING = 0.76;         // was 0.74 — slightly less oscillation
+  const VELOCITY_FACTOR = 0.55;
+  const MAGNETIC_STRENGTH = 0.16;
+  const MAGNETIC_MAX = 3.5;     // was 4 — subtler for compact size
+  const LONG_PRESS_MS = 450;    // was 500 — faster grab
+  const DRAG_THRESHOLD = 5;
+  const TAP_THRESHOLD = 4;
 
-  // Indicator is a fixed-size squircle — 44px — centered behind the active icon.
-  // We translate it so its CENTER aligns with the active tab's CENTER.
-  const IND_SIZE = 44;
+  // Indicator: rounded capsule, ~15% smaller (was 44 → 38)
+  const IND_SIZE = 38;
   const IND_HALF = IND_SIZE / 2;
 
   // ── Layout measurement (cached) ──
-  /** Recompute all tab centers (relative to capsule) and cache them. */
   function invalidateCenters() {
     if (!capsuleEl) { cachedCenters = []; return; }
     const capsuleRect = capsuleEl.getBoundingClientRect();
@@ -82,9 +78,7 @@
     invalidateCenters();
     const c = cachedCenters[idx];
     if (!c) return;
-    // Target = tab center minus indicator half-width (so indicator center = tab center)
     targetX = c.centerX - IND_HALF;
-    // First measurement → snap instantly
     if (indX === 0 && indVX === 0) {
       indX = targetX;
       writeIndicator();
@@ -92,11 +86,9 @@
   }
 
   // ── Spring animation loop ──
-  /** Compute + apply magnetic tab offsets based on indicator center. */
   function applyMagneticTabs(indCenter: number) {
     const cs = cachedCenters;
     if (cs.length === 0) return;
-    // Batch all writes after reads to avoid layout thrash
     const transforms: string[] = [];
     for (let i = 0; i < tabEls.length; i++) {
       const c = cs[i];
@@ -112,7 +104,6 @@
   }
 
   function springStep() {
-    // Spring toward target X (size is constant — no size spring needed)
     const fx = (targetX - indX) * STIFFNESS;
     indVX = (indVX + fx) * DAMPING;
     indX += indVX;
@@ -121,7 +112,6 @@
     writeIndicator();
     applyMagneticTabs(indCenter);
 
-    // Continue if not settled
     const settled =
       Math.abs(targetX - indX) < 0.3 &&
       Math.abs(indVX) < 0.3;
@@ -129,7 +119,6 @@
       rafId = requestAnimationFrame(springStep);
     } else {
       rafId = null;
-      // Reset tab transforms when settled
       for (const el of tabEls) {
         if (el) el.style.transform = '';
       }
@@ -144,17 +133,16 @@
 
   function writeIndicator() {
     if (!indicatorEl) return;
-    // GPU-accelerated transform only — no width changes (size is constant)
-    // Subtle scale on grab for tactile feedback
-    const scale = isGrabbed ? 1.06 : 1;
-    indicatorEl.style.transform = `translateX(${indX.toFixed(2)}px) scale(${scale})`;
+    // GPU transform only. Subtle lift scale on grab (floating effect).
+    const scale = isGrabbed ? 1.05 : 1;
+    const lift = isGrabbed ? -2 : 0;  // translateY up when grabbed
+    indicatorEl.style.transform = `translateX(${indX.toFixed(2)}px) translateY(${lift}px) scale(${scale})`;
   }
 
   // ── Tab selection ──
   function selectTab(id: TabId) {
     // If same tab AND not in a conversation → no-op.
-    // If same tab BUT in a conversation → fall through to setTab,
-    // which closes the conversation and returns to the chat list.
+    // If same tab BUT in a conversation → fall through to setTab (closes chat).
     if (uiStore.tab === id && uiStore.view !== 'conversation') return;
     uiStore.setTab(id);
     requestAnimationFrame(() => {
@@ -176,7 +164,7 @@
     }, 600);
   }
 
-  // ── Long press (tab contextual pulse — no haptic) ──
+  // ── Long press ──
   let longPressTimer: ReturnType<typeof setTimeout> | null = null;
   let pointerDownTab: TabId | null = null;
   let pointerDownX = 0;
@@ -215,9 +203,7 @@
     const dx = e.clientX - pointerDownX;
     const dy = e.clientY - pointerDownY;
 
-    // If press is on the ACTIVE tab and movement exceeds drag threshold,
-    // engage indicator drag (long-press-to-grab pattern). The indicator
-    // sits BEHIND the tab (z-index 1 < 2), so we drive its drag from here.
+    // Active tab + movement > threshold → engage indicator drag
     if (!indDragEngaged && pointerDownTab === uiStore.tab) {
       if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
         indDragEngaged = true;
@@ -238,7 +224,7 @@
       }
     }
 
-    // Once drag is engaged, follow finger
+    // Drag engaged → follow finger
     if (indDragEngaged && indPointerId === e.pointerId) {
       const moveDx = e.clientX - dragStartX;
       let newX = dragStartIndX + moveDx;
@@ -250,7 +236,7 @@
         const minX = minCenter - IND_HALF;
         const maxX = maxCenter - IND_HALF;
         if (newX < minX) {
-          newX = minX + (newX - minX) * 0.4;  // elastic resistance
+          newX = minX + (newX - minX) * 0.4;
         } else if (newX > maxX) {
           newX = maxX + (newX - maxX) * 0.4;
         }
@@ -273,7 +259,6 @@
       return;
     }
 
-    // Non-active tab movement → cancel tap / long-press
     if (Math.abs(dx) > TAP_THRESHOLD || Math.abs(dy) > TAP_THRESHOLD) {
       movedSinceDown = true;
       cancelLongPress();
@@ -283,7 +268,6 @@
   function onTabPointerUp(e: PointerEvent, tabId: TabId) {
     cancelLongPress();
 
-    // If an indicator drag was engaged, handle snap
     if (indDragEngaged && indPointerId === e.pointerId) {
       try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* ignore */ }
       isGrabbed = false;
@@ -324,7 +308,6 @@
       return;
     }
 
-    // Normal tap
     if (pointerDownTab === tabId && !movedSinceDown) {
       if (longPressedTab !== tabId) {
         selectTab(tabId);
@@ -383,7 +366,7 @@
     window.removeEventListener('resize', onResize);
   });
 
-  // Re-measure when the active tab changes (e.g. from another trigger like back-gesture)
+  // Re-measure when the active tab changes
   $effect(() => {
     const _t = uiStore.tab;
     requestAnimationFrame(() => {
@@ -393,6 +376,19 @@
   });
 </script>
 
+<!-- Inline SVG displacement filter for liquid-glass refraction.
+     Applied via a pseudo-element overlay (not on the capsule itself, to avoid
+     distorting icons/indicator). -->
+<svg class="liquid-glass-svg" aria-hidden="true" width="0" height="0" style="position:absolute;pointer-events:none;">
+  <defs>
+    <filter id="liquidRefraction" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.008 0.012" numOctaves="2" seed="3" result="noise" />
+      <feGaussianBlur in="noise" stdDeviation="2" result="softNoise" />
+      <feDisplacementMap in="SourceGraphic" in2="softNoise" scale="6" xChannelSelector="R" yChannelSelector="G" />
+    </filter>
+  </defs>
+</svg>
+
 <!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
 <nav
   class="liquid-nav"
@@ -400,17 +396,20 @@
   aria-label="Main navigation"
 >
   <div class="liquid-capsule" bind:this={capsuleEl}>
-    <!-- subtle top sheen -->
+    <!-- layered glass highlights -->
     <div class="capsule-sheen" aria-hidden="true"></div>
+    <div class="capsule-fresnel" aria-hidden="true"></div>
+    <!-- liquid glass refraction overlay (only visible in liquid mode) -->
+    <div class="capsule-refraction" aria-hidden="true"></div>
 
-    <!-- active indicator (fixed-size squircle, BEHIND tabs so icons stay visible) -->
+    <!-- active indicator (fixed-size rounded capsule, behind tabs) -->
     <div
       class="liquid-indicator"
       bind:this={indicatorEl}
       aria-hidden="true"
     ></div>
 
-    <!-- tabs (icons only — no labels) -->
+    <!-- tabs (icons only) -->
     {#each tabs as tab, i (tab.id)}
       {@const isActive = uiStore.tab === tab.id}
       <button
@@ -428,7 +427,7 @@
         onpointerleave={onTabPointerCancel}
       >
         <span class="tab-icon-wrap">
-          <tab.icon size={22} class="tab-icon" strokeWidth={isActive ? 2.2 : 1.6} />
+          <tab.icon size={20} class="tab-icon" strokeWidth={isActive ? 2.3 : 1.7} />
         </span>
 
         {#if tab.id === 'dms' && totalUnread > 0}
@@ -460,8 +459,7 @@
     align-items: center;
     justify-content: center;
     pointer-events: none;
-    /* Compact margins — never touch screen edges */
-    padding: 0 max(16px, env(safe-area-inset-left, 0px)) max(14px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-right, 0px));
+    padding: 0 max(14px, env(safe-area-inset-left, 0px)) max(12px, env(safe-area-inset-bottom, 0px)) max(14px, env(safe-area-inset-right, 0px));
   }
 
   .liquid-capsule {
@@ -470,80 +468,154 @@
     display: flex;
     align-items: center;
     gap: 0;
-    padding: 6px;
-    border-radius: 28px;
-    max-width: 260px;
+    padding: 5px;
+    border-radius: 26px;
+    max-width: 220px;
     width: 100%;
-    height: 56px;
-    /* Soft dark liquid glass — deep charcoal, premium translucent */
+    height: 48px;
+    /* ── Standard glass: layered blur + translucent dark ── */
     background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.018) 100%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%),
       rgba(28, 28, 30, 0.58);
-    backdrop-filter: blur(32px) saturate(180%);
-    -webkit-backdrop-filter: blur(32px) saturate(180%);
-    /* Thin subtle glass border */
-    border: 0.5px solid rgba(255, 255, 255, 0.12);
-    /* Minimal shadow — soft, downward */
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    border: 0.5px solid rgba(255, 255, 255, 0.14);
     box-shadow:
-      0 4px 12px rgba(0, 0, 0, 0.22),
-      0 1px 3px rgba(0, 0, 0, 0.10),
-      0 0.5px 0 rgba(255, 255, 255, 0.10) inset;
+      0 6px 20px rgba(0, 0, 0, 0.24),
+      0 2px 6px rgba(0, 0, 0, 0.12),
+      0 0.5px 0 rgba(255, 255, 255, 0.14) inset,
+      0 -0.5px 1px rgba(0, 0, 0, 0.06) inset;
     isolation: isolate;
   }
 
-  /* Top sheen — very subtle highlight along the top edge */
+  /* ── Real Liquid Glass mode: layered blur + fresnel + refraction overlay ── */
+  :global(.nav-liquid-glass) .liquid-capsule {
+    /* Layered blur for depth: stronger saturation + brightness for refraction feel */
+    backdrop-filter: blur(24px) saturate(200%) brightness(1.10);
+    -webkit-backdrop-filter: blur(24px) saturate(200%) brightness(1.10);
+    background:
+      /* top internal reflection */
+      linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.03) 35%, rgba(255, 255, 255, 0) 50%),
+      /* fresnel edge light (brighter at top/bottom edges) */
+      radial-gradient(120% 100% at 50% 0%, rgba(255, 255, 255, 0.12) 0%, transparent 45%),
+      radial-gradient(120% 100% at 50% 100%, rgba(255, 255, 255, 0.08) 0%, transparent 45%),
+      /* base tint — more transparent for deeper glass */
+      rgba(24, 24, 28, 0.38);
+    border: 0.5px solid rgba(255, 255, 255, 0.26);
+    box-shadow:
+      0 8px 28px rgba(0, 0, 0, 0.30),
+      0 2px 8px rgba(0, 0, 0, 0.14),
+      0 0.5px 0 rgba(255, 255, 255, 0.34) inset,
+      0 -0.5px 1px rgba(0, 0, 0, 0.08) inset,
+      0 0 0 0.5px rgba(255, 255, 255, 0.10);
+  }
+
+  /* Refraction overlay — a pseudo-layer with SVG filter for subtle distortion.
+     This sits ABOVE the backdrop but BELOW tabs/icons, so icons stay crisp. */
+  .capsule-refraction {
+    position: absolute;
+    inset: 0;
+    border-radius: 26px;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0;
+    /* Subtle noise texture for refraction simulation */
+    background:
+      radial-gradient(80% 60% at 30% 20%, rgba(255, 255, 255, 0.06) 0%, transparent 50%),
+      radial-gradient(80% 60% at 70% 80%, rgba(255, 255, 255, 0.04) 0%, transparent 50%);
+    transition: opacity 300ms ease;
+  }
+  :global(.nav-liquid-glass) .capsule-refraction {
+    opacity: 1;
+    filter: url(#liquidRefraction);
+  }
+
+  /* Top sheen — soft highlight */
   .capsule-sheen {
     position: absolute;
     top: 1px;
-    left: 12px;
-    right: 12px;
-    height: 45%;
-    border-radius: 28px 28px 14px 14px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0) 100%);
+    left: 10px;
+    right: 10px;
+    height: 50%;
+    border-radius: 26px 26px 12px 12px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0) 100%);
     pointer-events: none;
     z-index: 0;
   }
+  :global(.nav-liquid-glass) .capsule-sheen {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0) 70%);
+  }
 
-  /* ── Draggable active indicator (FIXED-SIZE squircle) ── */
-  /* Small rounded square behind ONLY the active icon — never stretches. */
+  /* Fresnel edge lighting — brighter at horizontal edges (left/right) */
+  .capsule-fresnel {
+    position: absolute;
+    inset: 0;
+    border-radius: 26px;
+    background:
+      linear-gradient(90deg, rgba(255, 255, 255, 0.14) 0%, transparent 12%, transparent 88%, rgba(255, 255, 255, 0.14) 100%);
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.7;
+  }
+  :global(.nav-liquid-glass) .capsule-fresnel {
+    opacity: 1;
+    background:
+      linear-gradient(90deg, rgba(255, 255, 255, 0.22) 0%, transparent 14%, transparent 86%, rgba(255, 255, 255, 0.22) 100%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.10) 0%, transparent 20%, transparent 80%, rgba(255, 255, 255, 0.08) 100%);
+  }
+
+  /* ── Active indicator (rounded capsule, floating) ── */
   .liquid-indicator {
     position: absolute;
     top: 50%;
     left: 0;
-    width: 44px;
-    height: 44px;
-    margin-top: -22px;  /* center vertically */
-    border-radius: 14px;  /* squircle — rounded square, not pill */
-    /* Subtle elevated surface — lighter than the dark capsule bg */
+    width: 38px;
+    height: 38px;
+    margin-top: -19px;
+    /* Rounded capsule (pill) — full radius = half of height */
+    border-radius: 19px;
     background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0.03) 100%),
-      rgba(72, 72, 74, 0.92);
-    /* Soft inset + tiny shadow — no oversized glow */
+      linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.04) 100%),
+      rgba(72, 72, 78, 0.88);
+    /* Reduced shadow, floating appearance */
     box-shadow:
-      0 1px 3px rgba(0, 0, 0, 0.20),
-      0 0.5px 0 rgba(255, 255, 255, 0.12) inset,
-      0 -0.5px 0.5px rgba(0, 0, 0, 0.08) inset;
+      0 2px 8px rgba(0, 0, 0, 0.20),
+      0 1px 2px rgba(0, 0, 0, 0.10),
+      0 0.5px 0 rgba(255, 255, 255, 0.22) inset,
+      0 -0.5px 0.5px rgba(0, 0, 0, 0.10) inset;
     transform: translateX(0);
     transform-origin: center;
-    /* z-index 1 — BEHIND tabs so the active icon stays fully visible.
-       Dragging is driven by the active tab's pointer handlers (long-press
-       + move engages the indicator drag). */
     z-index: 1;
     pointer-events: none;
     will-change: transform;
     -webkit-tap-highlight-color: transparent;
-    transition: box-shadow 180ms ease, background 180ms ease;
+    transition: box-shadow 200ms cubic-bezier(0.22, 1, 0.36, 1), background 200ms ease;
+  }
+  :global(.nav-liquid-glass) .liquid-indicator {
+    /* Premium glass indicator with refraction */
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.20) 0%, rgba(255, 255, 255, 0.06) 50%, rgba(255, 255, 255, 0.10) 100%),
+      rgba(60, 60, 66, 0.70);
+    backdrop-filter: blur(8px) saturate(160%);
+    -webkit-backdrop-filter: blur(8px) saturate(160%);
+    box-shadow:
+      0 3px 10px rgba(0, 0, 0, 0.22),
+      0 1px 3px rgba(0, 0, 0, 0.12),
+      0 0.5px 0 rgba(255, 255, 255, 0.30) inset,
+      0 -0.5px 0.5px rgba(0, 0, 0, 0.10) inset,
+      0 0 0 0.5px rgba(255, 255, 255, 0.10);
   }
   .liquid-indicator.indicator-grabbed {
     background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.04) 100%),
-      rgba(82, 82, 84, 0.96);
+      linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.06) 100%),
+      rgba(88, 88, 94, 0.94);
     box-shadow:
-      0 2px 6px rgba(0, 0, 0, 0.26),
-      0 0.5px 0 rgba(255, 255, 255, 0.16) inset;
+      0 4px 14px rgba(0, 0, 0, 0.28),
+      0 2px 4px rgba(0, 0, 0, 0.14),
+      0 0.5px 0 rgba(255, 255, 255, 0.26) inset;
   }
 
-  /* ── Tabs (equal width — icons only) ── */
+  /* ── Tabs (equal width, icons only) ── */
   .liquid-tab {
     position: relative;
     z-index: 2;
@@ -555,28 +627,28 @@
     padding: 0;
     border: none;
     background: transparent;
-    color: rgba(235, 235, 240, 0.55);
+    color: rgba(235, 235, 240, 0.50);
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
     user-select: none;
     overflow: hidden;
     border-radius: 18px;
     transition:
-      color 220ms cubic-bezier(0.22, 1, 0.36, 1),
-      transform 140ms cubic-bezier(0.22, 1, 0.36, 1);
+      color 200ms cubic-bezier(0.22, 1, 0.36, 1),
+      transform 120ms cubic-bezier(0.22, 1, 0.36, 1);
     will-change: transform;
     touch-action: manipulation;
   }
 
   .liquid-tab:active {
-    transform: scale(0.92);
+    transform: scale(0.90);
   }
 
   .tab-icon-wrap {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
     flex-shrink: 0;
   }
 
@@ -584,17 +656,18 @@
     color: #ffffff;
   }
   .liquid-tab.tab-active .tab-icon-wrap {
-    transform: scale(1.08);
+    transform: scale(1.10);
   }
 
   :global(.liquid-tab .tab-icon) {
-    transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
     display: block;
+    /* Sharper icon rendering */
+    shape-rendering: geometricPrecision;
   }
 
-  /* Long-press pulse */
   .liquid-tab.tab-longpressed {
-    transform: scale(0.86);
+    transform: scale(0.84);
   }
 
   /* ── Ripple ── */
@@ -603,31 +676,31 @@
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.30);
+    background: rgba(255, 255, 255, 0.28);
     transform: translate(-50%, -50%) scale(0);
     pointer-events: none;
     animation: tabRipple 600ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
     z-index: 0;
   }
   @keyframes tabRipple {
-    0% { transform: translate(-50%, -50%) scale(0); opacity: 0.30; }
-    100% { transform: translate(-50%, -50%) scale(18); opacity: 0; }
+    0% { transform: translate(-50%, -50%) scale(0); opacity: 0.28; }
+    100% { transform: translate(-50%, -50%) scale(16); opacity: 0; }
   }
 
   /* ── Unread badge ── */
   .unread-badge {
     position: absolute;
-    top: 4px;
-    right: 8px;
-    min-width: 16px;
-    height: 16px;
+    top: 3px;
+    right: 6px;
+    min-width: 15px;
+    height: 15px;
     padding: 0 4px;
     border-radius: 8px;
     background: var(--color-danger, #ef4444);
     color: white;
     font-size: 9px;
     font-weight: 700;
-    line-height: 16px;
+    line-height: 15px;
     text-align: center;
     box-shadow: 0 1px 4px rgba(239, 68, 68, 0.4);
     animation: badgeScaleIn 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
@@ -639,48 +712,48 @@
     100% { transform: scale(1); opacity: 1; }
   }
 
-  /* ── Theme variants (all lean dark per reference) ── */
+  /* ── Theme variants ── */
   :global(.dark) .liquid-capsule {
     background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.014) 100%),
-      rgba(22, 22, 26, 0.64);
-    border-color: rgba(255, 255, 255, 0.10);
+      linear-gradient(180deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.015) 100%),
+      rgba(20, 20, 24, 0.64);
+    border-color: rgba(255, 255, 255, 0.12);
     box-shadow:
-      0 4px 12px rgba(0, 0, 0, 0.40),
-      0 1px 3px rgba(0, 0, 0, 0.20),
-      0 0.5px 0 rgba(255, 255, 255, 0.08) inset;
+      0 6px 20px rgba(0, 0, 0, 0.42),
+      0 2px 6px rgba(0, 0, 0, 0.20),
+      0 0.5px 0 rgba(255, 255, 255, 0.10) inset;
   }
 
   :global(.amoled) .liquid-capsule {
     background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.012) 100%),
-      rgba(12, 12, 16, 0.68);
-    border-color: rgba(255, 255, 255, 0.10);
+      linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.01) 100%),
+      rgba(10, 10, 14, 0.70);
+    border-color: rgba(255, 255, 255, 0.12);
     box-shadow:
-      0 4px 12px rgba(0, 0, 0, 0.50),
-      0 1px 3px rgba(0, 0, 0, 0.25),
-      0 0.5px 0 rgba(255, 255, 255, 0.10) inset;
+      0 6px 20px rgba(0, 0, 0, 0.52),
+      0 2px 6px rgba(0, 0, 0, 0.26),
+      0 0.5px 0 rgba(255, 255, 255, 0.12) inset;
   }
   :global(.amoled) .liquid-indicator {
     background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%),
-      rgba(40, 40, 44, 0.92);
+      linear-gradient(180deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0.02) 100%),
+      rgba(38, 38, 42, 0.90);
   }
 
   :global(.crimson-dark) .liquid-capsule {
     background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.055) 0%, rgba(255, 255, 255, 0.014) 100%),
-      rgba(26, 22, 30, 0.64);
-    border-color: rgba(255, 255, 255, 0.10);
+      linear-gradient(180deg, rgba(255, 255, 255, 0.065) 0%, rgba(255, 255, 255, 0.015) 100%),
+      rgba(24, 20, 28, 0.64);
+    border-color: rgba(255, 255, 255, 0.12);
     box-shadow:
-      0 4px 12px rgba(0, 0, 0, 0.44),
-      0 1px 3px rgba(0, 0, 0, 0.22),
-      0 0.5px 0 rgba(255, 255, 255, 0.08) inset;
+      0 6px 20px rgba(0, 0, 0, 0.46),
+      0 2px 6px rgba(0, 0, 0, 0.22),
+      0 0.5px 0 rgba(255, 255, 255, 0.10) inset;
   }
   :global(.crimson-dark) .liquid-indicator {
     background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%),
-      rgba(58, 48, 58, 0.92);
+      linear-gradient(180deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0.02) 100%),
+      rgba(54, 44, 54, 0.90);
   }
 
   /* ── Reduced motion ── */
@@ -690,6 +763,15 @@
     .liquid-indicator,
     :global(.liquid-tab .tab-icon) {
       transition-duration: 1ms !important;
+    }
+  }
+
+  /* ── Graceful degradation: disable SVG filter on low-end (coarse pointer + small screen) ── */
+  @media (pointer: coarse) and (max-width: 360px) {
+    :global(.nav-liquid-glass) .liquid-capsule {
+      filter: none;
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
     }
   }
 </style>

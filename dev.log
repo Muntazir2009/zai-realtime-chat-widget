@@ -434,3 +434,22 @@ https://svelte.dev/e/css_unused_selector
 [getAccessToken] using cached token
 sed_selector
 [getAccessToken] using cached token
+7:47:30 PM [vite] (client) Forced re-optimization of dependencies
+
+  VITE v6.4.3  ready in 1395 ms
+
+  ➜  Local:   http://localhost:3000/
+  ➜  Network: http://21.0.4.207:3000/
+
+  VITE v6.4.3  ready in 1679 ms
+
+  ➜  Local:   http://localhost:3000/
+  ➜  Network: http://21.0.4.207:3000/
+Using secrets defined in .env
+Using secrets defined in .env
+
+  VITE v6.4.3  ready in 1421 ms
+
+  ➜  Local:   http://localhost:3000/
+  ➜  Network: http://21.0.4.207:3000/
+Using secrets defined in .env

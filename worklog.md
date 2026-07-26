@@ -2563,3 +2563,111 @@ Stage Summary:
   - Drag: dispatched PointerEvents on active tab → indicator followed → snapped to Settings ✓
   - Indicator width stayed 44px during drag (no resize) ✓
 - VLM comparison: capsule 8/10, layout 7/10 match with reference. Indicator rated 4/10 by VLM because reference's indicator is nearly invisible — but user explicitly requested a visible small indicator, so this is correct per spec.
+---
+Task ID: 7-A
+Agent: Subagent A
+Task: Add Glass Effects segmented control to SettingsView
+
+Work Log:
+- Read worklog tail to understand previous context (BottomNavBar task completed with 33 baseline errors)
+- Read SettingsView.svelte to locate: import line (21), style arrays (~292), Input Bar Style UI block (~821), Compact Mode block (~837)
+- Verified prefs.svelte.ts exports `type GlassEffect`, `glassEffect` state, and `setGlassEffect()` method
+- Confirmed `Sparkles` and `Circle` already imported from lucide-svelte
+- Edit 1: Added `type GlassEffect` to the prefs import on line 21
+- Edit 2: Added `glassEffects` array constant after `inputBarStyles` (lines 297-301)
+- Edit 3: Inserted Glass Effects segmented control block after Input Bar Style section and before Compact Mode (lines 843-857)
+- Ran `npx svelte-kit sync && npx svelte-check --threshold error --output human 2>&1 | grep -c '^Error:'` → 33 (matches baseline)
+- Verified no new errors mention GlassEffect; the SettingsView:95 error is pre-existing (type comparison issue unrelated to this task)
+
+Stage Summary:
+- File changed: `/home/z/my-project/src/lib/components/chat/SettingsView.svelte`
+- Three edits made: import type, array constant, UI segmented control
+- svelte-check: 33 errors — IDENTICAL to baseline, zero new errors
+- No CSS changes, no BottomNavBar changes, no prefs.svelte.ts changes
+
+---
+Task ID: 7
+Agent: Main Agent + Subagent A
+Task: Premium flagship nav refinement — smaller size, rounded-capsule indicator, real Liquid Glass setting, drag, animations
+
+Work Log:
+- **SIZE & PROPORTIONS — 15-20% smaller**:
+  - Capsule: max-width 260→220px, height 56→48px, padding 6→5px, border-radius 28→26px
+  - Tabs: 69px each (equal flex), min-height 44px (preserved touch target)
+  - Icons: 22→20px (lucide size), strokeWidth 1.7 inactive / 2.3 active
+  - Nav padding: 16→14px horizontal, 14→12px bottom
+  - Verified: capsule 220×48px, tabs [69,69,69], icon 22×22px
+
+- **ACTIVE INDICATOR — Rounded capsule, 15% smaller, floating**:
+  - Size: 44→38px (15% smaller)
+  - Shape: squircle (14px radius) → **rounded capsule (19px = full pill radius)**
+  - Reduced shadow: 0 1px 3px → softer 0 2px 8px with lower opacity
+  - Floating appearance: `translateY(-2px)` lift on grab + `scale(1.05)`
+  - Fixed size across all tabs — never resizes during drag (verified: stayed 38px)
+  - z-index 1 (behind tabs), pointer-events none — icon always fully visible
+
+- **REAL LIQUID GLASS — New setting + authentic glass material**:
+  - Added `GlassEffect = 'standard' | 'liquid'` type to prefs.svelte.ts
+  - Added `glassEffect` pref (default 'standard'), persisted, with `setGlassEffect()` setter
+  - Setter toggles `nav-liquid-glass` / `nav-standard-glass` CSS classes on `<html>`
+  - Constructor applies class on load (persists across sessions)
+  - Added "Glass Effects" segmented control in SettingsView (Standard / Liquid Glass)
+  - **Standard Glass**: current lightweight blur(28px) saturate(180%)
+  - **Liquid Glass**: enhanced multi-layer glass:
+    - Layered backdrop-filter: blur(24px) saturate(200%) brightness(1.10)
+    - Internal reflection: top gradient (14% white → transparent at 50%)
+    - Fresnel edge lighting: radial gradients at top/bottom + horizontal edge highlights
+    - SVG displacement filter (feTurbulence + feDisplacementMap) on separate `.capsule-refraction` overlay layer (z-index 0, below tabs/icons) — provides refraction distortion WITHOUT distorting icons
+    - Brighter border (0.26 vs 0.14) for edge highlight
+    - Deeper transparency (0.38 vs 0.58 base tint)
+    - Indicator gets its own backdrop-filter: blur(8px) saturate(160%)
+  - **Graceful degradation**: `@media (pointer: coarse) and (max-width: 360px)` disables SVG filter on low-end devices
+  - **Critical fix**: Initially applied SVG filter directly on capsule → distorted icons/indicator. Fixed by moving filter to a separate `.capsule-refraction` overlay div (z-index 0, below tabs at z-index 2).
+
+- **DRAGGING — Preserved & refined**:
+  - Long-press (450ms) + move engages drag via active tab's pointer handlers
+  - Spring physics: stiffness 0.24 (was 0.20 — snappier), damping 0.76
+  - Velocity-aware snapping (120ms projection + EMA)
+  - Magnetic tab movement (3.5px max, was 4)
+  - Elastic edge resistance (0.4x)
+  - Indicator never resizes during drag (verified: 38px constant)
+  - Verified via agent-browser: drag Chats→Settings works, indicator follows finger
+
+- **CHATS TAB BUG — Preserved fix**:
+  - `selectTab` guard: `if (uiStore.tab === id && uiStore.view !== 'conversation') return;`
+  - Same-tab tap in conversation → closeChat → returns to chat list
+
+- **ANIMATIONS — Faster, premium**:
+  - Spring: stiffness 0.20→0.24 (faster response), damping 0.74→0.76
+  - Long-press: 500→450ms (faster grab)
+  - Tab transitions: 220ms→200ms (color), 120ms (transform)
+  - Icon transitions: 260ms→220ms with overshoot bezier
+  - All GPU-accelerated (translateX, scale only)
+
+- **VISUAL POLISH**:
+  - Softer reflections: sheen 10%→8% opacity (standard), 16% (liquid)
+  - Fresnel edge lighting: horizontal + vertical edge highlights
+  - Premium shadows: softer, more diffused (20px→28px spread in liquid mode)
+  - Better transparency: 0.58→0.38 base tint in liquid mode
+  - Icon rendering: `shape-rendering: geometricPrecision` for sharper SVG
+
+- Subagent A added Glass Effects UI in SettingsView:
+  - Imported `type GlassEffect` from prefs.svelte
+  - Added `glassEffects` array constant
+  - Added segmented control in Appearance section (between Input Bar Style and Compact Mode)
+  - svelte-check: 33 errors (baseline unchanged)
+
+Stage Summary:
+- Files changed:
+  - `/home/z/my-project/src/lib/stores/prefs.svelte.ts` — added GlassEffect type, glassEffect pref, setGlassEffect setter with CSS class toggling, constructor apply-on-load
+  - `/home/z/my-project/src/lib/components/ui/BottomNavBar.svelte` — size reduction, rounded-capsule indicator, liquid glass CSS (standard + liquid modes), SVG refraction overlay, animation tuning
+  - `/home/z/my-project/src/lib/components/chat/SettingsView.svelte` — Glass Effects segmented control (by Subagent A)
+- svelte-check: 33 errors — IDENTICAL to baseline, zero new
+- Dev server: HTTP 200, 0 runtime errors
+- agent-browser verified:
+  - Capsule: 220×48px, indicator 38×38px radius 19px (rounded capsule) ✓
+  - Tabs: [69,69,69] equal, icons 22×22px crisp ✓
+  - Drag: Chats→Settings works, indicator stays 38px ✓
+  - Glass Effects toggle: Standard↔Liquid Glass switches CSS class + persists ✓
+  - Liquid Glass: backdrop-filter enhanced, SVG refraction overlay active, icons NOT distorted ✓
+  - VLM ratings: Standard 6/10, Liquid Glass 9/10 ("subtle indicator, translucent liquid-like sheen, significantly more premium")
