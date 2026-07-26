@@ -2429,3 +2429,70 @@ Stage Summary:
 - Verified live via agent-browser: stickers 220px, headings 28/23/19px, reply highlight works (content+bg+animation), input bar opaque/glass toggle works, message sound toggle present, profile pic realtime sync works, image upload instant preview works.
 - svelte-check: 33 errors (IDENTICAL to baseline — zero new errors).
 - Dev server: HTTP 200, clean log.
+
+---
+Task ID: 5
+Agent: Main Agent
+Task: Refine BottomNavBar — compact size, premium glass, remove haptics, fix draggable indicator, fix Chats button bug, optimize performance
+
+Work Log:
+- **SIZE — Compact & minimal**: Reduced all dimensions for a lightweight, premium feel.
+  - Capsule: padding 6→4px, max-width 440→340px, border-radius 28→20px, gap 2→0
+  - Tabs: min-height 46→36px, padding 10→4px, font-size 13→11px, border-radius 22→16px, gap 7→4px
+  - Icons: 20→16px (lucide size prop), strokeWidth active 2.4/inactive 1.8
+  - Nav padding: 20→16px horizontal, 16→12px bottom
+  - Unread badge: 18→15px height, font 10→9px
+  - Ripple: 8→6px start size, scale 24→20
+  - Verified via agent-browser: capsule 340×46px, tabs 36px min-height, font 11px, icon 16px
+
+- **VISUAL DESIGN — Premium liquid glass**:
+  - Lower opacity: light glass rgba(255,255,255,0.32)→0.20; dark 0.55→0.42; amoled 0.6→0.48
+  - Thinner border: 0.55→0.35 (light), 0.14→0.10 (dark)
+  - Softer shadow: 40px→24px spread, 12px→8px offset; reduced inner highlights
+  - Blur: 36px→28px, saturate 200%→180%, brightness 1.06→1.04 (slightly less for perf)
+  - Sheen: refined proportions (45% height, inset 10px), opacity 0.45→0.32
+  - Inner glow: opacity 0.18→0.12
+  - Indicator: gradient 0.28→0.22 top layer, shadow 16px→10px; grabbed state via filter:brightness(1.12) + larger glow
+  - **Constant-width indicator**: tabs are flex:1 equal width (verified: [110,110,110] all equal). Labels always visible (opacity 0.65 inactive → 1 active, no expand/collapse animation). Indicator width = tab width = constant across all tabs. Removed the width spring (indVW) entirely since width never changes between tabs.
+
+- **REMOVE HAPTICS**: Deleted `haptic()` function, `SNAP_HAPTIC_MS` constant, and all 4 call sites (selectTab, onIndicatorPointerDown, onIndicatorPointerUp, startLongPress). Zero `navigator.vibrate` references remain. Verified via grep.
+
+- **DRAGGABLE ACTIVE INDICATOR** — Fixed & refined:
+  - ROOT CAUSE of "not draggable": indicator had z-index:1, tabs had z-index:2 — tabs sat ON TOP of the indicator, intercepting all pointer events. Fixed: indicator z-index 1→3 (above tabs).
+  - Added drag threshold (DRAG_THRESHOLD=5px): distinguishes tap vs drag. A quick tap on the indicator now acts as a tap on the active tab (calls selectTab → closes conversation if in one).
+  - Grab visual feedback: `indicator-grabbed` CSS class adds `filter:brightness(1.12)` + larger glow shadow on pointerdown. Applied via classList (doesn't conflict with JS-controlled transform).
+  - Elastic edge resistance: 0.4x damping beyond first/last tab bounds (preserved from original).
+  - Spring physics: stiffness=0.18, damping=0.72 (preserved). Self-terminating RAF when settled (<0.3px).
+  - Velocity-aware snapping: 120ms projection + EMA (0.6/0.4) for smooth velocity tracking. Fixed a bug in the original projected-idx loop that compared against `nearestDist` instead of `projectedDist` (defeating the velocity projection).
+  - Magnetic tab movement: max 5px shift (reduced from 6 for compact size), strength 0.20.
+  - Velocity-based stretch: max 8% scaleX during motion (reduced from 12% for subtlety).
+  - GPU-accelerated: all animation via `transform: translateX() scale()` + `width` (will-change set on indicator). No layout properties animated.
+  - Verified via agent-browser: dispatched synthetic PointerEvents (pointerdown→10×pointermove→pointerup) on indicator → tab switched from Chats to Settings, indicator moved to correct position with scaleX(1.012) stretch.
+
+- **CHATS BUTTON BUG** — Fixed:
+  - ROOT CAUSE: `selectTab()` had `if (uiStore.tab === id) return;` — when inside a DM conversation, `uiStore.tab` is already 'dms' (opening a conversation changes `view` to 'conversation', NOT `tab`). So tapping "Chats" returned early without calling `setTab()`, meaning `closeChat()` never fired.
+  - Fix: changed guard to `if (uiStore.tab === id && uiStore.view !== 'conversation') return;` — same-tab tap is a no-op ONLY when not in a conversation. When in a conversation, it falls through to `uiStore.setTab(id)` which calls `chatStore.closeChat()` + sets view='chatList'.
+  - This works from every nested chat screen because `setTab` always closes the conversation and returns to the chat list.
+
+- **PERFORMANCE** — Optimized:
+  - Cached tab centers: `invalidateCenters()` computes all tab rects ONCE (on mount/resize/tab-change) and stores in `cachedCenters[]`. `applyMagneticTabs()` and drag handlers read from cache instead of calling `getBoundingClientRect()` every frame. This eliminates the per-frame layout thrash that was the primary source of lag.
+  - Removed width spring: since indicator width is constant (equal-width tabs), removed `indW`/`indVW`/`targetW` spring entirely. Spring loop now only tracks X — half the computation per frame.
+  - Removed label-expand `setTimeout` re-measures: the original code re-measured after 320ms to catch the label-expand transition. With always-visible labels (no expand/collapse), this is unnecessary — removed both setTimeout calls.
+  - `isDragging` changed from `$state` to plain `let`: it's only read inside the RAF loop (not in template), so reactive overhead was wasted.
+  - `isGrabbed` is plain `let` (not reactive) — read in `writeIndicator()` only.
+  - Removed `$effect` for `totalUnread`: the unread badge is `position:absolute` and doesn't affect tab layout/width, so re-measuring on unread change was unnecessary.
+  - All transforms use `translateX()` + `scale()` only — GPU-composited, no layout/paint.
+  - `will-change: transform` on indicator + tabs only (removed from capsule which doesn't animate).
+
+Stage Summary:
+- File changed: `/home/z/my-project/src/lib/components/ui/BottomNavBar.svelte` (refined in-place, same architecture preserved)
+- svelte-check: 33 errors / 95 warnings — IDENTICAL to pre-existing baseline. Zero new diagnostics.
+- Dev server: HTTP 200, no runtime errors in dev.log (only pre-existing SettingsView CSS unused-selector warnings).
+- agent-browser verified:
+  - Compact size: capsule 340×46px, tabs 36px min-height, font 11px, icon 16px ✓
+  - Constant-width indicator: all 3 tabs equal width [110,110,110], indicator 110px ✓
+  - Indicator z-index: 3 (above tabs) ✓
+  - Tab click switching: works (Chats→Settings) ✓
+  - Indicator drag: works (dispatched PointerEvents → Chats→Settings switch, indicator moved with elastic stretch) ✓
+  - Haptics removed: zero navigator.vibrate references ✓
+- Chats button bug: code fix verified (selectTab guard allows same-tab tap when view='conversation'). Cannot fully E2E test without a second user to create a DM, but the logic is correct and uiStore.setTab() already handles closeChat().
