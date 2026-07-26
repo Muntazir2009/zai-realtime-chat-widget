@@ -215,6 +215,25 @@ class AuthStore {
     }).catch(() => {});
   }
 
+  /**
+   * Patch the current user's profile fields (e.g. avatarUrl, displayName,
+   * accentColor, bio) and persist to localStorage so the update survives
+   * page reloads. Also keeps authStore.user reactive state in sync so all
+   * derived UI (avatars, headers, chat tiles) refresh immediately.
+   */
+  updateUser(patch: Partial<User>): void {
+    if (!this.user) return;
+    const updated = { ...this.user, ...patch, id: this.user.id };
+    this.user = updated;
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(updated));
+      } catch {
+        /* best-effort persistence */
+      }
+    }
+  }
+
   private clearStorage(): void {
     if (typeof localStorage === 'undefined') return;
     localStorage.removeItem(STORAGE_TOKEN_KEY);

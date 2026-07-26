@@ -15,17 +15,19 @@ export type TimestampFormat = 'relative' | 'absolute' | 'none';
 export type AnimationSpeed = 'reduced' | 'normal' | 'enhanced';
 export type MediaQuality = 'low' | 'medium' | 'high';
 export type ChatSortOrder = 'recent' | 'unread' | 'alphabetical';
+export type InputBarStyle = 'opaque' | 'glass';
 
 interface Prefs {
   // Privacy & Realtime
   sendReadReceipts: boolean;
   sendTypingIndicators: boolean;
-  notificationSounds: boolean;
+  messageSound: boolean;
   // Appearance
   fontSize: FontSize;
   bubbleStyle: BubbleStyle;
   compactMode: boolean;
   enterSend: boolean;
+  inputBarStyle: InputBarStyle;
   // Customisation
   timestampFormat: TimestampFormat;
   animationSpeed: AnimationSpeed;
@@ -44,11 +46,12 @@ interface Prefs {
 const DEFAULT_PREFS: Prefs = {
   sendReadReceipts: true,
   sendTypingIndicators: true,
-  notificationSounds: true,
+  messageSound: true,
   fontSize: 'medium',
   bubbleStyle: 'round',
   compactMode: false,
   enterSend: true,
+  inputBarStyle: 'opaque',
   timestampFormat: 'relative',
   animationSpeed: 'normal',
   showLinkPreviews: true,
@@ -84,12 +87,13 @@ class PrefsStore {
   // Privacy & Realtime
   sendReadReceipts = $state(readPrefs().sendReadReceipts);
   sendTypingIndicators = $state(readPrefs().sendTypingIndicators);
-  notificationSounds = $state(readPrefs().notificationSounds);
+  messageSound = $state(readPrefs().messageSound);
   // Appearance
   fontSize = $state(readPrefs().fontSize);
   bubbleStyle = $state(readPrefs().bubbleStyle);
   compactMode = $state(readPrefs().compactMode);
   enterSend = $state(readPrefs().enterSend);
+  inputBarStyle = $state(readPrefs().inputBarStyle);
   // Customisation
   timestampFormat = $state(readPrefs().timestampFormat);
   animationSpeed = $state(readPrefs().animationSpeed);
@@ -119,11 +123,12 @@ class PrefsStore {
     writePrefs({
       sendReadReceipts: this.sendReadReceipts,
       sendTypingIndicators: this.sendTypingIndicators,
-      notificationSounds: this.notificationSounds,
+      messageSound: this.messageSound,
       fontSize: this.fontSize,
       bubbleStyle: this.bubbleStyle,
       compactMode: this.compactMode,
       enterSend: this.enterSend,
+      inputBarStyle: this.inputBarStyle,
       timestampFormat: this.timestampFormat,
       animationSpeed: this.animationSpeed,
       showLinkPreviews: this.showLinkPreviews,
@@ -188,7 +193,7 @@ class PrefsStore {
   // Privacy & Realtime setters
   setSendReadReceipts(val: boolean): void { this.sendReadReceipts = val; this.persist(); }
   setSendTypingIndicators(val: boolean): void { this.sendTypingIndicators = val; this.persist(); }
-  setNotificationSounds(val: boolean): void { this.notificationSounds = val; this.persist(); }
+  setMessageSound(val: boolean): void { this.messageSound = val; this.persist(); }
 
   // Time setters
   setUse24HourFormat(val: boolean): void { this.use24HourFormat = val; this.persist(); }
@@ -199,6 +204,7 @@ class PrefsStore {
   setFontSize(size: FontSize): void { this.fontSize = size; this.applyFontSize(size); this.persist(); }
   setBubbleStyle(style: BubbleStyle): void { this.bubbleStyle = style; this.applyBubbleStyle(style); this.persist(); }
   setCompactMode(val: boolean): void { this.compactMode = val; this.applyCompactMode(val); this.persist(); }
+  setInputBarStyle(style: InputBarStyle): void { this.inputBarStyle = style; this.persist(); }
 
   // Customisation setters
   setTimestampFormat(fmt: TimestampFormat): void { this.timestampFormat = fmt; this.persist(); }

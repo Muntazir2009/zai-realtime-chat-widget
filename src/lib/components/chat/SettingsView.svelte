@@ -17,10 +17,11 @@
   import { uploadFile } from '$lib/firebase/storage';
   import { presenceManager } from '$lib/managers/PresenceManager.svelte';
   import { networkManager } from '$lib/managers/NetworkManager.svelte';
-  import { prefsStore, type FontSize, type BubbleStyle, type TimestampFormat, type AnimationSpeed, type MediaQuality, type ChatSortOrder } from '$lib/stores/prefs.svelte';
+  import { cacheUserProfiles } from '$lib/managers/CacheManager';
+  import { prefsStore, type FontSize, type BubbleStyle, type TimestampFormat, type AnimationSpeed, type MediaQuality, type ChatSortOrder, type InputBarStyle } from '$lib/stores/prefs.svelte';
   import { appLockStore, type LockType, type AutoLockDuration } from '$lib/stores/app-lock.svelte';
   import { isBiometricAvailable, registerBiometric, clearBiometric } from '$lib/utils/biometric';
-  import type { ThemeMode } from '$lib/types/index';
+  import type { ThemeMode, User } from '$lib/types/index';
   import OnlineUsers from './OnlineUsers.svelte';
 
   // ── Online Users overlay state ──
@@ -287,6 +288,12 @@
     { style: 'minimal', label: 'Minimal', icon: Minus },
   ];
 
+  // ── Input bar styles ──
+  const inputBarStyles: { style: InputBarStyle; label: string; icon: typeof Circle }[] = [
+    { style: 'opaque', label: 'Opaque', icon: Square },
+    { style: 'glass', label: 'Liquid Glass', icon: Sparkles },
+  ];
+
   // ── Accent color presets ──
   const accentColors = [
     { label: 'Default', value: null },
@@ -397,26 +404,48 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: authStore.user.username, ...fields }),
       });
-      const data = (await res.json()) as { error?: string; newUsername?: string };
+      const data = (await res.json()) as {
+        error?: string;
+        success?: boolean;
+        newUsername?: string;
+        profile?: User;
+      };
       if (!res.ok) {
         throw new Error(data.error || 'Update failed');
       }
-      if (data.newUsername && authStore.user) {
-        authStore.user = { ...authStore.user, username: data.newUsername };
-      }
-      if (fields.displayName && authStore.user) {
-        authStore.user = { ...authStore.user, displayName: fields.displayName as string };
-      }
-      // Optimistically update authStore.user + userDict so derived UI reacts immediately
-      if ('accentColor' in fields && authStore.user) {
-        const updated = { ...authStore.user, accentColor: fields.accentColor as string | null };
-        authStore.user = updated;
-        // Also patch userDict so userProfile derived picks it up
+
+      // Server returns the full updated profile in `data.profile` (or the
+      // renamed profile when `newUsername` is set). Merge it into
+      // `authStore.user` + patch `chatStore.userDict` + invalidate the
+      // IndexedDB user cache so conversation headers, chat lists, and
+      // avatars refresh immediately (covers avatarUrl, bio, displayName,
+      // accentColor, emojiStatus, and any future profile field).
+      if (authStore.user) {
+        const id = authStore.user.id; // preserve client-side id (rename keeps id stable in RTDB)
+        const updated: User = data.profile
+          ? { ...authStore.user, ...data.profile, id }
+          : { ...authStore.user, ...(fields as Partial<User>) };
+        // updateUser persists to localStorage + updates reactive state
+        authStore.updateUser(updated);
+
         const m = new Map(chatStore.userDict);
-        m.set(authStore.user.id, updated);
+        m.set(id, updated);
         chatStore.userDict = m;
-        applyLocalAccentColor(fields.accentColor as string | null);
+
+        // Invalidate the IndexedDB user cache so stale avatars/fields don't
+        // reappear on next load.
+        try {
+          cacheUserProfiles([updated]);
+        } catch {
+          /* best-effort cache invalidation */
+        }
       }
+
+      // Accent color must also be applied to the document root CSS vars.
+      if ('accentColor' in fields) {
+        applyLocalAccentColor((fields.accentColor as string | null) ?? null);
+      }
+
       toastStore.show('Profile updated', 'success');
     } catch (err) {
       toastStore.show(err instanceof Error ? err.message : 'Failed to update', 'error');
@@ -789,6 +818,22 @@
           {/each}
         </div>
 
+        <!-- Input Bar Style -->
+        <div class="option-row-header"><Layers size={12} /> Input Bar Style</div>
+        <div class="btn-group">
+          {#each inputBarStyles as s (s.style)}
+            {@const isActive = prefsStore.inputBarStyle === s.style}
+            <button
+              class="btn-option"
+              class:btn-option-active={isActive}
+              onclick={() => prefsStore.setInputBarStyle(s.style)}
+            >
+              <s.icon size={13} />
+              {s.label}
+            </button>
+          {/each}
+        </div>
+
         <!-- Compact Mode -->
         <div class="toggle-row">
           <div class="toggle-info">
@@ -895,24 +940,24 @@
 
         <div class="toggle-divider"></div>
 
-        <!-- Notification Sounds -->
+        <!-- Message Sound — in-app blip when a new DM arrives in another chat -->
         <div class="toggle-row">
           <div class="toggle-info">
-            <div class="toggle-icon" style="background: color-mix(in srgb, #06b6d4 12%, transparent);">
-              <Volume2 size={15} style="color: #06b6d4;" />
+            <div class="toggle-icon" style="background: color-mix(in srgb, var(--color-primary) 12%, transparent);">
+              <Volume2 size={15} style="color: var(--color-primary);" />
             </div>
             <div>
-              <p class="toggle-title">Notification Sounds</p>
-              <p class="toggle-desc">Play sounds for new messages</p>
+              <p class="toggle-title">Message Sound</p>
+              <p class="toggle-desc">Play a sound for new direct messages</p>
             </div>
           </div>
           <button
             class="toggle-track"
-            class:toggle-on={prefsStore.notificationSounds}
-            onclick={() => prefsStore.setNotificationSounds(!prefsStore.notificationSounds)}
+            class:toggle-on={prefsStore.messageSound}
+            onclick={() => prefsStore.setMessageSound(!prefsStore.messageSound)}
             role="switch"
-            aria-checked={prefsStore.notificationSounds}
-            aria-label="Toggle notification sounds"
+            aria-checked={prefsStore.messageSound}
+            aria-label="Toggle message sound"
           >
             <div class="toggle-thumb"></div>
           </button>

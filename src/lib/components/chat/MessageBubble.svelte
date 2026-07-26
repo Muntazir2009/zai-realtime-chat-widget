@@ -141,9 +141,12 @@
   let touchOnReaction = false;
 
   function handleTouchStart(e: TouchEvent) {
-    // Ignore touches that start on reaction chips or audio player — they handle themselves
+    // Ignore touches that start on reaction chips, audio player, or reply preview —
+    // they handle their own interactions. The reply preview (.rply-bar) must NOT
+    // trigger the bubble's tap→reaction-picker logic (it has its own onclick that
+    // scrolls to the original message).
     const target = e.target as HTMLElement;
-    if (target.closest('.rxn-bar') || target.closest('.audio-player')) {
+    if (target.closest('.rxn-bar') || target.closest('.audio-player') || target.closest('.rply-bar') || target.closest('.link-card') || target.closest('.bbl-img') || target.closest('.upload-retry-btn')) {
       touchOnReaction = true;
       return;
     }
@@ -397,9 +400,15 @@
     msg.t === 'text' && emojiOnlyRegex.test(msg.c.trim()) && msg.c.trim().length <= 30
   );
 
+  // Sticker: a single emoji sent from the sticker picker (tagged with md.sticker).
+  // Render at full sticker size — much larger than a typed emoji-only message.
+  const isSticker = $derived(
+    msg.t === 'text' && !!msg.md?.sticker && emojiOnlyRegex.test(msg.c.trim()) && msg.c.trim().length <= 12
+  );
+
   // Discord-style markdown headings: # ## ### at message start
   const headingLevel = $derived(() => {
-    if (msg.t !== 'text' || isEmojiOnly) return 0;
+    if (msg.t !== 'text' || isEmojiOnly || isSticker) return 0;
     const text = msg.c;
     if (/^###\s/.test(text)) return 3;
     if (/^##\s/.test(text)) return 2;
@@ -483,7 +492,7 @@
   <div class="msg-content">
     <!-- Bubble -->
     <div
-      class="msg-bubble {isOwn ? 'bbl-sent' : 'bbl-recv'} {isGrouped ? 'bbl-grouped' : ''} {isPinned ? 'bbl-pinned' : ''} {isEmojiOnly ? 'bbl-emoji' : ''} {justReacted ? 'bbl-just-reacted' : ''}"
+      class="msg-bubble {isOwn ? 'bbl-sent' : 'bbl-recv'} {isGrouped ? 'bbl-grouped' : ''} {isPinned ? 'bbl-pinned' : ''} {isEmojiOnly ? 'bbl-emoji' : ''} {isSticker ? 'bbl-sticker' : ''} {justReacted ? 'bbl-just-reacted' : ''}"
       style={!isOwn && senderAccentColor ? `border-left: 3px solid ${senderAccentColor};` : ''}
       onclick={handleBubbleClick}
       role="button"
@@ -516,7 +525,9 @@
 
     <!-- Content -->
     {#if msg.t === 'text'}
-      {#if headingLevel() > 0}
+      {#if isSticker}
+        <p class="bbl-text bbl-sticker-text">{msg.c}</p>
+      {:else if headingLevel() > 0}
         <p class="bbl-text bbl-heading bbl-h{headingLevel()}">{displayText()}</p>
       {:else}
         <p class="bbl-text {isEmojiOnly ? 'bbl-emoji-text' : ''}">{msg.c}</p>
@@ -729,6 +740,11 @@
     max-width: min(85%, 420px);
   }
 
+  /* Sticker messages break out further for the full sticker size */
+  .msg-row:has(.bbl-sticker) .msg-content {
+    max-width: min(90%, 320px);
+  }
+
   .msg-own .msg-content { align-items: flex-end; }
   .msg-other .msg-content { align-items: flex-start; }
 
@@ -893,9 +909,32 @@
     max-width: none !important;
   }
 
-  .bbl-emoji-text {
+  .bbl-text.bbl-emoji-text {
     font-size: min(180px, 40vw);
     line-height: 1.15;
+  }
+
+  /* === STICKER BUBBLE === */
+  /* Stickers are sent from the sticker picker (tagged md.sticker=true).
+     Rendered much larger than a typed emoji, on a transparent bubble with
+     generous spacing. Transparency preserved (no background fill). */
+  .bbl-sticker {
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 6px !important;
+    animation: none;
+    max-width: none !important;
+  }
+
+  .bbl-text.bbl-sticker-text {
+    font-size: min(220px, 62vw);
+    line-height: 1;
+    margin: 0;
+    display: block;
+    /* Preserve transparency + high-quality rendering */
+    -webkit-user-select: none;
+    user-select: none;
+    filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.18));
   }
 
   /* === CONTENT === */
@@ -918,24 +957,25 @@
   /* === DISCORD-STYLE MARKDOWN HEADINGS === */
   .bbl-heading {
     white-space: pre-wrap;
+    margin-bottom: 2px;
   }
 
   .bbl-h1 {
-    font-size: 22px;
+    font-size: 28px;
     font-weight: 800;
-    line-height: 1.25;
+    line-height: 1.2;
     letter-spacing: -0.02em;
   }
 
   .bbl-h2 {
-    font-size: 18px;
+    font-size: 23px;
     font-weight: 700;
-    line-height: 1.3;
-    letter-spacing: -0.01em;
+    line-height: 1.25;
+    letter-spacing: -0.015em;
   }
 
   .bbl-h3 {
-    font-size: 16px;
+    font-size: 19px;
     font-weight: 700;
     line-height: 1.35;
   }
@@ -1001,18 +1041,21 @@
     display: flex;
     gap: 8px;
     margin-bottom: 6px;
-    padding: 6px 8px;
-    border-radius: 10px;
+    padding: 8px 10px;
+    min-height: 44px;
+    align-items: center;
+    border-radius: 12px;
     overflow: hidden;
     position: relative;
     z-index: 1;
     max-width: 100%;
     cursor: pointer;
-    transition: opacity 150ms ease;
+    transition: opacity 150ms ease, transform 120ms ease;
     -webkit-tap-highlight-color: transparent;
   }
   .rply-bar:active {
     opacity: 0.7;
+    transform: scale(0.98);
   }
 
   .bbl-sent .rply-bar {

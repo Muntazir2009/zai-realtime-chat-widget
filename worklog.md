@@ -2237,3 +2237,195 @@ Stage Summary:
 - Verified via agent-browser: nav renders as floating capsule with tablist + slider indicator + 3 tabs. Tapping tabs moves indicator (value 2→3→2→1 verified). Dragging indicator from Chats→Global snaps correctly (value 2→1, Global selected). No console errors, no dev log errors.
 - svelte-check: 33 total errors (IDENTICAL to pre-existing baseline — zero new errors in BottomNavBar or OnlineUsers).
 - All 6 user requirements implemented: (1) floating liquid glass nav, (2) draggable spring-physics indicator with velocity-aware snapping + magnetic tab movement, (3) tab interactions (tap/long-press/drag/ripple/scale/icon-transition/label-fade), (4) Online Users page (by subagent B), (5) Clear Chat fix (by subagent A), (6) performance (GPU transforms, minimal re-renders, self-terminating RAF).
+
+---
+Task ID: 4-investigation
+Agent: Main Agent
+Task: Investigate codebase for bug-fix/polish task (uploads, profile pic, emoji status, notifications, sound, input bar, chat UI, markdown, stickers, reply bugs)
+
+Work Log:
+- **Image upload flow**: Tested LIVE via agent-browser (logged in, opened Bob chat, uploaded /tmp/test-upload.png). MediaComposer preview appeared ("Preview of test-upload.png" + caption + Send). Clicked Send → image uploaded to R2 (https://pub-5015d5428b174f55a02bb5e740d63919.r2.dev/...) and rendered in chat at 200x200. **Upload WORKS in current code.** InputBar.svelte has the prior `input.value=''` FileList mutation fix (snapshots files before reset, lines 197-227). Conversation handleMediaSelect→MediaComposerFile→showComposer=true→MediaComposer renders. handleComposerSend creates optimistic temp msg with localUrl, uploadTrackers tracks progress, uploadMediaFile calls uploadFile→uploadViaWorker(XHR FormData POST to Cloudflare Worker). MessageBubble renders upload progress ring + error retry overlay. The user may be hitting an intermittent issue; will harden the flow (ensure progress visible, robust error handling, no race conditions).
+- **Profile pic upload bug ROOT CAUSE**: SettingsView.svelte `updateProfile()` (line 391) patches `authStore.user` + `chatStore.userDict` locally ONLY for `accentColor` (lines 411-418). When `avatarUrl` is updated (line 457), it does NOT patch authStore.user.avatarUrl or userDict → the avatar doesn't update immediately in the UI. The API (/api/profile PUT) correctly writes to RTDB `users/{username}.avatarUrl` and returns the full updated profile, but the client ignores the returned profile and doesn't update local caches. Fix: patch authStore.user + userDict for avatarUrl (same pattern as accentColor), and also invalidate IndexedDB user cache.
+- **Emoji status overlay**: Avatar.svelte renders `.emoji-badge` (lines 90-101) when `emojiStatus` prop is set. SettingsView has emoji status UI. Need to remove rendering + settings + unused logic, but KEEP online indicators (`.avatar-root .absolute` status dot, lines 76-88 — driven by `showStatus` + `status` props, separate from emojiStatus).
+- **Notification system**: prefsStore has `notificationSounds` (line 87, 191). SettingsView has "Notification Sounds" toggle (lines 898-915). Need to remove the toggle + pref + dead code. Keep messaging functionality.
+- **Message sound**: No in-app message sound exists. Need to add: play sound only when a new DM arrives AND the conversation is NOT currently open. Add a setting toggle (Message Sound On/Off). Sound should be a short notification blip. Need to generate a sound (WebAudio API beep, or a small base64 WAV/MP3). Trigger in chatStore onChildAdded when msg.sid !== self && (activeChatId !== chatId || view !== 'conversation').
+- **Input bar styling**: InputBar.svelte `.input-row` (line 447) uses `background: color-mix(in srgb, var(--bg-surface) 80%, transparent)` + `backdrop-filter: blur(32px)`. Too transparent — wallpaper bleeds through. Default should be FULLY OPAQUE. Add a setting "Input Bar Style": Opaque (default) | Liquid Glass. Wire via prefsStore + CSS class on .input-row.
+- **Markdown headings**: MessageBubble.svelte has heading detection (lines 400-416) + CSS (lines 918-941). Current sizes: h1=22px, h2=18px, h3=16px. User wants them LARGER. Will bump to ~28/22/19px with better weight/spacing.
+- **Stickers**: StickerPicker sends emoji strings via onStickerSelect→Conversation.handleStickerSelect→chatStore.sendMessage(sticker). Rendered as `isEmojiOnly` (bigger text). User wants stickers MUCH larger. Fix: tag sticker messages with `md.sticker=true` in handleStickerSelect, render in MessageBubble at ~96px with proper spacing/transparency. Keep emoji-only messages (typed) at current size.
+- **Reply bugs ROOT CAUSE**: MessageBubble.svelte `handleTouchStart` (line 143) excludes `.rxn-bar` + `.audio-player` from touch handling, but NOT `.rply-bar`. So tapping reply preview on touch devices: (1) rply-bar onclick fires onReplyTap→scrollToMessage (works), BUT (2) bubble's touchstart/touchend also fire → handleTouchEnd schedules onTapReaction (reaction picker) after 250ms. BOTH happen → "opens reaction panel" bug. Fix: add `.rply-bar` to the touch exclusion list in handleTouchStart. scrollToMessage already works (data-msg-id is set on line 1085, querySelector finds it, scrollIntoView+highlight class). For messages not in the loaded 50, it returns silently — acceptable.
+- **General**: svelte-check baseline = 33 errors (pre-existing, unrelated). Dev server HTTP 200, clean log.
+
+Stage Summary:
+- Image upload: WORKS (verified live). Will harden for robustness.
+- Profile pic: ROOT CAUSE = updateProfile doesn't patch local caches for avatarUrl. Fix = mirror accentColor pattern.
+- Emoji status: remove Avatar.svelte .emoji-badge + SettingsView emoji UI + User.emojiStatus usage (keep online dot).
+- Notifications: remove prefsStore.notificationSounds + SettingsView toggle + dead code.
+- Message sound: NEW — WebAudio blip on new DM when convo not open + setting toggle.
+- Input bar: default opaque, add Liquid Glass option via pref + CSS class.
+- Markdown headings: bump sizes (28/22/19px).
+- Stickers: tag with md.sticker=true, render at ~96px.
+- Reply bugs: add .rply-bar to handleTouchStart exclusion list.
+
+---
+Task ID: 4-D
+Agent: Subagent D
+Task: Harden image upload flow (audit + fix edge cases / UX gaps)
+
+Work Log:
+- Read worklog 4-investigation section. Upload flow already verified LIVE-working; my mandate was audit + harden (no rewrite).
+- Audited all 5 target files (InputBar.svelte, Conversation.svelte, MediaComposer.svelte, storage.ts, MessageBubble.svelte) against the 9-point checklist and 6-point hardening list.
+- Checklist findings:
+  1. InputBar file picker — already had the `input.value=''` FileList mutation fix (snapshots Files into plain array before reset). `accept="image/*,video/*"` + `multiple` set, input not disabled, in DOM. ✓
+  2. InputBar validation — drops invalid types/sizes with `toastStore.info` warnings. `onMediaSelect?.(validFiles)` only fires when there's ≥1 valid file. ✓
+  3. Preview state — `handleMediaSelect` built `MediaComposerFile[]` with objectUrl + metadata, set `showComposer=true`. Composer gate `showComposer && composerFiles.length > 0`. ✓ BUT awaited ALL metadata before showing composer (race risk — see hardening A below).
+  4. Upload queue / progress — `uploadTrackers = $state(new Map<...>())`. Both progress callbacks (`onProgress` mutates `.percentage` in place + reassigns Map; `onDetailedProgress` replaces `.progress` object + reassigns Map). Svelte 5 deep-proxies the Map so the mutation IS tracked; the reassignment is belt-and-suspenders. ✓
+  5. Worker request — XHR FormData POST to `https://chatfolder.killermunu.workers.dev/`, response parsing `data.publicUrl || data.url || (key ? R2_PUBLIC_URL/key : '')`, 120s timeout, abort wired via `signal.addEventListener('abort', () => xhr.abort())`, `xhr.onabort` rejects with `DOMException('Upload cancelled','AbortError')`. ✓
+  6. R2 upload — `result.publicUrl` updates optimistic msg + calls `chatStore.sendImageMessage`. ✓
+  7. Firebase metadata — `chatStore.sendImageMessage(chatId, publicUrl, caption, blurhash)` after upload succeeds. ✓
+  8. Message creation — `chatStore.messages = chatStore.messages.filter(m => m.id !== msgId)` removes optimistic temp after RTDB write. ✓
+  9. Chat rendering — MessageBubble renders `<img class="bbl-img">` for `msg.t==='image' && msg.mu`. Optimistic msg has `mu: localUrl` (blob:), real msg has `mu: publicUrl`. Both render. ✓
+
+- Hardening changes made:
+
+  A. **Instant preview (Conversation.svelte handleMediaSelect)** — Previously awaited ALL file metadata (image dimensions / video duration+thumbnail) before showing the composer, so a hung metadata extraction (e.g. video `onseeked` never firing) would leave the user staring at nothing after picking a file. Rewrote to push minimal `{file, objectUrl, type}` entries to `composerFiles` immediately and set `showComposer=true` synchronously, then extract metadata in parallel via `Promise.all` and update each entry in place (with `composerFiles = [...composerFiles]` for reactivity). Preview now appears the same tick the file picker closes.
+
+  B. **Reactivity verification (Conversation.svelte)** — `getUploadTracker(msg.id)` was a plain function call reading `$state(uploadTrackers)`. Svelte 5 does track this at runtime via the proxy, but to make the dependency explicit and future-proof I replaced the template reads with a `$derived(uploadTrackers)` snapshot (`trackersSnapshot`) and updated MessageBubble props to read `trackersSnapshot.get(msg.id)?.progress` / `?.status`. Also removed the now-unused `getUploadTracker` helper.
+
+  C. **Error toast (Conversation.svelte handleComposerSend)** — The original `.catch` set `tracker.status = 'error'` and built a `tracker.retry` function but never surfaced a user-visible toast. Added `toastStore.error('Upload failed: …')` in both the initial-failure path and the retry-failure path, with the error message truncated to 100 chars.
+
+  D. **Race / collision / cleanup** — Confirmed `tempMsgId = upload_${Date.now()}_${Math.random().toString(36).slice(2,8)}` gives unique IDs even for same-ms multi-file sends. Added a 60s safety-cleanup timeout for errored trackers: if the user never retries, the tracker + its blob URL are freed and the stale optimistic message is removed so the error overlay doesn't linger forever. (Successful uploads already had a 2s cleanup; cancelled uploads already cleaned up immediately.)
+
+  E. **Object URL lifecycle fix (Conversation.svelte)** — The original `handleComposerSend` revoked every `mediaFile.objectUrl` immediately after starting the upload — but the optimistic temp message still referenced that blob URL via `msg.mu`, so the local preview could fail to load if Svelte hadn't rendered the `<img>` before the revocation. Removed the eager revocation. The blob URL is now revoked in three places: (1) `uploadMediaFile` success path 2s after `tracker.status='done'`, (2) `uploadMediaFile` abort path immediately, (3) the new 60s error-cleanup timeout. The optimistic preview stays alive for the entire upload duration.
+
+  F. **Console log cleanup** — Removed all `console.log('[UPLOAD-DEBUG] …')` statements from Conversation.svelte (5 sites), storage.ts (4 sites: `uploadFile`, `uploadViaWorker`, the parallel-work debug, and the XHR send debug), and MediaComposer.svelte (1 site in `handleSend`). Replaced one noisy `console.error('[UPLOAD-DEBUG] uploadMediaFile FAILED:', err)` with `console.error('[upload] failed:', err)` and added a parallel `[upload] retry failed:` log. Verified via agent-browser that the production console is now clean — no `[UPLOAD-DEBUG]` lines appear during upload.
+
+- Robustness edge case handled in `uploadMediaFile` — added a guard for `idx === -1` (optimistic message already gone, e.g. user navigated away / cleared chat): the RTDB write still happens so the message lands, and the tracker + blob URL are cleaned up.
+
+Stage Summary:
+- Files changed: src/lib/components/chat/Conversation.svelte (rewrote handleMediaSelect, handleComposerSend, uploadMediaFile; added trackersSnapshot derived; removed getUploadTracker; updated MessageBubble props), src/lib/firebase/storage.ts (removed 4 debug logs), src/lib/components/media/MediaComposer.svelte (removed 1 debug log).
+- svelte-check: 33 errors → 33 errors in MY files (no new errors introduced by my changes; total repo count is now 34 because another agent's SettingsView.svelte imports a non-existent `InputBarStyle` type from prefs.svelte — not my code, flagged for the prefs/input-bar agent).
+- Live test (agent-browser): logged in as existing session (navtester), opened Bob QA chat, uploaded `/tmp/test-upload-4d.png` (592 bytes). MediaComposer appeared INSTANTLY (Harden A working), preview blob: URL loaded at 200x200, clicked Send, optimistic message appeared, upload completed in ~1s, optimistic temp msg replaced by real RTDB message with R2 URL `https://pub-5015d5428b174f55a02bb5e740d63919.r2.dev/1785084232088-…`, "delivered" status shown. Console: NO `[UPLOAD-DEBUG]` logs (Harden F working), NO `[upload] failed` errors. Screenshot saved to /tmp/4d-final-three-images.png (shows three sent images in chat).
+- No regressions detected in touch handlers / prefs / MessageBubble (other agents' domains respected).
+
+---
+Task ID: 4-C
+Agent: Subagent C
+Task: Fix profile pic + emoji + notifications + sound + input setting (5 parts)
+
+Work Log:
+
+**PART 1 — Profile picture upload cache invalidation** (`SettingsView.svelte`)
+- Root cause (per investigation): `updateProfile()` only patched local caches for `accentColor`; `avatarUrl`/`bio`/`displayName`/`emojiStatus` updates were ignored client-side, so the avatar didn't refresh until a reload.
+- Fix: rewrote `updateProfile()` to use the server's returned `data.profile` (the full updated RTDB user record, returned as `{ success, profile }` by `/api/profile` PUT and as `{ success, profile, newUsername }` on rename). Merges `data.profile` into `authStore.user` (preserving the client-side `id` since RTDB keeps `user_<oldUsername>` stable across renames), patches `chatStore.userDict` so conversation headers/chat lists react immediately, and invalidates the IndexedDB user cache via `cacheUserProfiles([updated])` so stale cached avatars don't reappear on next load.
+- Added imports: `cacheUserProfiles` from `$lib/managers/CacheManager`, `User` type from `$lib/types/index`.
+- Kept the special-case `applyLocalAccentColor()` call (still needs to write `--color-primary` CSS var on the document root).
+- Renamed-user flow now covered by the same merge (data.profile.username === newUsername, since the server wrote `{ ...currentData, username: body.newUsername }` at the new RTDB path).
+
+**PART 2 — Remove profile status emoji overlay** (`Avatar.svelte`)
+- Removed the `.emoji-badge` span block (`{#if emojiStatus}…{/if}`) entirely.
+- Removed the `.emoji-badge` CSS rule and the `@keyframes emojiPop` animation.
+- Kept the online status dot (driven by `showStatus` + `status` props) — untouched.
+- Did NOT remove the `emojiStatus?` prop from the `Props` interface. Marked it `@deprecated` with a JSDoc comment and stopped destructuring it locally. Rationale: removing it entirely would break existing call sites in `MessageBubble.svelte`, `Conversation.svelte`, `ChatTile.svelte`, and `OnlineUsers.svelte` — and the constraint forbids modifying MessageBubble/Conversation (handled by another agent). Keeping it as a silently-ignored deprecated prop achieves the visual goal (no emoji badge) without breaking other agents' work or introducing type errors. The other agents can clean up their call sites at their leisure.
+- Verified: no `emojiStatus` UI exists in `SettingsView.svelte` (grep returned zero matches), so nothing to remove there. `User.emojiStatus` field left intact in `types/index.ts`.
+
+**PART 3 — Remove notification system** (`prefs.svelte.ts`, `SettingsView.svelte`)
+- Removed `notificationSounds: boolean` from the `Prefs` interface, `DEFAULT_PREFS`, the `$state` field, the `persist()` write, and the `setNotificationSounds()` setter.
+- Removed the entire "Notification Sounds" toggle row (Volume2/cyan toggle) from SettingsView's Privacy & Realtime section.
+- Verified via repo-wide grep: zero remaining `notificationSounds`/`setNotificationSounds` references in `src/` (only stale mentions in `worklog.md` history, which are intentional).
+
+**PART 4 — Input Bar Style setting** (`prefs.svelte.ts`, `InputBar.svelte`, `SettingsView.svelte`)
+- Added `export type InputBarStyle = 'opaque' | 'glass';` to `prefs.svelte.ts`.
+- Added `inputBarStyle: InputBarStyle` to the `Prefs` interface, `DEFAULT_PREFS` (default `'opaque'`), the `$state` field, the `persist()` write, and a new `setInputBarStyle(style)` setter.
+- In `InputBar.svelte`:
+  - Added `class:input-row-glass={prefsStore.inputBarStyle === 'glass'}` to the `.input-row` element (`prefsStore` was already imported).
+  - Changed `.input-row` default `background` from `color-mix(in srgb, var(--bg-surface) 80%, transparent)` to solid `var(--bg-surface)` — fully opaque, maximum readability.
+  - Removed `backdrop-filter` from the default `.input-row` (no longer needed without transparency).
+  - Added new `.input-row.input-row-glass` variant: `background: color-mix(in srgb, var(--bg-surface) 72%, transparent); backdrop-filter: blur(32px) saturate(200%); -webkit-backdrop-filter: blur(32px) saturate(200%);` — premium frosted glass, still 72% opaque so text stays readable.
+  - Updated `.input-row-focused` to use solid `var(--bg-surface)`. Added `.input-row.input-row-glass.input-row-focused` variant that bumps glass opacity to 84% on focus for clarity.
+  - Updated `.input-row-active` to use solid `var(--bg-elevated, var(--bg-surface))`. Added `.input-row.input-row-glass.input-row-active` variant (76% opacity).
+  - `.input-row-picker-open` radius override left untouched (works for both styles).
+- In `SettingsView.svelte`:
+  - Imported `type InputBarStyle` from `prefs.svelte`.
+  - Added a new `inputBarStyles` array constant (Opaque with `Square` icon, Liquid Glass with `Sparkles` icon).
+  - Added a new "Input Bar Style" segmented-button row in the Appearance section, right after "Bubble Style". Uses `Layers` icon for the section header (already imported). Each button calls `prefsStore.setInputBarStyle(s.style)`.
+
+**PART 5 — In-app Message Sound** (NEW `message-sound.ts`, `prefs.svelte.ts`, `chat.svelte.ts`, `SettingsView.svelte`)
+- Step 1: Created `/home/z/my-project/src/lib/utils/message-sound.ts`:
+  - Lazy AudioContext creation (cached at module scope, created on first play).
+  - `webkitAudioContext` fallback for Safari/iOS.
+  - `getAudioContext()` resumes suspended contexts (no-op if already running) — required by browser autoplay policies.
+  - `playMessageSound()` plays a 150ms two-tone blip: sine oscillator sweeping 880Hz→1320Hz (exponential ramp), gain envelope 0.0001→0.15 (12ms attack)→0.0001 (decay). Pleasant "blip" feel, not a harsh beep.
+  - Fully guarded: try/catch wraps everything, returns silently on SSR/no-AudioContext/blocked autoplay. Never throws.
+- Step 2: Added `messageSound: boolean` (default `true`) to `prefs.svelte.ts` — `Prefs` interface, `DEFAULT_PREFS`, `$state`, `persist()`, and `setMessageSound(val)` setter. (Replaces the removed `notificationSounds`.)
+- Step 3: In `chat.svelte.ts`:
+  - Imported `playMessageSound` from `$lib/utils/message-sound.js` and `uiStore` from `./ui.svelte.js`.
+  - Added two private bookkeeping fields: `selfMessageTsByChat` (Map<chatId, number[]>) and `lastMetaTsByChat` (Map<chatId, number>).
+  - Added two private methods: `recordSelfMessage(chatId, ts)` (records a self-sent message timestamp, prunes entries older than 5 min) and `isSelfMessageTs(chatId, ts)` (returns true if `ts` matches a self-sent timestamp within ±2s tolerance — handles client/server clock drift).
+  - Modified `attachChatMetaListener()` to detect new messages via `meta.ts` increase and trigger `playMessageSound()` when ALL of: `prevTs` is defined (skip initial fire), `meta.ts > prevTs`, `prefsStore.messageSound` is on, NOT a self-message (via `isSelfMessageTs`), and the user is NOT currently viewing this chat (`uiStore.view !== 'conversation' || this.activeChatId !== chatId`).
+  - Rationale: the chat-meta listener is attached for EVERY chat in the user's inbox (via `loadInbox()` → `onChildAdded` for `user_chats/{uid}` → `attachChatMetaListener()`), so this fires for incoming DMs in chats the user is NOT viewing. ChatMeta doesn't include the sender id of the last message, so `selfMessageTsByChat` is used to distinguish our own sends (which also fan-out a meta update) from the other user's incoming messages.
+  - Also added the literal per-message sound trigger from the task spec inside `openChat()`'s `onChildAdded` handler (after the dedup check + after the message is added to the array). This is a defensive guard — in practice it never fires a sound because the listener is only attached when the chat is active (so `isViewingThisChat` is always true), but it matches the task spec literally and provides forward-compatibility if the listener lifecycle ever changes.
+  - Called `this.recordSelfMessage(chatId, message.ts)` in all four send methods: `sendMessage`, `sendImageMessage`, `sendVideoMessage`, `sendVoiceMessage`.
+  - Cleared `lastMetaTsByChat` and `selfMessageTsByChat` in `detachInboxListener()` so a fresh login doesn't carry stale state.
+- Step 4: Added a "Message Sound" toggle in SettingsView's Privacy & Realtime section (in the exact location where the old "Notification Sounds" toggle was). Uses `Volume2` icon (already imported), emerald primary color (matches theme — no blue/indigo), label "Message Sound", description "Play a sound for new direct messages". Calls `prefsStore.setMessageSound(!prefsStore.messageSound)` on toggle.
+
+Stage Summary:
+- Files changed:
+  - `/home/z/my-project/src/lib/components/chat/SettingsView.svelte` — `updateProfile()` rewritten to patch all profile fields via `data.profile`; imports added (`cacheUserProfiles`, `User`, `InputBarStyle`); Notification Sounds toggle replaced with Message Sound toggle; Input Bar Style segmented buttons added in Appearance.
+  - `/home/z/my-project/src/lib/components/ui/Avatar.svelte` — removed `.emoji-badge` rendering + CSS + `@keyframes emojiPop`; kept `emojiStatus` prop as deprecated/ignored.
+  - `/home/z/my-project/src/lib/stores/prefs.svelte.ts` — removed `notificationSounds`; added `InputBarStyle` type + `inputBarStyle` field + setter; added `messageSound` field + setter.
+  - `/home/z/my-project/src/lib/components/chat/InputBar.svelte` — `.input-row` default made fully opaque; new `.input-row-glass` variant; class binding wired to `prefsStore.inputBarStyle`.
+  - `/home/z/my-project/src/lib/stores/chat.svelte.ts` — imported `playMessageSound` + `uiStore`; added `selfMessageTsByChat`/`lastMetaTsByChat` bookkeeping + `recordSelfMessage`/`isSelfMessageTs` methods; meta-listener sound trigger; openChat defensive sound trigger; `recordSelfMessage` calls in 4 send methods; cleanup in `detachInboxListener`.
+  - `/home/z/my-project/src/lib/utils/message-sound.ts` — NEW WebAudio-based blip module (lazy AudioContext, 150ms 880→1320Hz sine sweep, gain envelope, try/catch-guarded).
+- svelte-check: 33 errors / 95 warnings — IDENTICAL to the pre-existing baseline. Zero new errors or warnings introduced by this task. Verified by sorting + comparing the error list before/after (cache-cleared run); all 33 baseline errors (mostly missing module declarations like `next/server`, `react`, `@prisma/client`, `firebase-admin/*`, plus a few `Property 'X' does not exist on type 'Y'` and the 2 "Expected token }" errors that actually originate from `src/components/ui/Avatar.svelte` — a DIFFERENT legacy file not in this task's scope) are unchanged. None of the new code (`message-sound.ts`, `prefs.svelte.ts`, `chat.svelte.ts`, `InputBar.svelte`, `SettingsView.svelte`, the in-scope `Avatar.svelte`) produces any new diagnostics.
+- Dev server: HTTP 200, no new runtime errors in `dev.log`.
+- Notes / deviations:
+  - Did NOT remove the `emojiStatus` prop from Avatar's `Props` interface (kept as deprecated/ignored). The task instructions were contradictory: PART 2 says to remove the prop AND remove call sites in `MessageBubble.svelte`/`Conversation.svelte`, but the Constraints section forbids modifying those files (handled by another agent). I prioritised the constraint and chose the non-breaking approach: visual badge removed, prop kept as a no-op so the other agents' files don't break. They can clean up their call sites independently.
+  - The task spec for PART 5 Step 3 said to put the sound trigger only inside `openChat()`'s `onChildAdded`. I followed that literally AND added a second trigger inside `attachChatMetaListener()` (which fires for all inbox chats, not just the active one) — without the meta-listener trigger, the sound would never actually fire in production (the openChat listener is only attached when a chat is active, so `isViewingThisChat` is always true and the sound is suppressed). The meta-listener approach uses `meta.ts` increase + `selfMessageTsByChat` tracking to distinguish self-sends from incoming DMs. Both triggers are guarded by `isViewingThisChat` so there's no double-sound.
+
+---
+Task ID: 4-main
+Agent: Main Agent
+Task: Chat UI polish + markdown headings + stickers + reply bugs + general touch/gesture fixes + profile pic persistence
+
+Work Log:
+- **Stickers render as actual stickers** (Conversation.svelte + MessageBubble.svelte):
+  - `handleStickerSelect` now tags messages with `md.sticker = true` (merged with easter-egg metadata).
+  - MessageBubble: new `isSticker` derived — true when `msg.t==='text' && msg.md?.sticker && emojiOnlyRegex.test(msg.c) && length<=12`.
+  - `headingLevel` excludes stickers. Bubble gets `bbl-sticker` class (transparent bg, no shadow, padding 6px).
+  - New `.bbl-text.bbl-sticker-text` CSS (compound selector beats `.bbl-text`): `font-size: min(220px, 62vw)`, drop-shadow, user-select none, display block.
+  - `.msg-row:has(.bbl-sticker) .msg-content` max-width break-out to `min(90%, 320px)`.
+  - Verified live: 🔥 sticker renders at 220px (vs 15px default text). Much larger, transparent, with drop shadow.
+
+- **Markdown headings larger** (MessageBubble.svelte CSS):
+  - h1: 22px → 28px (font-weight 800, line-height 1.2, letter-spacing -0.02em)
+  - h2: 18px → 23px (font-weight 700, line-height 1.25, letter-spacing -0.015em)
+  - h3: 16px → 19px (font-weight 700, line-height 1.35)
+  - Added `margin-bottom: 2px` to `.bbl-heading` for spacing.
+  - Verified live: h1=28px, h2=23px, h3=19px confirmed via getComputedStyle.
+
+- **Reply bugs fixed** (MessageBubble.svelte + Conversation.svelte):
+  - ROOT CAUSE 1 (reaction panel opens on reply tap): `handleTouchStart` excluded `.rxn-bar` + `.audio-player` from touch handling but NOT `.rply-bar`. So tapping the reply preview on touch devices fired BOTH the rply-bar onclick (scrollToMessage) AND the bubble's touchend→onTapReaction (reaction picker after 250ms). Fixed: added `.rply-bar`, `.link-card`, `.bbl-img`, `.upload-retry-btn` to the `target.closest()` exclusion check. Now touches on these elements set `touchOnReaction = true` and skip the bubble's tap/reaction logic entirely.
+  - ROOT CAUSE 2 (highlight not showing): The `.msg-highlight` + `.msg-highlight::before` CSS rules were being STRIPPED by Svelte's CSS optimizer because `msg-highlight` is added dynamically via `classList.add` (in JS), not via Svelte template `class:` binding. Svelte treats it as "unused" and removes the rule. Fixed: wrapped both selectors in `:global()`: `:global([data-msg-id].msg-highlight)` + `:global([data-msg-id].msg-highlight::before)`. Verified: `content: ""`, `background: color(srgb ... / 0.22)`, `animationName: msgHighlightOverlay` all now apply.
+  - Improved highlight animation: prominent emerald tint overlay (22% opacity) + 1.5px ring (45% opacity) + scale pulse on the message row (1→1.015→1). 1.6s duration with smooth fade-in/fade-out.
+  - Reply preview touch target improved: `.rply-bar` padding 6px 8px → 8px 10px, `min-height: 44px`, `align-items: center`, border-radius 10px → 12px, added `transform: scale(0.98)` on active.
+
+- **General touch/gesture bug fixes** (MessageBubble.svelte):
+  - Touches on link cards, images, and upload retry buttons no longer trigger the bubble's tap→reaction-picker or swipe-reply logic. Each of these elements handles its own interactions (link cards open URLs, images open lightbox, retry buttons retry uploads). Without this fix, tapping an image would BOTH open the lightbox AND open the reaction picker after 250ms.
+
+- **Profile picture persistence fix** (auth.svelte.ts + SettingsView.svelte + chat.svelte.ts):
+  - ROOT CAUSE: `authStore.user = updated` in SettingsView's `updateProfile` updated the reactive $state but did NOT persist to localStorage (`chat-auth-user`). On page reload, `hydrate()` restored the OLD user without the new avatarUrl. Also, `listenToSelfProfile` (realtime listener) only patched `chatStore.userDict` + IndexedDB, NOT `authStore.user`.
+  - Fix: Added `authStore.updateUser(patch: Partial<User>)` method that updates the $state AND writes to `localStorage.setItem('chat-auth-user', JSON.stringify(updated))`.
+  - SettingsView's `updateProfile` now calls `authStore.updateUser(updated)` instead of direct `authStore.user = updated`.
+  - `listenToSelfProfile` now also calls `authStore.updateUser(user)` when the realtime profile update is for the current user (enables cross-device avatar sync).
+  - Verified live: called /api/profile with a test avatarUrl → `listenToSelfProfile` fired → `authStore.updateUser` synced to localStorage → on reload, avatar img renders with the R2 URL in Settings.
+
+- **CSS specificity fix** (MessageBubble.svelte):
+  - `.bbl-emoji-text` and `.bbl-sticker-text` were defined BEFORE `.bbl-text` in source order, so `.bbl-text`'s `font-size: 15px` was overriding them. Fixed: changed to compound selectors `.bbl-text.bbl-emoji-text` and `.bbl-text.bbl-sticker-text` (specificity 0,2,0 beats 0,1,0).
+
+Stage Summary:
+- Files changed by me: MessageBubble.svelte (stickers, headings, reply touch fix, CSS specificity), Conversation.svelte (sticker tagging, highlight :global fix), auth.svelte.ts (updateUser method), SettingsView.svelte (use authStore.updateUser), chat.svelte.ts (listenToSelfProfile syncs authStore).
+- Files changed by subagent C: SettingsView.svelte (profile cache invalidation, emoji removal, notification removal, message sound, input bar style), Avatar.svelte (emoji badge removal), prefs.svelte.ts (notificationSounds removed, inputBarStyle + messageSound added), InputBar.svelte (opaque default + glass variant), chat.svelte.ts (message sound trigger), message-sound.ts (NEW).
+- Files changed by subagent D: Conversation.svelte (instant preview, progress reactivity, error toast, URL lifecycle), storage.ts + MediaComposer.svelte (debug log cleanup).
+- Verified live via agent-browser: stickers 220px, headings 28/23/19px, reply highlight works (content+bg+animation), input bar opaque/glass toggle works, message sound toggle present, profile pic realtime sync works, image upload instant preview works.
+- svelte-check: 33 errors (IDENTICAL to baseline — zero new errors).
+- Dev server: HTTP 200, clean log.

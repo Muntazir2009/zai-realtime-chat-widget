@@ -13,9 +13,11 @@ import { MAX_MESSAGES_IN_MEMORY, RTDB_PATHS } from '$lib/types/index.js';
 import { authStore } from './auth.svelte.js';
 import { toastStore } from './toast.svelte.js';
 import { prefsStore } from './prefs.svelte.js';
+import { uiStore } from './ui.svelte.js';
 import { networkManager } from '$lib/managers/NetworkManager.svelte.js';
 import { cacheMessages, getCachedMessages, cacheUserProfiles, getUserProfile, clearChat as clearCachedMessages } from '$lib/managers/CacheManager.js';
 import { generateIdempotencyKey } from '$lib/utils/idempotency.js';
+import { playMessageSound } from '$lib/utils/message-sound.js';
 
 // ── Network resilience: retry with exponential backoff ──
 
@@ -106,6 +108,17 @@ class ChatStore {
   private sentKeys = new Set<string>();
   private static readonly MAX_SENT_KEYS = 500;
 
+  // ---- Message-sound bookkeeping ----
+  // Track self-sent message timestamps per chat so we can distinguish
+  // meta updates triggered by our own sends (via fan-out) from those
+  // triggered by the other user's incoming messages. The ChatMeta
+  // schema doesn't include the sender id of the last message, so we
+  // use this to suppress the message-sound for our own sends.
+  private selfMessageTsByChat = new Map<string, number[]>();
+  // Last observed `meta.ts` per chat — used to detect when a new
+  // message has arrived (i.e. when `meta.ts` increases).
+  private lastMetaTsByChat = new Map<string, number>();
+
   private addSentKey(key: string): boolean {
     if (this.sentKeys.has(key)) return false;
     this.sentKeys.add(key);
@@ -117,6 +130,26 @@ class ChatStore {
       }
     }
     return true;
+  }
+
+  /** Record a self-sent message timestamp so the meta listener can
+   *  suppress the message sound for our own outgoing messages. */
+  private recordSelfMessage(chatId: string, ts: number): void {
+    const arr = this.selfMessageTsByChat.get(chatId) ?? [];
+    arr.push(ts);
+    // Keep only timestamps from the last 5 minutes (bounded memory)
+    const cutoff = Date.now() - 5 * 60 * 1000;
+    const filtered = arr.filter((t) => t > cutoff);
+    this.selfMessageTsByChat.set(chatId, filtered);
+  }
+
+  /** Returns true if `ts` matches a self-sent message timestamp for
+   *  `chatId` (within a 2s tolerance for clock drift between client
+   *  and server). */
+  private isSelfMessageTs(chatId: string, ts: number): boolean {
+    const arr = this.selfMessageTsByChat.get(chatId);
+    if (!arr || arr.length === 0) return false;
+    return arr.some((t) => Math.abs(t - ts) < 2000);
   }
 
   /** Derive sorted inbox. Respects user's chat sort order preference. */
@@ -208,6 +241,28 @@ class ChatStore {
         // Ensure presence listeners for inbox participants (real-time online dots)
         if (otherIds.length > 0) {
           this.ensurePresenceListeners(otherIds);
+        }
+
+        // ── In-app message sound trigger ──
+        // The chat-meta listener is attached for EVERY chat in the user's
+        // inbox (via loadInbox → onChildAdded → attachChatMetaListener),
+        // so this fires for incoming messages in chats the user is NOT
+        // currently viewing as well. ChatMeta doesn't include the sender
+        // id of the last message, so we suppress our own sends by checking
+        // `selfMessageTsByChat` (recorded by sendMessage/sendImage/etc.).
+        const prevTs = this.lastMetaTsByChat.get(chatId);
+        this.lastMetaTsByChat.set(chatId, meta.ts);
+        if (
+          prevTs !== undefined &&
+          meta.ts > prevTs &&
+          prefsStore.messageSound &&
+          !this.isSelfMessageTs(chatId, meta.ts)
+        ) {
+          const isViewingThisChat =
+            uiStore.view === 'conversation' && this.activeChatId === chatId;
+          if (!isViewingThisChat) {
+            playMessageSound();
+          }
         }
       }
     });
@@ -341,6 +396,27 @@ class ChatStore {
       // Auto-mark as read when a new message arrives (user has chat open)
       if (this.activeChatId && msg.sid !== authStore.user?.id) {
         this.markAsRead(this.activeChatId);
+      }
+
+      // ── Message sound (defensive double-trigger) ──
+      // The primary sound trigger lives in `attachChatMetaListener`,
+      // which fires for ALL inbox chats (including the active one).
+      // For the active chat the meta-listener's `isViewingThisChat`
+      // check correctly suppresses the sound. We keep this explicit
+      // per-message check here as a defensive guard for the rare case
+      // where the meta listener's `meta.ts` comparison misses (e.g.
+      // clock-skew edge cases) — when the user is actively viewing
+      // this chat we never want a sound.
+      if (
+        msg.sid !== authStore.user?.id &&
+        msg.t !== 'system' &&
+        prefsStore.messageSound
+      ) {
+        const isViewingThisChat =
+          uiStore.view === 'conversation' && this.activeChatId === chatId;
+        if (!isViewingThisChat) {
+          playMessageSound();
+        }
       }
     });
 
@@ -502,6 +578,10 @@ class ChatStore {
       rk: idempotencyKey, rid: replyToId ?? null, mu: null, mh: null, md: metadata ?? null, edited: false,
     };
 
+    // Record self-sent message ts so the meta-listener can suppress
+    // the in-app message sound for our own outgoing message.
+    this.recordSelfMessage(chatId, message.ts);
+
     const updates = this.buildFanOutUpdates(chatId, messageId, message, content.slice(0, 100));
     // Optimistic: add to local array immediately so UI updates instantly
     this.messages = [...this.messages, message].sort((a, b) => a.ts - b.ts);
@@ -530,6 +610,8 @@ class ChatStore {
       id: messageId, c: caption ?? '📷 Photo', sid: user.id, t: 'image', ts: Date.now(),
       rk: idempotencyKey, rid: null, mu: imageUrl, mh: blurhash ?? null, md: null, edited: false,
     };
+
+    this.recordSelfMessage(chatId, message.ts);
 
     const updates = this.buildFanOutUpdates(chatId, messageId, message, caption ?? '📷 Photo');
     // Optimistic: add to local array immediately
@@ -562,6 +644,8 @@ class ChatStore {
       md: { duration, thumbnailUrl }, edited: false,
     };
 
+    this.recordSelfMessage(chatId, message.ts);
+
     const updates = this.buildFanOutUpdates(chatId, messageId, message, `🎬 Video ${durStr}`);
     this.messages = [...this.messages, message].sort((a, b) => a.ts - b.ts);
     await retryWithBackoff(
@@ -591,6 +675,8 @@ class ChatStore {
       sid: user.id, t: 'voice', ts: Date.now(),
       rk: idempotencyKey, rid: null, mu: voiceUrl, mh: null, md: { duration }, edited: false,
     };
+
+    this.recordSelfMessage(chatId, message.ts);
 
     const updates = this.buildFanOutUpdates(chatId, messageId, message, '🎙 Voice message');
     // Optimistic: add to local array immediately
@@ -973,6 +1059,10 @@ class ChatStore {
     }
     for (const [, unsub] of this.chatMetaUnsubs) unsub();
     this.chatMetaUnsubs.clear();
+    // Reset per-chat sound bookkeeping so a fresh login doesn't carry
+    // over stale "last meta ts" state from a previous session.
+    this.lastMetaTsByChat.clear();
+    this.selfMessageTsByChat.clear();
   }
 
   // ---- Self profile listener ----
@@ -995,6 +1085,11 @@ class ChatStore {
           m.set(uid, user);
           this.userDict = m;
           cacheUserProfiles([user]);
+          // Sync authStore.user too so the current user's own avatar/name
+          // updates in realtime across devices (and persists to localStorage).
+          if (authStore.user?.id === uid) {
+            authStore.updateUser(user);
+          }
         }
       }
     });

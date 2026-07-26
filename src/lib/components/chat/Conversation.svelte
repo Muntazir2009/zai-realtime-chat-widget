@@ -78,10 +78,6 @@
   }
   let uploadTrackers = $state(new Map<string, UploadTracker>());
 
-  function getUploadTracker(msgId: string): UploadTracker | undefined {
-    return uploadTrackers.get(msgId);
-  }
-
   // Reset last-seen counter when chat changes so old egg messages don't retrigger
   $effect(() => {
     const id = chatStore.activeChatId;
@@ -439,44 +435,47 @@
   }
 
   // ── Media Composer handlers ──
+  // Pushes preview entries immediately (with objectUrl) so the composer shows
+  // instantly; metadata (dimensions, duration, thumbnail) is extracted async
+  // and merged in place so the UI progressively enriches without ever blocking
+  // the preview from appearing.
   async function handleMediaSelect(files: File[]) {
-    console.log('[UPLOAD-DEBUG] handleMediaSelect called, files:', files.length, 'activeChatId:', chatStore.activeChatId);
     if (!chatStore.activeChatId) return;
 
-    // Build MediaComposerFile objects with metadata
-    const composerFileList: MediaComposerFile[] = [];
-    for (const file of files) {
+    // 1. Build minimal entries with objectUrl and show the composer immediately.
+    const initialEntries: MediaComposerFile[] = files.map((file) => {
       const isImage = file.type.startsWith('image/');
-      const isVideo = file.type.startsWith('video/');
       const objectUrl = URL.createObjectURL(file);
-      const entry: MediaComposerFile = {
+      return {
         file,
         objectUrl,
-        type: isImage ? 'image' : 'video',
+        type: (isImage ? 'image' : 'video') as 'image' | 'video',
       };
+    });
+    composerFiles = initialEntries;
+    showComposer = true;
 
-      // Extract metadata in parallel for all files
-      if (isImage) {
-        try {
-          const meta = await getImageMetadata(file);
+    // 2. Extract metadata in parallel; update each entry in place and reassign
+    //    the array so Svelte 5 picks up the change. Failures are non-fatal — the
+    //    composer still works without dimensions/duration.
+    await Promise.all(initialEntries.map(async (entry) => {
+      try {
+        if (entry.type === 'image') {
+          const meta = await getImageMetadata(entry.file);
           entry.width = meta.width;
           entry.height = meta.height;
-        } catch { /* best-effort */ }
-      } else if (isVideo) {
-        try {
-          const meta = await getVideoMetadata(file);
+        } else {
+          const meta = await getVideoMetadata(entry.file);
           entry.width = meta.width;
           entry.height = meta.height;
           entry.duration = meta.duration;
           entry.thumbnailUrl = meta.thumbnailDataUrl ?? undefined;
-        } catch { /* best-effort */ }
+        }
+      } catch {
+        // best-effort — preview still renders with objectUrl alone
       }
-
-      composerFileList.push(entry);
-    }
-
-    composerFiles = composerFileList;
-    showComposer = true;
+      composerFiles = [...composerFiles];
+    }));
   }
 
   function handleComposerClose() {
@@ -546,9 +545,8 @@
   }
 
   // Called when user presses Send in the MediaComposer
-  async function handleComposerSend(files: MediaComposerFile[], caption: string) {
-    console.log('[UPLOAD-DEBUG] handleComposerSend called, files:', files.length, 'activeChatId:', chatStore.activeChatId);
-    if (!chatStore.activeChatId) { console.warn('[UPLOAD-DEBUG] ABORT: no activeChatId'); return; }
+  function handleComposerSend(files: MediaComposerFile[], caption: string) {
+    if (!chatStore.activeChatId) return;
     showComposer = false;
 
     // Process each file: create optimistic message, then upload
@@ -558,11 +556,13 @@
       const user = authStore.user;
       if (!user) return;
 
-      // Create a temporary message ID
+      // Create a temporary message ID — Date.now() + random suffix avoids collisions
+      // even when multiple files are sent in the same millisecond.
       const tempMsgId = `upload_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       const localUrl = mediaFile.objectUrl;
 
-      // Build the optimistic message
+      // Build the optimistic message — uses the blob: objectUrl so the preview
+      // renders immediately while the upload is in flight.
       const tempMsg: Message = {
         id: tempMsgId,
         c: caption || (isImage ? '📷 Photo' : '🎬 Video'),
@@ -571,7 +571,7 @@
         ts: Date.now(),
         rk: '',
         rid: null,
-        mu: localUrl, // local preview URL
+        mu: localUrl, // local preview URL (kept alive until tracker cleanup)
         mh: isVideo ? (mediaFile.thumbnailUrl ?? null) : null,
         md: isVideo
           ? { duration: mediaFile.duration ?? 0, thumbnailUrl: mediaFile.thumbnailUrl, isUploading: true }
@@ -602,31 +602,59 @@
         caption,
       };
       uploadTrackers.set(tempMsgId, tracker);
+      uploadTrackers = new Map(uploadTrackers);
 
-      // Start upload in background
-      console.log('[UPLOAD-DEBUG] Calling uploadMediaFile for', tempMsgId, 'type:', mediaFile.type, 'size:', mediaFile.file.size);
-      uploadMediaFile(tempMsgId, mediaFile, caption, abortController).catch((err) => {
-        if (err instanceof DOMException && err.name === 'AbortError') return;
-        console.error('[UPLOAD-DEBUG] uploadMediaFile FAILED:', err);
-        tracker.status = 'error';
-        // Create retry function
-        tracker.retry = () => {
-          const newAbort = new AbortController();
-          tracker.signal = newAbort;
-          tracker.status = 'uploading';
-          tracker.progress = { percentage: 0, loaded: 0, total: mediaFile.file.size, speed: 0, eta: -1, phase: 'preparing' };
-          uploadMediaFile(tempMsgId, mediaFile, caption, newAbort).catch((retryErr) => {
-            if (retryErr instanceof DOMException && retryErr.name === 'AbortError') return;
-            tracker.status = 'error';
-          });
-        };
-      });
+      // Start upload in background (fire-and-forget; we handle errors via .catch)
+      uploadMediaFile(tempMsgId, mediaFile, caption, abortController).then(
+        () => {
+          // Success: nothing extra — uploadMediaFile already wrote the RTDB
+          // message, replaced the optimistic temp, and scheduled tracker cleanup.
+        },
+        (err) => {
+          if (err instanceof DOMException && err.name === 'AbortError') return;
+          console.error('[upload] failed:', err);
+          tracker.status = 'error';
+          uploadTrackers = new Map(uploadTrackers);
+          toastStore.error(`Upload failed: ${(err instanceof Error ? err.message : String(err)).slice(0, 100)}`);
+          // Create retry function
+          tracker.retry = () => {
+            const newAbort = new AbortController();
+            tracker.signal = newAbort;
+            tracker.status = 'uploading';
+            tracker.progress = { percentage: 0, loaded: 0, total: mediaFile.file.size, speed: 0, eta: -1, phase: 'preparing' };
+            uploadTrackers = new Map(uploadTrackers);
+            uploadMediaFile(tempMsgId, mediaFile, caption, newAbort).then(
+              () => { /* success */ },
+              (retryErr) => {
+                if (retryErr instanceof DOMException && retryErr.name === 'AbortError') return;
+                console.error('[upload] retry failed:', retryErr);
+                tracker.status = 'error';
+                uploadTrackers = new Map(uploadTrackers);
+                toastStore.error(`Upload failed: ${(retryErr instanceof Error ? retryErr.message : String(retryErr)).slice(0, 100)}`);
+              },
+            );
+          };
+          // Safety cleanup: if the user never retries, free the tracker (and
+          // its object URL) after 60s to avoid unbounded growth.
+          setTimeout(() => {
+            const t = uploadTrackers.get(tempMsgId);
+            if (t && t.status === 'error') {
+              try { URL.revokeObjectURL(t.localUrl); } catch { /* ignore */ }
+              uploadTrackers.delete(tempMsgId);
+              uploadTrackers = new Map(uploadTrackers);
+              // Also remove the optimistic message so the UI doesn't show a
+              // stale error overlay forever.
+              chatStore.messages = chatStore.messages.filter((m) => m.id !== tempMsgId);
+            }
+          }, 60_000);
+        },
+      );
     }
 
-    // Revoke composer file URLs
-    for (const f of files) {
-      URL.revokeObjectURL(f.objectUrl);
-    }
+    // IMPORTANT: do NOT revoke the file.objectUrl here — the optimistic message
+    // still references it via msg.mu for the local preview. The URL is revoked
+    // after the upload completes (see uploadMediaFile success path) or after
+    // the 60s error-cleanup timeout above.
     composerFiles = [];
   }
 
@@ -636,25 +664,25 @@
     caption: string,
     abortController: AbortController,
   ) {
-    console.log('[UPLOAD-DEBUG] uploadMediaFile entered, msgId:', msgId);
     const tracker = uploadTrackers.get(msgId);
-    if (!tracker) { console.warn('[UPLOAD-DEBUG] ABORT: no tracker for', msgId); return; }
+    if (!tracker) return;
 
     const isImage = mediaFile.type === 'image';
     const isVideo = mediaFile.type === 'video';
     const folder = isVideo ? 'videos' : 'images';
 
     try {
-      console.log('[UPLOAD-DEBUG] Calling uploadFile, file:', mediaFile.file.name, 'size:', mediaFile.file.size, 'type:', mediaFile.file.type);
       const result = await uploadFile(
         mediaFile.file,
         folder,
         mediaFile.file.name,
         (pct) => {
-          // Simple progress callback — update tracker
+          // Simple progress callback — update percentage in place
           if (tracker) {
             tracker.progress.percentage = pct;
-            // Force reactivity by reassigning the map
+            // Force reactivity by reassigning the map (belt-and-suspenders —
+            // Svelte 5 deep-proxies the tracker so the mutation is already
+            // tracked, but reassigning guarantees a fresh dep read).
             uploadTrackers = new Map(uploadTrackers);
           }
         },
@@ -672,26 +700,9 @@
       // Upload succeeded — update the message with real URL
       const msgs = chatStore.messages;
       const idx = msgs.findIndex((m) => m.id === msgId);
-      if (idx !== -1) {
-        const updatedMsg = { ...msgs[idx]! };
-        updatedMsg.mu = result.publicUrl;
-        if (result.blurhash) updatedMsg.mh = result.blurhash;
-
-        if (isImage) {
-          updatedMsg.c = caption || '📷 Photo';
-          updatedMsg.md = { width: mediaFile.width, height: mediaFile.height };
-        } else {
-          updatedMsg.c = caption || '🎬 Video';
-          updatedMsg.md = {
-            duration: mediaFile.duration ?? 0,
-            thumbnailUrl: mediaFile.thumbnailUrl,
-            width: mediaFile.width,
-            height: mediaFile.height,
-          };
-        }
-        updatedMsg.rk = ''; // Will be set by sendXxxMessage
-
-        // Now write to RTDB via chatStore
+      if (idx === -1) {
+        // Optimistic message already gone (e.g. user cleared chat). Still
+        // need to write to RTDB so the message lands.
         if (isImage) {
           await chatStore.sendImageMessage(chatStore.activeChatId!, result.publicUrl, caption, result.blurhash);
         } else {
@@ -702,21 +713,64 @@
             mediaFile.thumbnailUrl,
           );
         }
-
-        // Remove the optimistic temp message (the RTDB write will add the real one)
-        chatStore.messages = chatStore.messages.filter((m) => m.id !== msgId);
         tracker.status = 'done';
-        // Clean up tracker after a short delay
         setTimeout(() => {
+          try { URL.revokeObjectURL(tracker.localUrl); } catch { /* ignore */ }
           uploadTrackers.delete(msgId);
           uploadTrackers = new Map(uploadTrackers);
         }, 2000);
+        return;
       }
+
+      const updatedMsg = { ...msgs[idx]! };
+      updatedMsg.mu = result.publicUrl;
+      if (result.blurhash) updatedMsg.mh = result.blurhash;
+
+      if (isImage) {
+        updatedMsg.c = caption || '📷 Photo';
+        updatedMsg.md = { width: mediaFile.width, height: mediaFile.height };
+      } else {
+        updatedMsg.c = caption || '🎬 Video';
+        updatedMsg.md = {
+          duration: mediaFile.duration ?? 0,
+          thumbnailUrl: mediaFile.thumbnailUrl,
+          width: mediaFile.width,
+          height: mediaFile.height,
+        };
+      }
+      updatedMsg.rk = ''; // Will be set by sendXxxMessage
+
+      // Now write to RTDB via chatStore
+      if (isImage) {
+        await chatStore.sendImageMessage(chatStore.activeChatId!, result.publicUrl, caption, result.blurhash);
+      } else {
+        await chatStore.sendVideoMessage(
+          chatStore.activeChatId!,
+          result.publicUrl,
+          mediaFile.duration ?? 0,
+          mediaFile.thumbnailUrl,
+        );
+      }
+
+      // Remove the optimistic temp message (the RTDB write will add the real one)
+      chatStore.messages = chatStore.messages.filter((m) => m.id !== msgId);
+      tracker.status = 'done';
+      uploadTrackers = new Map(uploadTrackers);
+      // Clean up tracker after a short delay (keep it around briefly so the
+      // 'done' status can settle on screen and the blob URL is no longer
+      // referenced by any <img>).
+      setTimeout(() => {
+        try { URL.revokeObjectURL(tracker.localUrl); } catch { /* ignore */ }
+        uploadTrackers.delete(msgId);
+        uploadTrackers = new Map(uploadTrackers);
+      }, 2000);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
         tracker.status = 'cancelled';
+        uploadTrackers = new Map(uploadTrackers);
         // Remove the optimistic message on cancel
         chatStore.messages = chatStore.messages.filter((m) => m.id !== msgId);
+        try { URL.revokeObjectURL(tracker.localUrl); } catch { /* ignore */ }
         uploadTrackers.delete(msgId);
         uploadTrackers = new Map(uploadTrackers);
         return;
@@ -731,6 +785,13 @@
       tracker.signal.abort();
     }
   }
+
+  // Derived snapshot of all trackers — used by MessageBubble props below so
+  // the {#each} block re-renders the affected bubble whenever any tracker
+  // changes. (Svelte 5 already tracks `uploadTrackers` deep via the $state
+  // proxy, but reading the derived here keeps the dependency explicit and
+  // future-proof if the implementation changes.)
+  let trackersSnapshot = $derived(uploadTrackers);
 
   function retryUpload(msgId: string) {
     const tracker = uploadTrackers.get(msgId);
@@ -859,7 +920,10 @@
     if (!chatStore.activeChatId) return;
     const isEggSticker = ['❤️', '💕', '💗', '💞', '💘', '💖', '💋', '😘', '😍', '❣️', '💓', '💞', '💝'].includes(sticker);
     const effectForSticker = emojiToEffectType(sticker);
-    const meta = isEggSticker ? { egg: effectForSticker || 'heart' } : undefined;
+    // Tag as a sticker so MessageBubble renders it at full sticker size
+    // (much larger than a typed emoji). Easter-egg metadata is merged in.
+    const meta: Record<string, unknown> = { sticker: true };
+    if (isEggSticker) meta.egg = effectForSticker || 'heart';
     chatStore.sendMessage(chatStore.activeChatId, sticker, undefined, meta);
     if (isEggSticker || effectForSticker) {
       if (effectForSticker) currentEffectType = effectForSticker;
@@ -1103,8 +1167,8 @@
             senderAccentColor={msg.sid === authStore.user?.id ? null : (chatStore.userDict.get(msg.sid)?.accentColor ?? null)}
             senderEmojiStatus={msg.sid === authStore.user?.id ? null : (chatStore.userDict.get(msg.sid)?.emojiStatus ?? null)}
             senderAvatarUrl={chatStore.userDict.get(msg.sid)?.avatarUrl ?? null}
-            uploadProgress={getUploadTracker(msg.id)?.progress}
-            uploadStatus={getUploadTracker(msg.id)?.status}
+            uploadProgress={trackersSnapshot.get(msg.id)?.progress}
+            uploadStatus={trackersSnapshot.get(msg.id)?.status}
             onCancelUpload={() => cancelUpload(msg.id)}
             onRetryUpload={() => retryUpload(msg.id)}
           />
@@ -2049,26 +2113,38 @@
     to { opacity: 1; transform: translateY(0); }
   }
 
-  /* Message highlight animation for reply-tap navigation */
-  [data-msg-id].msg-highlight {
+  /* Message highlight animation for reply-tap navigation.
+     Uses :global() because msg-highlight is added dynamically via JS
+     (classList.add), not via Svelte template class binding — Svelte would
+     otherwise strip these rules as "unused". */
+  :global([data-msg-id].msg-highlight) {
     position: relative;
+    animation: msgHighlightPulse 1.6s cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 
-  [data-msg-id].msg-highlight::before {
+  :global([data-msg-id].msg-highlight::before) {
     content: '';
     position: absolute;
-    inset: 0 6px;
-    border-radius: 14px;
-    background: var(--color-primary);
-    animation: msgHighlightOverlay 1.6s ease both;
+    inset: -4px 4px;
+    border-radius: 18px;
+    background: color-mix(in srgb, var(--color-primary) 22%, transparent);
+    box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--color-primary) 45%, transparent);
+    animation: msgHighlightOverlay 1.6s cubic-bezier(0.22, 1, 0.36, 1) both;
     pointer-events: none;
-    z-index: 2;
+    z-index: 0;
   }
 
   @keyframes msgHighlightOverlay {
-    0% { opacity: 0.2; }
-    15% { opacity: 0.25; }
-    100% { opacity: 0; }
+    0% { opacity: 0; transform: scale(0.96); }
+    18% { opacity: 1; transform: scale(1); }
+    40% { opacity: 0.85; }
+    100% { opacity: 0; transform: scale(1.02); }
+  }
+
+  @keyframes msgHighlightPulse {
+    0% { transform: scale(1); }
+    18% { transform: scale(1.015); }
+    100% { transform: scale(1); }
   }
 
   /* === PINNED MESSAGES PANEL === */

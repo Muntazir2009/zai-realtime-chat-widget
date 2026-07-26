@@ -266,7 +266,7 @@
     />
 
     <!-- Input Row -->
-    <div class="input-row" class:input-row-focused={isFocused} class:input-row-active={hasText} class:input-row-picker-open={!!activePicker}>
+    <div class="input-row" class:input-row-glass={prefsStore.inputBarStyle === 'glass'} class:input-row-focused={isFocused} class:input-row-active={hasText} class:input-row-picker-open={!!activePicker}>
 
       <!-- Left: Media picker -->
       <button onclick={handleMediaUpload} aria-label="Add media"
@@ -443,16 +443,16 @@
     }
   }
 
-  /* Input row — full-width 3D frosted glass bar */
+  /* Input row — fully opaque by default for maximum readability; a premium
+     frosted-glass variant (.input-row-glass) is opt-in via the Input Bar Style
+     setting. */
   .input-row {
     display: flex;
     align-items: center;
     gap: 2px;
     padding: 6px 8px 6px 6px;
     border-radius: 24px;
-    background: color-mix(in srgb, var(--bg-surface) 80%, transparent);
-    backdrop-filter: blur(32px) saturate(200%);
-    -webkit-backdrop-filter: blur(32px) saturate(200%);
+    background: var(--bg-surface);
     border: 1px solid color-mix(in srgb, white 10%, transparent);
     border-bottom-color: color-mix(in srgb, black 15%, transparent);
     border-right-color: color-mix(in srgb, black 8%, transparent);
@@ -466,8 +466,15 @@
     width: 100%;
   }
 
+  /* Liquid Glass variant — premium frosted glass, still readable (72% surface) */
+  .input-row.input-row-glass {
+    background: color-mix(in srgb, var(--bg-surface) 72%, transparent);
+    backdrop-filter: blur(32px) saturate(200%);
+    -webkit-backdrop-filter: blur(32px) saturate(200%);
+  }
+
   .input-row-focused {
-    background: color-mix(in srgb, var(--bg-surface) 90%, transparent);
+    background: var(--bg-surface);
     border-color: color-mix(in srgb, black 15%, transparent);
     border-bottom-color: color-mix(in srgb, black 12%, transparent);
     border-right-color: color-mix(in srgb, black 6%, transparent);
@@ -480,8 +487,17 @@
       0 8px 28px color-mix(in srgb, black 4%, transparent);
   }
 
+  /* For glass variant, raise surface opacity slightly on focus for clarity */
+  .input-row.input-row-glass.input-row-focused {
+    background: color-mix(in srgb, var(--bg-surface) 84%, transparent);
+  }
+
   .input-row-active {
-    background: color-mix(in srgb, var(--bg-elevated, var(--bg-surface)) 78%, transparent);
+    background: var(--bg-elevated, var(--bg-surface));
+  }
+
+  .input-row.input-row-glass.input-row-active {
+    background: color-mix(in srgb, var(--bg-elevated, var(--bg-surface)) 76%, transparent);
   }
 
   .input-row-picker-open {

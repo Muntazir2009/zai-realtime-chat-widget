@@ -6,10 +6,22 @@
     status?: 'online' | 'offline' | 'away';
     avatarUrl?: string | null;
     accentColor?: string | null;
+    /**
+     * @deprecated Emoji status badges have been removed from the UI. The
+     * `User.emojiStatus` field is preserved in the schema for backwards
+     * compatibility, but it is no longer rendered. This prop is accepted
+     * (and silently ignored) so existing call sites don't break — new
+     * callers should omit it.
+     */
     emojiStatus?: string | null;
   }
 
-  let { username, size = 'md', showStatus = false, status, avatarUrl = null, accentColor = null, emojiStatus = null }: Props = $props();
+  // NOTE: `emojiStatus` is intentionally accepted but not destructured into
+  // a local variable — it's deprecated and no longer rendered. Keeping it
+  // in the Props interface avoids breaking existing <Avatar emojiStatus={…}>
+  // call sites in MessageBubble.svelte / Conversation.svelte / ChatTile.svelte
+  // / OnlineUsers.svelte, which are owned by other agents.
+  let { username, size = 'md', showStatus = false, status, avatarUrl = null, accentColor = null }: Props = $props();
 
   const sizeMap = $derived({
     sm: 32,
@@ -35,7 +47,7 @@
     const num = parseInt(hex.replace('#', ''), 16);
     const r = Math.max(0, (num >> 16) - amount);
     const g = Math.max(0, ((num >> 8) & 0x00FF) - amount);
-    const b = Math.max(0, (num & 0x0000FF) - amount);
+    const b = Math.max(0, (num & 0x000000FF) - amount);
     return `#${(r << 16 | g << 8 | b).toString(16).padStart(6, '0')}`;
   }
 
@@ -86,19 +98,6 @@
       "
     ></span>
   {/if}
-
-  <!-- Emoji Status Badge -->
-  {#if emojiStatus}
-    <span
-      class="emoji-badge"
-      style="
-        width: 20px;
-        height: 20px;
-        bottom: -2px;
-        left: -2px;
-      "
-    >{emojiStatus}</span>
-  {/if}
 </div>
 
 <style>
@@ -114,27 +113,5 @@
     .avatar-has-accent:hover {
       box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--color-primary) 35%, transparent), 0 4px 14px color-mix(in srgb, var(--color-primary) 20%, transparent) !important;
     }
-  }
-
-  .emoji-badge {
-    position: absolute;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 9999px;
-    border: 2px solid var(--bg-surface);
-    background: var(--bg-surface);
-    font-size: 11px;
-    line-height: 1;
-    z-index: 2;
-    pointer-events: none;
-    animation: emojiPop 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-  }
-
-  @keyframes emojiPop {
-    0% { transform: scale(0) rotate(-20deg); opacity: 0; }
-    60% { transform: scale(1.15) rotate(4deg); opacity: 1; }
-    100% { transform: scale(1) rotate(0deg); opacity: 1; }
   }
 </style>

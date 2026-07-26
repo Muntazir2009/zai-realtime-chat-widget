@@ -469,7 +469,6 @@ async function uploadViaWorker(
       reject(new DOMException('Upload cancelled', 'AbortError'));
     };
 
-    console.log('[UPLOAD-DEBUG] XHR sending to', WORKER_URL, 'fileSize:', file.size);
     xhr.send(formData);
   });
 }
@@ -491,7 +490,6 @@ export async function uploadFile(
   onProgress?: (pct: number) => void,
   options?: UploadOptions,
 ): Promise<UploadResult> {
-  console.log('[UPLOAD-DEBUG] uploadFile called, browser:', typeof browser !== 'undefined', 'size:', file.size, 'type:', file.type);
   if (!browser) throw new Error('Uploads only work in the browser');
 
   const { signal, onDetailedProgress, skipCompression, compressMaxWidth, compressQuality } = options || {};
@@ -552,9 +550,7 @@ export async function uploadFile(
 
   // Wait for parallel work
   reportPhase('preparing', 2);
-  console.log('[UPLOAD-DEBUG] Waiting for blurhash + compression...');
   const [blurhash] = await Promise.all([blurhashPromise, compressionPromise]);
-  console.log('[UPLOAD-DEBUG] Blurhash + compression done, blurhash:', blurhash ? 'yes' : 'no');
 
   // Re-check abort after parallel work
   if (signal?.aborted) {
@@ -565,7 +561,6 @@ export async function uploadFile(
 
   // Upload via Worker
   reportPhase('uploading', 12);
-  console.log('[UPLOAD-DEBUG] Calling uploadViaWorker, file:', finalFilename, 'size:', fileToUpload.size, 'folder:', effectiveFolder);
   const result = await uploadViaWorker(
     fileToUpload,
     finalFilename,
