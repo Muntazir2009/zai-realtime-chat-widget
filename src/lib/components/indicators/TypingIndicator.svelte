@@ -8,15 +8,16 @@
 
   let { usernames, avatarUrl = null, accentColor = null, username = null }: Props = $props();
 
-  // --- Debounced visibility state ---
+  // --- Visibility state ---
+  // Show IMMEDIATELY when typing starts (no show-debounce) so the indicator
+  // is never missed for brief typing bursts. Keep a hide-debounce so a
+  // momentary stop/resume doesn't flicker.
   let visible = $state(false);
   let rendering = $state(false);
-  let showTimer: ReturnType<typeof setTimeout> | null = null;
   let hideTimer: ReturnType<typeof setTimeout> | null = null;
   let exitTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const SHOW_DELAY = 200;
-  const HIDE_DELAY = 600;
+  const HIDE_DELAY = 500;
   const EXIT_DURATION = 280;
 
   $effect(() => {
@@ -24,25 +25,15 @@
     const hasUsers = usernames.length > 0;
 
     if (hasUsers) {
-      // Clear pending hide / exit
+      // Clear pending hide / exit — typing is active
       if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
       if (exitTimer) { clearTimeout(exitTimer); exitTimer = null; }
-
-      // Debounce show
-      if (!visible) {
-        if (showTimer) clearTimeout(showTimer);
-        showTimer = setTimeout(() => {
-          visible = true;
-          showTimer = null;
-        }, SHOW_DELAY);
-      }
+      // Show immediately (no debounce) — never miss a typing event
+      visible = true;
+      rendering = true;
     } else {
-      // Clear pending show
-      if (showTimer) { clearTimeout(showTimer); showTimer = null; }
-
-      // Debounce hide
-      if (visible) {
-        if (hideTimer) clearTimeout(hideTimer);
+      // Debounce hide — avoids flicker on brief stop/resume
+      if (visible && !hideTimer) {
         hideTimer = setTimeout(() => {
           visible = false;
           hideTimer = null;
@@ -56,15 +47,9 @@
     }
 
     return () => {
-      if (showTimer) { clearTimeout(showTimer); showTimer = null; }
       if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
       if (exitTimer) { clearTimeout(exitTimer); exitTimer = null; }
     };
-  });
-
-  // Sync rendering with visible for enter; stay for exit
-  $effect(() => {
-    if (visible) rendering = true;
   });
 
   // --- Computed label ---

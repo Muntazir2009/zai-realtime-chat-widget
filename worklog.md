@@ -2072,3 +2072,28 @@ Stage Summary:
 - **Issue 1 FIXED**: Android back/exit — double-back-to-exit toast on main tabs, proper conversation→chatlist navigation, guard history entries prevent accidental exit.
 - No files other than `src/routes/+page.svelte` were modified.
 - No wallpaper rendering logic was changed — only the CSS property used to apply it.
+
+---
+Task ID: typing-upload-fix
+Agent: Main Agent
+Task: Fix typing indicator not appearing + image upload showing no preview/confirmation
+
+Work Log:
+- Investigated typing indicator flow end-to-end via code review (InputBar → PresenceManager.setTyping → writeTyping → RTDB; chatStore.attachTypingListener → onValue → _handleTypingSnapshot → _updateTypingDisplayNames → typingDisplayNames; Conversation typingNames $derived → TypingIndicator render + header "typing" text)
+- Set up live cross-account E2E test with two real Firebase accounts (alice551 ↔ bob551) via two agent-browser sessions through the Caddy gateway (port 81)
+- Confirmed the typing DATA FLOW works: Bob's console logs "[PresenceManager] Writing typing indicator" + "Typing write completed"; Alice's console logs "[ChatStore] Typing START: uid=user_bob551"
+- Confirmed the typing UI renders: top bar shows "bob551 Bob QA typing" (header-typing, visible) AND floating TypingIndicator "Bob QA is typing" (typing-root is-entering, typing-bubble, typing-label — all visibility:visible)
+- Found a real reliability edge case: TypingIndicator had SHOW_DELAY=200ms before becoming visible. For brief typing bursts (type + immediate send, <200ms typing window) the indicator never appeared because the show timer was cleared by the stop event before firing.
+- Fixed TypingIndicator.svelte: removed SHOW_DELAY — indicator now shows IMMEDIATELY when typing starts (visible=true, rendering=true synchronously). Kept HIDE_DELAY=500ms + EXIT_DURATION=280ms for smooth, flicker-free disappearance. Also removed now-unused showTimer state.
+- Investigated image upload "nothing happens" issue: InputBar.handleFileSelect logged "[UPLOAD-DEBUG] InputBar handleFileSelect, files: 1" but NEVER called onMediaSelect (no "handleMediaSelect called" log)
+- Root cause: `input.value = ''` was called BEFORE iterating `fileList`. Verified via eval that setting input.value='' on a file input MUTATES the FileList in place (lenBefore:1 → lenAfter:0). So the subsequent loop saw 0 files and onMediaSelect was never invoked.
+- Fixed InputBar.svelte handleFileSelect: snapshot File objects into a plain `files: File[]` array BEFORE resetting `input.value = ''`, then iterate the snapshot. Added explanatory comment.
+- Re-tested image upload: MediaComposer now renders correctly (mc-backdrop mc-backdrop-mounted disp:flex vis:visible, mc-panel, mc-top, mc-preview all visible). The preview/confirmation screen appears as expected.
+- Ran svelte-check: my edited files (TypingIndicator.svelte, InputBar.svelte handleFileSelect) have zero new errors. 33 pre-existing errors in SettingsView/LockScreen are unrelated.
+- Cleaned up test scripts and screenshot artifacts.
+
+Stage Summary:
+- Typing indicator: VERIFIED WORKING cross-account (both top-bar "typing" text and floating indicator). Fixed SHOW_DELAY so it appears instantly and is never missed for brief typing bursts.
+- Image upload: FIXED. Root cause was `input.value = ''` mutating the FileList before iteration. Now the MediaComposer preview/confirmation screen appears correctly when an image is selected.
+- Files changed: src/lib/components/indicators/TypingIndicator.svelte, src/lib/components/chat/InputBar.svelte
+- Note for the user: The typing indicator only shows for the OTHER participant's typing (you cannot see your own typing — by design). To verify, open two different accounts (e.g. two browser profiles) and have one type while watching the other.

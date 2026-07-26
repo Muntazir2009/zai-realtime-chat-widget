@@ -192,14 +192,21 @@
   function handleFileSelect(e: Event) {
     const input = e.target as HTMLInputElement;
     const fileList = input.files;
-    console.log('[UPLOAD-DEBUG] InputBar handleFileSelect, files:', fileList?.length);
     if (!fileList || fileList.length === 0) return;
+
+    // IMPORTANT: snapshot the File objects into a plain array BEFORE resetting
+    // input.value. Setting input.value = '' on a file input mutates the
+    // FileList in place (length becomes 0), so any later iteration would see
+    // no files and onMediaSelect would never fire.
+    const files: File[] = [];
+    for (let i = 0; i < fileList.length; i++) {
+      files.push(fileList[i]!);
+    }
     input.value = '';
 
     // Filter and validate files
     const validFiles: File[] = [];
-    for (let i = 0; i < fileList.length; i++) {
-      const file = fileList[i]!;
+    for (const file of files) {
       const isImage = file.type.startsWith('image/');
       const isVideo = file.type.startsWith('video/');
       if (!isImage && !isVideo) {
