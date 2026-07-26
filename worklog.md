@@ -2496,3 +2496,70 @@ Stage Summary:
   - Indicator drag: works (dispatched PointerEvents → Chats→Settings switch, indicator moved with elastic stretch) ✓
   - Haptics removed: zero navigator.vibrate references ✓
 - Chats button bug: code fix verified (selectTab guard allows same-tab tap when view='conversation'). Cannot fully E2E test without a second user to create a DM, but the logic is correct and uiStore.setTab() already handles closeChat().
+
+---
+Task ID: 6
+Agent: Main Agent
+Task: Refine BottomNavBar to match reference image — small squircle indicator, dark glass, icons-only, fix icon visibility
+
+Work Log:
+- **ANALYZED REFERENCE IMAGE** via VLM (z-ai vision): Reference shows a compact dark charcoal pill nav (~64px height), icons-only (no labels), with a small 44-48px squircle active indicator (#48484A gray) behind only the active icon. Equal spacing between 3 icons. Subtle shadow, thin border, no glow.
+
+- **ACTIVE INDICATOR — Small fixed squircle (CRITICAL FIX)**:
+  - Previous: large emerald pill spanning full tab width (110px) with glow — hid the icon.
+  - Now: **44×44px squircle** (border-radius 14px), subtle gray (#48484A), NO glow, NO emerald.
+  - **FIXED ICON VISIBILITY BUG**: indicator was z-index 3 (above tabs) → hid the active icon. Now z-index 1 (BEHIND tabs), `pointer-events: none`. Icon (z-index 2) is always fully visible.
+  - Removed `.indicator-glow` div entirely (no oversized glow effects).
+  - Removed `:focus-visible` outline (indicator is no longer interactive/focusable).
+  - Size is CONSTANT across all tabs — never resizes. Only translates horizontally.
+
+- **DRAG REFACTOR — Driven by active tab's pointer handlers**:
+  - Since indicator is now behind tabs (z-index 1, pointer-events: none), it can't receive pointer events directly.
+  - Refactored: the ACTIVE TAB's pointer handlers detect "press + move beyond threshold" and engage indicator drag.
+  - `onTabPointerMove`: if `pointerDownTab === uiStore.tab` and movement > DRAG_THRESHOLD, engages drag (captures pointer, sets isGrabbed, starts RAF). Non-active tabs just cancel tap/long-press on movement.
+  - `onTabPointerUp`: if drag was engaged, performs velocity-aware snapping to nearest tab (with 120ms velocity projection); otherwise normal tap.
+  - `onTabPointerCancel`: cleans up drag state.
+  - Verified via agent-browser: dispatched PointerEvents on active Chats tab → dragged right → snapped to Settings tab. Indicator stayed 44px (no resize). ✓
+  - Spring physics preserved: stiffness=0.20, damping=0.74, velocity-aware snapping, magnetic tab movement (4px max), elastic edge resistance (0.4x).
+
+- **NAVIGATION SIZE — Compact**:
+  - Capsule: max-width 260px, height 56px, padding 6px, border-radius 28px
+  - Tabs: min-height 44px, padding 0, equal flex (82px each)
+  - Icons: 22px (lucide size), strokeWidth 1.6 inactive / 2.2 active
+  - Icons-only (NO labels) — matches reference
+  - Nav padding: 16px horizontal, 14px bottom
+
+- **VISUAL DESIGN — Soft dark liquid glass**:
+  - Background: rgba(28,28,30,0.58) — translucent dark charcoal (enhanced transparency for glassmorphism)
+  - Blur: 32px saturate(180%) — soft backdrop blur
+  - Border: 0.5px rgba(255,255,255,0.12) — thin subtle
+  - Shadow: 0 4px 12px rgba(0,0,0,0.22) — minimal, downward
+  - Sheen: subtle top highlight (8% white gradient)
+  - Inactive icon color: rgba(235,235,240,0.55) — soft white
+  - Active icon color: #ffffff — full white
+  - Theme variants for dark/amoled/crimson-dark (all lean dark per reference)
+
+- **CHATS BUTTON BUG — Fixed (preserved from Task 5)**:
+  - `selectTab` guard: `if (uiStore.tab === id && uiStore.view !== 'conversation') return;`
+  - Same-tab tap in conversation → falls through to setTab → closeChat → returns to chat list.
+
+- **HAPTICS — Removed (preserved from Task 5)**: Zero navigator.vibrate calls. Only a comment "no haptic" remains.
+
+- **PERFORMANCE — Optimized (preserved + enhanced)**:
+  - Cached tab centers (no per-frame getBoundingClientRect)
+  - Indicator uses GPU transform only (translateX + scale), no width animation
+  - isDragging/isGrabbed as plain let (not reactive)
+  - Self-terminating RAF when spring settles
+
+Stage Summary:
+- File changed: `/home/z/my-project/src/lib/components/ui/BottomNavBar.svelte` (refined in-place)
+- svelte-check: 33 errors — IDENTICAL to baseline, zero from BottomNavBar
+- Dev server: HTTP 200, 0 runtime errors
+- agent-browser verified:
+  - Capsule: 260×56px, dark charcoal glass ✓
+  - Indicator: 44×44px squircle, z-index 1 (behind tabs), pointer-events none ✓
+  - Icon: 24×24px visible above indicator (z-index 2 > 1) ✓
+  - Tabs: [82,82,82] equal width, icons-only (0 labels) ✓
+  - Drag: dispatched PointerEvents on active tab → indicator followed → snapped to Settings ✓
+  - Indicator width stayed 44px during drag (no resize) ✓
+- VLM comparison: capsule 8/10, layout 7/10 match with reference. Indicator rated 4/10 by VLM because reference's indicator is nearly invisible — but user explicitly requested a visible small indicator, so this is correct per spec.
