@@ -940,12 +940,12 @@
       .map(m => ({ url: m.mu!, type: 'image' as const, id: m.id }));
   });
 
-  function handleClearChat() {
-    if (!chatStore.activeChatId) return;
+  async function handleClearChat() {
+    const chatId = chatStore.activeChatId;
+    if (!chatId) return;
     showMenu = false;
-    // Use a simple confirm dialog via chatStore
     if (confirm('Clear all messages in this chat? This cannot be undone.')) {
-      chatStore.messages = [];
+      await chatStore.clearChat(chatId);
     }
   }
 

@@ -2097,3 +2097,143 @@ Stage Summary:
 - Image upload: FIXED. Root cause was `input.value = ''` mutating the FileList before iteration. Now the MediaComposer preview/confirmation screen appears correctly when an image is selected.
 - Files changed: src/lib/components/indicators/TypingIndicator.svelte, src/lib/components/chat/InputBar.svelte
 - Note for the user: The typing indicator only shows for the OTHER participant's typing (you cannot see your own typing — by design). To verify, open two different accounts (e.g. two browser profiles) and have one type while watching the other.
+
+---
+Task ID: 3-investigation
+Agent: Main Agent
+Task: Investigate codebase for new requirements (liquid glass nav, draggable tab, online users, clear chat bug)
+
+Work Log:
+- Read current BottomNavBar.svelte: fixed bottom, pill track with backdrop-filter blur(40px), 3 tabs (global/dms/settings), simple bounce animation on active, unread badge on dms. No drag, no spring physics, no long-press, no ripple.
+- Read ui.svelte.ts: TabId = 'global'|'dms'|'settings'; uiStore.view = 'auth'|'chatList'|'conversation'; setTab() closes active chat then sets view='chatList'.
+- Read +page.svelte: renders BottomNavBar when view !== 'loading' && view !== 'auth'. Body wallpaper effect already fixed. Back-gesture + double-back-to-exit already working.
+- Read PresenceManager.svelte.ts: manages online/away/offline + typing. Writes to RTDB presence/{uid}. onDisconnect cleanup. Heartbeat every 30s.
+- Read rtdb.ts: thin wrappers (ref/set/update/remove/onValue/onChildAdded/Changed/Removed/get/query/limitToLast/transaction/onDisconnect*). All browser-only, lazy-loaded.
+- Read chat.svelte.ts key methods: openChat (attaches onChildAdded/Changed/Removed listeners with limitToLast(50)), closeChat, deleteChat, sendMessage (fan-out), deleteMessage (rtdb.remove + meta update). presence map keyed by UID. userDict keyed by UID. fetchUser is PRIVATE (uses user_index/{uid}→users/{username}). ensurePresenceListeners(uids) attaches per-uid onValue on presence/{uid}.
+- Read types/index.ts: RTDB_PATHS — PRESENCE(uid)=`presence/${uid}`, CHAT_MESSAGES(chatId)=`chats/${chatId}/messages`, USER_PROFILE(uid)=`users/${uid}`. PresenceState={uid,status,lastSeen,typing}.
+- Read CacheManager.ts: clearChat(chatId) deletes from IndexedDB STORE_MESSAGES. cacheMessages/getCachedMessages for message persistence.
+- Read Conversation.svelte handleClearChat (line 943-950): ROOT CAUSE OF CLEAR CHAT BUG — only sets `chatStore.messages = []` locally. Never calls rtdb.remove on chats/{chatId}/messages. The onChildAdded listener immediately re-populates from RTDB. Also doesn't clear IndexedDB cache, so stale messages reappear on next openChat.
+- Read SettingsView.svelte structure: sections (Profile/Appearance/Privacy&Realtime/Time&Date/Security/Customisation/Advanced/Logout). Uses .glass .card pattern. Local dialog state for confirms. themeManager for theming.
+- Read app.css theme vars: --color-primary (#059669 emerald, NO blue/indigo), --glass-bg, --glass-blur, --glass-border, --glass-shadow, --bg-page, --text-primary/secondary/tertiary. Themes: light/dark/amoled/crimson-dark.
+- Dev server confirmed running on port 3000 (HTTP 200).
+
+Stage Summary:
+- Clear Chat bug root cause CONFIRMED: handleClearChat only clears local array, never touches RTDB or cache. Need: chatStore.clearChat(chatId) that removes chats/{chatId}/messages from RTDB + clears IndexedDB cache + updates meta lm=null. The onChildRemoved listener will naturally sync local state.
+- BottomNavBar needs full rewrite for liquid glass capsule + draggable spring-physics indicator + tab interactions (tap/long-press/drag/ripple/scale/icon-transition/label-fade).
+- Online Users page needs: new component listening to global `presence/` RTDB node, profile fetching for unknown UIDs (fetchUser is private — need to expose or use user_index lookup), liquid glass cards, Settings entry point, full-screen dedicated page (local state in SettingsView to avoid routing changes).
+- No routing changes needed — all done via uiStore.view + local component state.
+- Theme: emerald primary, no blue/indigo. Use --glass-* vars for consistency.
+
+---
+Task ID: 5a
+Agent: Subagent A (Clear Chat Fix)
+Task: Fix the Clear Chat bug — only clears local array, never touches RTDB/cache
+
+Work Log:
+- Read worklog.md to understand prior context (Task 3-investigation already diagnosed the root cause)
+- Read chat.svelte.ts imports (line 17) and existing deleteMessage (line 1258-1284) to match the optimistic-update + rtdb.remove + meta-fan-out + toast pattern
+- Read Conversation.svelte handleClearChat (line 943-950) to confirm the buggy implementation (`chatStore.messages = []` only)
+- Read CacheManager.ts to confirm exported `clearChat(chatId)` function deletes the IndexedDB message store for a chat
+- Read RTDB_PATHS in types/index.ts: CHAT_MESSAGES=`chats/${chatId}/messages`, CHAT_META=`chats/${chatId}/meta`, PINNED=`chats/${chatId}/pinned`, REACTIONS=`reactions/${chatId}/${messageId}`
+- Step 1 — chat.svelte.ts:
+  - Updated import on line 17 to alias the CacheManager export: `clearChat as clearCachedMessages` (avoids name clash with the new store method)
+  - Added new `async clearChat(chatId: string): Promise<void>` method immediately after `deleteMessage` (lines 1305-1343). The method:
+    1. Optimistically clears local `this.messages = []` (saves prevMessages for revert)
+    2. Calls `clearCachedMessages(chatId)` to wipe IndexedDB STORE_MESSAGES entry
+    3. `rtdb.remove(await rtdb.ref(RTDB_PATHS.CHAT_MESSAGES(chatId)))` — removes ALL messages from RTDB
+    4. Best-effort `rtdb.remove(await rtdb.ref('reactions/' + chatId))` with `.catch(() => {})` swallow
+    5. Best-effort `rtdb.remove(await rtdb.ref(RTDB_PATHS.PINNED(chatId)))` with `.catch(() => {})` swallow
+    6. Fan-out `rtdb.update(await rtdb.ref('/'), { [CHAT_META + '/lm']: null })` to clear inbox preview (only `lm` touched — participants, wallpaper, uploadedWallpapers, ts, updatedAt all left intact). Best-effort `.catch` swallow
+    7. `toastStore.success('Chat cleared')` on success
+    8. On hard failure (RTDB messages remove throws): reverts `this.messages = prevMessages`, logs `[clearChat]` error, shows `toastStore.error('Failed to clear chat')`
+- Step 2 — Conversation.svelte handleClearChat (line 943-950):
+  - Changed signature from sync `function handleClearChat()` to `async function handleClearChat()`
+  - Captured `const chatId = chatStore.activeChatId;` then null-guarded before any other work
+  - Kept `showMenu = false;` and the native `confirm(...)` dialog unchanged (works correctly)
+  - Replaced `chatStore.messages = [];` with `await chatStore.clearChat(chatId);`
+  - Did NOT touch the menu button at line 1304 that invokes it (onclick fires the async fn; promise is intentionally unhandled which is fine)
+- Verification: ran `bun run check`. Output shows 33 pre-existing errors and 97 warnings — ALL in unrelated files (SettingsView, LockScreen, ToastContainer,firebase-admin,firebase-rest,r2,storage). Filtered the output for `chat.svelte.ts:1[3-9][0-9][0-9]` and `Conversation.svelte:94[0-9]` (my changed lines) → ZERO matches. My new code introduces no new TypeScript errors.
+- The existing `onChildRemoved` listener attached in `openChat` will fire per-message as RTDB removes them, providing cross-device realtime sync automatically.
+
+Stage Summary:
+- Files changed: `src/lib/stores/chat.svelte.ts` (import alias + new `clearChat` method, +61 lines), `src/lib/components/chat/Conversation.svelte` (handleClearChat body, 8-line delta)
+- `clearChat` method signature: `async clearChat(chatId: string): Promise<void>`
+- Bug fixed: Clear Chat now (a) optimistically empties local messages array, (b) removes ALL messages from RTDB at `chats/${chatId}/messages`, (c) clears IndexedDB cache via `clearCachedMessages(chatId)`, (d) clears reactions at `reactions/${chatId}`, (e) clears pinned messages at `chats/${chatId}/pinned`, (f) clears inbox preview `lm` to null. Conversation metadata (participants/wallpaper/uploadedWallpapers/ts/updatedAt) left intact.
+- Cross-device sync: handled automatically by the existing `onChildRemoved` listener in `openChat`.
+- TypeScript check: no new errors introduced in changed files (33 pre-existing errors in unrelated files unchanged).
+
+---
+Task ID: 5b
+Agent: Subagent B (Online Users Page)
+Task: Add Online Users option in Settings → dedicated page with Firebase RTDB presence
+
+Work Log:
+- Read worklog.md, types/index.ts, rtdb.ts, chat.svelte.ts (fetchUser/createDirectChat/ensurePresenceListeners patterns), ChatList.svelte (startNewChat pattern), ui.svelte.ts, Avatar.svelte, toast.svelte.ts, app.css (theme vars + .glass + .custom-scrollbar + .safe-top/.safe-bottom).
+- Investigated SettingsView.svelte (3420 lines): located "Privacy & Realtime" section at lines 837-924, header markup, info-row pattern, and dialog-overlay template tail (so I could append the overlay outside `.settings-scroll`).
+- Created `/home/z/my-project/src/lib/components/chat/OnlineUsers.svelte` (full-screen overlay component, ~910 lines):
+  - Props: `{ onBack: () => void }` (parent toggles `showOnlineUsers = false`).
+  - Glass header (safe-top) with ChevronLeft back button, title "Online Users", subtitle showing `${onlineCount} online · ${totalCount} total`, and a RefreshCw button.
+  - Search input (150ms debounced via setTimeout in onSearchInput, not $effect, to avoid reactive footguns).
+  - Sort toggle button cycling `online` → `az` → `recent` with ArrowUpDown icon.
+  - Realtime: `rtdb.onValue(rtdb.ref('presence/'), cb)` — iterates snapshot via `snap.forEach`, builds `Map<uid, PresenceState>`.
+  - Profile resolution replicates chatStore.fetchUser (private): reads `user_index/${uid}` → `users/${username}`, falls back to `users/${uid}`. Cached in local `$state Map`. Also falls back to `chatStore.userDict` if already cached there.
+  - Stale presence correction (same 90s logic as chatStore.ensurePresenceListeners): online entries with `lastSeen > 90_000ms` ago are reclassified as offline in the `$derived` view.
+  - Periodic stale re-eval every 30s by reassigning the presenceMap (forces $derived recompute).
+  - Pull-to-refresh gesture: touchstart when scrollTop ≤ 0, touchmove applies `pullDistance = min(delta*0.5, 100)`, touchend triggers `handleRefresh()` if `pullDistance >= 80`. Visual indicator (Loader2 + opacity based on pullProgress) sits between header and scroll area.
+  - Each card: liquid glass (var(--glass-bg)/--glass-blur/--glass-border/--glass-shadow, 18px radius), Avatar with showStatus + status, displayName + @username, status badge (green #22c55e / amber #f59e0b / grey #6b7280) with pulsing dot for online, "Last seen Xm ago" for offline/away, Message button (Send icon, emerald gradient).
+  - Stagger fade-in via `animation-delay: min(index * 35ms, 600ms)` on cards.
+  - Empty state: UsersIcon in glass tile, "No users online" + desc + Refresh button.
+  - Cleanup: onMount/onDestroy with `mounted` guard, unsub listener, clear staleTimer and searchDebounce.
+  - Responsive: max-width 640px centered on desktop; safe-area-inset-bottom padding on scroll.
+  - Slide-up enter animation: `transform: translateY(100%) → 0` over 320ms cubic-bezier(0.22, 1, 0.36, 1).
+- Modified `/home/z/my-project/src/lib/components/chat/SettingsView.svelte`:
+  - Added `import OnlineUsers from './OnlineUsers.svelte';` and `let showOnlineUsers = $state(false);` after the existing imports (line ~24).
+  - Added a new info-row action button inside the "Privacy & Realtime" card (after Notification Sounds, before the privacy notice). Uses Users icon (emerald) + "Online Users" / "See who's active now" + ChevronRight. Tapping sets `showOnlineUsers = true`.
+  - Rendered `<OnlineUsers onBack={() => (showOnlineUsers = false)} />` conditionally (`{#if showOnlineUsers}`) just after the `.settings-root` div closes, so it overlays the entire screen at `position: fixed; inset: 0; z-index: 1000`.
+- Fixed `class:spin={isRefreshing}` Svelte 5 error: replaced with `class={isRefreshing ? 'spin' : ''}` on all three lucide icon instances (component-level `class:` directive is invalid in Svelte 5).
+- Added `<!-- svelte-ignore a11y_no_static_element_interactions -->` above the pull-to-refresh scroll div (touch handlers).
+- Ran `bun run check`: 33 errors / 97 warnings — IDENTICAL to baseline (git stash confirmed 33 errors/97 warnings without my changes). Zero new TypeScript/Svelte errors introduced. The single OnlineUsers.svelte error from the initial run was the `class:spin` directive, now resolved.
+- Started dev server (`bun run dev`): HTTP 200 on http://localhost:3000/, no compile/runtime errors in dev.log.
+
+Stage Summary:
+- Files created: `src/lib/components/chat/OnlineUsers.svelte` (~910 lines, full-screen overlay).
+- Files changed: `src/lib/components/chat/SettingsView.svelte` (+1 import, +1 state var, +18-line info-row in Privacy & Realtime, +6-line overlay render block).
+- Quick Message wiring: uses `chatStore.createDirectChat(otherUid)` → `chatStore.openChat(chatId)` → `uiStore.setView('conversation')` → `onBack()` to close overlay. This is the EXACT same pattern as ChatList.svelte's `startNewChat`. `createDirectChat` is idempotent — it returns the existing chatId if a DM with that user already exists (local lookup over `this.chats`), otherwise it POSTs to `/api/chats` and sets up local state + meta listener. The settings tab is left active but `uiStore.setView('conversation')` switches the top-level view, so the user lands directly in the conversation.
+- Realtime: subscribes to `presence/` once on mount, builds Map of all UIDs with their PresenceState, lazily fetches User profiles (user_index → users) for any UID not already in `chatStore.userDict`.
+- Stale presence: client-side 90s threshold matches chatStore's logic; also a 30s interval forces re-evaluation.
+- Constraints honored: no routing changes, no new bottom-nav tab, no edits to BottomNavBar / Conversation / upload / reactions / auth.
+- svelte-check: zero new errors (baseline 33/97 → after 33/97). Dev server: HTTP 200, clean log.
+
+---
+Task ID: 3-nav
+Agent: Main Agent
+Task: Build premium floating liquid-glass navigation with draggable spring-physics indicator + tab interactions
+
+Work Log:
+- Completely rewrote `/home/z/my-project/src/lib/components/ui/BottomNavBar.svelte` (was ~197 lines, now ~759 lines).
+- **Floating capsule layout**: `position: fixed; bottom: 0; left/right: 0; pointer-events: none` on the nav wrapper (so only the capsule captures taps). Capsule has `pointer-events: auto`, `max-width: 440px`, `width: 100%`, centered. Padding respects safe-area insets on all sides: `padding: 0 max(20px, safe-area-left) max(16px, safe-area-bottom) max(20px, safe-area-right)`. Generous horizontal margins — never touches screen edges.
+- **Liquid glass material**: Layered transparency — `background: linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0.04)), rgba(255,255,255,0.32)`. Real `backdrop-filter: blur(36px) saturate(200%) brightness(1.06)`. Thin glass border `0.5px solid rgba(255,255,255,0.55)`. Soft shadow + layered inner highlights: `0 12px 40px rgba(0,0,0,0.14), 0 4px 12px rgba(0,0,0,0.06), 0 0.5px 0 rgba(255,255,255,0.7) inset, 0 -1px 1px rgba(255,255,255,0.18) inset`. Two decorative layers: `.capsule-sheen` (top highlight) + `.capsule-inner-glow` (radial ambient). NO solid black backgrounds, NO flat rectangles, NO opaque containers. Theme variants for dark/amoled/crimson-dark.
+- **Draggable active indicator**: Separate absolutely-positioned `.liquid-indicator` element (NOT a background on the pill). Uses `position: absolute; top:6px; bottom:6px; left:0` with `transform: translateX()` + `width` animated via JS spring. Layered glass fill: gradient + `var(--color-primary)` + soft glow shadow. Has `role="slider"`, `tabindex="0"`, ARIA valuemin/max/now. `touch-action: none` for clean pointer capture. `cursor: grab`/`grabbing`.
+- **Spring physics**: Custom critically-damped spring integrator (STIFFNESS=0.18, DAMPING=0.72). Two springs: position (indX) + width (indW), each with velocity. Runs via `requestAnimationFrame` only when not settled (battery-friendly — stops when idle). Settled threshold: <0.3px + <0.3px/frame velocity.
+- **Drag mechanics**: `pointerdown` on indicator captures pointer, records start X + indicator X. `pointermove` updates indX with elastic resistance at edges (0.4x multiplier beyond bounds). Tracks pointer velocity via exponential moving average (0.6/0.4 weight). `pointerup` does velocity-aware snapping: projects position 120ms ahead by velocity, finds nearest tab center, sets spring target, injects velocity into spring (VELOCITY_FACTOR=0.55) for natural follow-through.
+- **Magnetic tab movement**: `applyMagneticTabs(indCenter)` computes each tab's offset = sign(dist) * min(|dist| * 0.22, 6px) — tabs shift toward the indicator center. Applied during BOTH drag (in pointermove) and spring animation (in RAF loop). Reads-first-then-writes pattern to avoid layout thrash.
+- **Indicator stretch**: `scaleX = 1 + min(|indVX| * 0.0015, 0.12)` — stretches slightly based on velocity (elastic resistance during motion).
+- **Haptic feedback**: `navigator.vibrate(8)` on tab snap, drag start, drag snap, long-press (12ms). Wrapped in try/catch + feature check.
+- **Tab interactions**: 
+  - Tap: pointerdown→up without movement → selectTab + ripple + haptic.
+  - Long press: 500ms timer on pointerdown → haptic(12) + scale pulse (future: contextual shortcuts).
+  - Drag: indicator drag (see above) + tab press-drag detection (DRAG_THRESHOLD=4px cancels long-press).
+  - Ripple: spawns a `.tab-ripple` span at pointer location, animates scale 0→24 + opacity 0.5→0 over 600ms, auto-removes.
+  - Scale animation: `.liquid-tab:active { transform: scale(0.94) }` + long-press `scale(0.88)`.
+  - Icon transition: `.tab-icon-wrap` scales 1→1.12 on active (cubic-bezier(0.34, 1.56, 0.64, 1) overshoot). Icon `strokeWidth` increases 2→2.4 when active. `.tab-icon` transition via `:global()` (lucide SVG is a child component).
+  - Label fade: `.tab-label` animates `max-width: 0→90px`, `opacity: 0→1`, `margin-left: -7px→0` (expanding pill effect). 320ms cubic-bezier(0.22, 1, 0.36, 1).
+- **Layout measurement**: `measureActiveTab()` reads active tab's `offsetLeft`/`offsetWidth` relative to capsule. `measureAllCenters()` returns all tab centers. Re-measures on: mount (RAF), resize (ResizeObserver on capsule + window resize + orientationchange), active tab change ($effect + setTimeout 320ms after label-expand CSS transition), unread count change ($effect — badge appears/disappears shifting layout).
+- **Performance**: All high-frequency animation state (indX, indW, indVX, indVW, targetX, targetW, dragVX) are plain `let` variables — NOT `$state`. Direct DOM writes via `indicatorEl.style.transform/width` + `tabEls[i].style.transform`. No Svelte reactivity in the RAF loop → zero re-render overhead. `will-change: transform, width` on indicator + `will-change: transform` on capsule + tabs. RAF loop self-terminates when settled. `transform-origin: center` for GPU-accelerated scaleX.
+- **Accessibility**: `role="tablist"` on nav, `role="tab"` + `aria-selected` on tabs, `role="slider"` + `aria-valuemin/max/now` + `tabindex="0"` on indicator, `aria-label` on all. `prefers-reduced-motion: reduce` → all transitions 1ms.
+- **Preserved**: Unread badge on dms tab (red, animated scale-in), `selectTab` behavior (closes active chat via uiStore.setTab), 3 tabs (global/dms/settings).
+
+Stage Summary:
+- Files changed: `/home/z/my-project/src/lib/components/ui/BottomNavBar.svelte` (full rewrite).
+- Verified via agent-browser: nav renders as floating capsule with tablist + slider indicator + 3 tabs. Tapping tabs moves indicator (value 2→3→2→1 verified). Dragging indicator from Chats→Global snaps correctly (value 2→1, Global selected). No console errors, no dev log errors.
+- svelte-check: 33 total errors (IDENTICAL to pre-existing baseline — zero new errors in BottomNavBar or OnlineUsers).
+- All 6 user requirements implemented: (1) floating liquid glass nav, (2) draggable spring-physics indicator with velocity-aware snapping + magnetic tab movement, (3) tab interactions (tap/long-press/drag/ripple/scale/icon-transition/label-fade), (4) Online Users page (by subagent B), (5) Clear Chat fix (by subagent A), (6) performance (GPU transforms, minimal re-renders, self-terminating RAF).

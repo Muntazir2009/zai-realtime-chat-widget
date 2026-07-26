@@ -14,7 +14,7 @@ import { authStore } from './auth.svelte.js';
 import { toastStore } from './toast.svelte.js';
 import { prefsStore } from './prefs.svelte.js';
 import { networkManager } from '$lib/managers/NetworkManager.svelte.js';
-import { cacheMessages, getCachedMessages, cacheUserProfiles, getUserProfile } from '$lib/managers/CacheManager.js';
+import { cacheMessages, getCachedMessages, cacheUserProfiles, getUserProfile, clearChat as clearCachedMessages } from '$lib/managers/CacheManager.js';
 import { generateIdempotencyKey } from '$lib/utils/idempotency.js';
 
 // ── Network resilience: retry with exponential backoff ──
@@ -1280,6 +1280,65 @@ class ChatStore {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('[deleteMessage]', msg);
       toastStore.error(`Delete failed: ${msg.slice(0, 60)}`);
+    }
+  }
+
+  // ============================================================
+  // Clear chat — remove ALL messages (RTDB + cache), keep metadata
+  // ============================================================
+
+  /**
+   * Clear every message in a chat.
+   *
+   * - Optimistically empties the local `messages` array so the UI updates instantly.
+   * - Removes ALL messages from RTDB at `chats/${chatId}/messages`. The existing
+   *   `onChildRemoved` listener (attached in `openChat`) fires per-message so other
+   *   devices/tabs stay in sync.
+   * - Clears the IndexedDB cache for that chat (so stale messages don't return on
+   *   the next `openChat`).
+   * - Clears reactions (`reactions/${chatId}`) and pinned messages
+   *   (`chats/${chatId}/pinned`) — best-effort, errors are swallowed.
+   * - Clears the inbox preview (`meta.lm`) to null.
+   * - Conversation metadata (participants, wallpaper, uploadedWallpapers, ts,
+   *   updatedAt, etc.) is intentionally left intact.
+   */
+  async clearChat(chatId: string): Promise<void> {
+    // 1) Optimistic: clear local array immediately
+    const prevMessages = this.messages;
+    this.messages = [];
+    try {
+      // 2) Clear IndexedDB cache for this chat (stale message cache)
+      clearCachedMessages(chatId);
+
+      // 3) Remove ALL messages from RTDB
+      await rtdb.remove(await rtdb.ref(RTDB_PATHS.CHAT_MESSAGES(chatId)));
+
+      // 4) Clear reactions (best-effort)
+      await rtdb.remove(await rtdb.ref('reactions/' + chatId)).catch(() => {
+        // Best-effort — don't fail the clear
+      });
+
+      // 5) Clear pinned messages (best-effort)
+      await rtdb.remove(await rtdb.ref(RTDB_PATHS.PINNED(chatId))).catch(() => {
+        // Best-effort — don't fail the clear
+      });
+
+      // 6) Clear inbox preview (lm) — fan-out update; leave other meta intact
+      await rtdb
+        .update(await rtdb.ref('/'), {
+          [RTDB_PATHS.CHAT_META(chatId) + '/lm']: null,
+        })
+        .catch(() => {
+          // Best-effort meta update — don't fail the clear
+        });
+
+      toastStore.success('Chat cleared');
+    } catch (err) {
+      // Revert local state on hard failure (RTDB messages remove failed)
+      this.messages = prevMessages;
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[clearChat]', msg);
+      toastStore.error('Failed to clear chat');
     }
   }
 

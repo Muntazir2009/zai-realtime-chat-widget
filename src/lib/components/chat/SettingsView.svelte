@@ -21,6 +21,10 @@
   import { appLockStore, type LockType, type AutoLockDuration } from '$lib/stores/app-lock.svelte';
   import { isBiometricAvailable, registerBiometric, clearBiometric } from '$lib/utils/biometric';
   import type { ThemeMode } from '$lib/types/index';
+  import OnlineUsers from './OnlineUsers.svelte';
+
+  // ── Online Users overlay state ──
+  let showOnlineUsers = $state(false);
 
   // ── App Lock state ──
   let showLockSetup = $state(false);
@@ -914,6 +918,26 @@
           </button>
         </div>
 
+        <div class="toggle-divider"></div>
+
+        <!-- Online Users — opens a full-screen realtime presence overlay -->
+        <button
+          class="info-row action-row"
+          onclick={() => (showOnlineUsers = true)}
+          aria-label="View online users"
+        >
+          <div class="info-left">
+            <div class="info-icon" style="background: color-mix(in srgb, var(--color-primary) 12%, transparent);">
+              <Users size={15} style="color: var(--color-primary);" />
+            </div>
+            <div>
+              <p class="toggle-title">Online Users</p>
+              <p class="toggle-desc">See who's active now</p>
+            </div>
+          </div>
+          <ChevronRight size={16} style="color: var(--text-tertiary);" />
+        </button>
+
         <!-- Privacy notice -->
         <div class="privacy-notice">
           <Shield size={11} style="color: var(--text-tertiary); flex-shrink: 0; margin-top: 1px;" />
@@ -1586,6 +1610,13 @@
 
   </div>
 </div>
+
+<!-- ════════════════════════════════
+     ONLINE USERS OVERLAY (full-screen)
+     ════════════════════════════════ -->
+{#if showOnlineUsers}
+  <OnlineUsers onBack={() => (showOnlineUsers = false)} />
+{/if}
 
 <!-- ════════════════════════════════
      CONFIRMATION DIALOG
