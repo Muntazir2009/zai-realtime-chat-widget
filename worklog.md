@@ -2821,3 +2821,34 @@ Stage Summary:
 - Performance maintained: GPU-only transforms, will-change: transform, contain: layout style
 - Pushed commit 236a7e7d to origin/main
 
+
+---
+Task ID: 11
+Agent: Main Agent
+Task: Refine nav interaction — immediate drag, hovered feedback, premium easing
+
+Work Log:
+- Replaced long press (300ms timer) with immediate horizontal movement detection
+- Drag engages when |dx| > 10px AND |dx| > |dy| * 1.2 (horizontal dominant)
+- Removed startLongPress(), cancelLongPress(), longPressTimer, LONG_PRESS_MS constants
+- Drag can start from any tab, not just the active tab
+- Added dragHoveredTab reactive state tracking which tab the finger is over
+- Added findHoveredTab() — resolves nearest tab center from finger position using cached layout
+- Added .tab-drag-hover CSS class: icon scales 1.10x, color brightens to rgba(255,255,255,0.85)
+- Smooth 200ms transition on tab-icon-wrap transform and nav-tab color
+- Updated all animations to use cubic-bezier(0.22, 1, 0.36, 1) — premium easing, zero overshoot
+- Indicator transition: 220ms with premium easing (was 250ms material design)
+- Grabbed state shadow slightly elevated (0 2px 6px 0.12 opacity) for tactile feedback
+- Removed redundant capsule-level onpointermove/onpointerup (document listeners handle all drag)
+- invalidateCenters() called on pointerdown for fresh layout before potential drag
+- Added tab-icon-wrap, nav-tab to reduced-motion media query
+- Vite compilation: zero BottomNavBar-specific warnings
+- Pushed commit 4e0152ce to origin/main
+
+Stage Summary:
+- Drag feels effortless: swipe horizontally to engage, indicator follows finger
+- Hovered tab feedback: subtle 10% scale + color brighten, smooth fade transitions
+- Premium animations: fast attack, smooth settle, no bounce/spring/overshoot
+- Indicator glides smoothly with 220ms premium easing
+- Architecture cleaner: removed long press timer complexity entirely
+
