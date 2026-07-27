@@ -1,0 +1,16 @@
+
+  VITE v6.4.3  ready in 1468 ms
+
+  ➜  Local:   http://localhost:3000/
+  ➜  Network: http://21.0.8.148:3000/
+Using secrets defined in .env
+4:01:11 PM [vite-plugin-svelte] src/lib/components/ui/ToastContainer.svelte:151:6 Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events
+4:01:11 PM [vite-plugin-svelte] src/lib/components/ui/ToastContainer.svelte:151:6 Non-interactive element `<div>` should not be assigned mouse or keyboard event listeners
+https://svelte.dev/e/a11y_no_noninteractive_element_interactions
+4:01:11 PM [vite-plugin-svelte] src/lib/components/ui/ToastContainer.svelte:206:12 Self-closing HTML tags for non-void elements are ambiguous — use `<div ...></div>` rather than `<div ... />`
+https://svelte.dev/e/element_invalid_self_closing_tag
+4:01:11 PM [vite-plugin-svelte] src/lib/components/ui/ToastContainer.svelte:443:4 Unused CSS selector ".dark .toast-x:hover"
+https://svelte.dev/e/css_unused_selector
+4:01:11 PM [vite-plugin-svelte] src/lib/components/lock/LockScreen.svelte:243:29 `ts-2351` is not a recognised code
+https://svelte.dev/e/unknown_code

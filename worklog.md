@@ -2796,3 +2796,28 @@ Stage Summary:
 - Indicator transition: only `transform` is animated (no shadow/background transitions)
 - Performance: GPU-only transforms during drag, `will-change: transform`, `contain: layout style`
 - Error count: 33 errors (unchanged baseline), 94 warnings (down from 95)
+
+---
+Task ID: 10
+Agent: Main Agent
+Task: Fix BottomNavBar — true cross-element dragging, single shadow indicator
+
+Work Log:
+- Read and analyzed current BottomNavBar.svelte (662 lines) implementation
+- Identified root cause of broken drag: pointer capture on capsule element only captures events within that element, not across the entire navigation bar
+- Identified double-pill visual bug: two-layer box-shadow (0.15 + 0.10 opacity layers) creating stacked shadow that looks like a second pill underneath
+- Fixed dragging: replaced `capsuleEl.setPointerCapture()` with document-level `addEventListener` for `pointermove`, `pointerup`, `pointercancel`
+- Added `attachDocDragListeners()` / `detachDocDragListeners()` functions for clean lifecycle management
+- Added cleanup in `onTabPointerCancel()` and `onDestroy()` to prevent listener leaks
+- Fixed shadow: merged two-layer box-shadow into single soft shadow `0 1px 2px rgba(0,0,0,0.08)`
+- Unified shadow in both normal and `.indicator-grabbed` states to prevent transition artifacts
+- Verified event flow correctness: no double-processing when document and capsule handlers both fire during drag over capsule area
+- Verified proper event ordering when releasing over different tab buttons
+
+Stage Summary:
+- Drag now works across entire nav bar: long press activates, finger tracking via document-level events, snap on release
+- Only ONE active indicator with clean single-layer shadow — no visual duplicate/ghost pill
+- Shadow refined: very soft (0.08 opacity), single layer, clean edges, subtle floating elevation
+- Performance maintained: GPU-only transforms, will-change: transform, contain: layout style
+- Pushed commit 236a7e7d to origin/main
+
