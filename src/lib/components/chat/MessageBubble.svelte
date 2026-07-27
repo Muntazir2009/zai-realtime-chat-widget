@@ -22,7 +22,7 @@
 
     function onTouchStart(e: TouchEvent) { handleTouchStart(e); }
     function onTouchMove(e: TouchEvent) { handleTouchMove(e); }
-    function onTouchEnd(e: TouchEvent) { handleTouchEnd(); }
+    function onTouchEnd(e: TouchEvent) { handleTouchEnd(e); }
     node.addEventListener('touchstart', onTouchStart, { passive: true });
     node.addEventListener('touchmove', onTouchMove, { passive: false });
     node.addEventListener('touchend', onTouchEnd, { passive: true });
@@ -131,9 +131,9 @@
   let touchDetected = false;
   let justReacted = $state(false);
 
-  const SWIPE_THRESHOLD = 50;
-  const MAX_PULL = 90;
-  const TOUCH_SLOP = 14;
+  const SWIPE_THRESHOLD = 55;
+  const MAX_PULL = 85;
+  const TOUCH_SLOP = 12;
   const DOUBLE_TAP_WINDOW = 320;
   const SINGLE_TAP_DELAY = 250;
   const LONG_PRESS_MS = 350;
@@ -195,13 +195,15 @@
         if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
       }
 
-      // Simple linear drag with mild rubber-band past threshold
+      // Smooth drag with eased rubber-band past threshold
       let offset: number;
       if (rawDx <= SWIPE_THRESHOLD) {
-        offset = rawDx;
+        // Ease-in curve for natural feel (slower start, faster as you commit)
+        const t = rawDx / SWIPE_THRESHOLD;
+        offset = SWIPE_THRESHOLD * (t * t * (3 - 2 * t)); // smoothstep
       } else {
         const over = rawDx - SWIPE_THRESHOLD;
-        offset = SWIPE_THRESHOLD + over * 0.3;
+        offset = SWIPE_THRESHOLD + over * 0.25;
       }
       offset = Math.min(offset, MAX_PULL);
       const direction = isOwn ? -1 : 1;
@@ -225,7 +227,7 @@
     lastTouchTime = Date.now();
   }
 
-  function handleTouchEnd() {
+  function handleTouchEnd(e?: TouchEvent) {
     if (touchOnReaction) { touchOnReaction = false; return; }
     if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
     if (didLongPress) { didLongPress = false; isSwiping = false; return; }
@@ -251,43 +253,43 @@
       return;
     }
 
-    // Calculate velocity from last two touch points
-    const dt = Date.now() - lastTouchTime;
-    const dx = Math.abs(lastTouchX - (isOwn ? touchStartX : touchStartX));
-    const velocity = dt > 0 ? dx / dt : 0; // px/ms
+    // Get final touch position for velocity
+    const cx = e?.changedTouches?.[0]?.clientX ?? lastTouchX;
 
     // Read current transform to get actual offset
     const style = rowEl?.style.transform || '';
     const match = style.match(/translateX\((-?\d+\.?\d*)px\)/);
     const currentPx = match ? Math.abs(parseFloat(match[1])) : 0;
 
-    const shouldTrigger = currentPx >= SWIPE_THRESHOLD * 0.75 || (currentPx >= SWIPE_THRESHOLD * 0.3 && velocity > 0.3);
+    // Velocity from recent touch movement
+    const dt = Date.now() - lastTouchTime;
+    const velocity = dt > 0 ? Math.abs(cx - lastTouchX) / dt : 0;
+
+    const shouldTrigger = currentPx >= SWIPE_THRESHOLD * 0.7 || (currentPx >= SWIPE_THRESHOLD * 0.35 && velocity > 0.25);
 
     if (shouldTrigger && rowEl) {
-      navigator.vibrate?.(25);
       swipeFlash = true;
       const dir = isOwn ? -1 : 1;
-      // Quick snap out then back
-      rowEl.style.transition = 'transform 150ms ease-out, opacity 150ms ease';
-      rowEl.style.transform = `translateX(${SWIPE_THRESHOLD * dir}px) scale(0.97)`;
-      rowEl.style.opacity = '0.85';
+      rowEl.style.transition = 'transform 130ms cubic-bezier(0.4, 0, 0.2, 1), opacity 130ms ease';
+      rowEl.style.transform = `translateX(${SWIPE_THRESHOLD * dir}px)`;
+      rowEl.style.opacity = '0.88';
       onSwipeReply?.(msg);
       setTimeout(() => {
         swipeFlash = false;
         showSwipeIndicator = false;
         if (rowEl) {
-          rowEl.style.transition = 'transform 300ms cubic-bezier(0.25, 1, 0.5, 1), opacity 200ms ease';
-          rowEl.style.transform = 'translateX(0) scale(1)';
+          rowEl.style.transition = 'transform 280ms cubic-bezier(0.4, 0, 0.2, 1), opacity 200ms ease';
+          rowEl.style.transform = 'translateX(0)';
           rowEl.style.opacity = '1';
-          setTimeout(() => { if (rowEl) rowEl.style.transition = ''; }, 350);
+          setTimeout(() => { if (rowEl) rowEl.style.transition = ''; }, 300);
         }
-      }, 150);
+      }, 130);
     } else if (rowEl) {
-      // Smooth spring-back with CSS transition (no rAF needed)
+      // Smooth return — duration proportional to distance
       showSwipeIndicator = false;
-      const duration = Math.min(200 + currentPx * 2, 400);
-      rowEl.style.transition = `transform ${duration}ms cubic-bezier(0.25, 1, 0.5, 1)`;
-      rowEl.style.transform = 'translateX(0) scale(1)';
+      const duration = Math.min(180 + currentPx * 1.5, 350);
+      rowEl.style.transition = `transform ${duration}ms cubic-bezier(0.4, 0, 0.2, 1), opacity ${Math.min(duration * 0.6, 150)}ms ease`;
+      rowEl.style.transform = 'translateX(0)';
       rowEl.style.opacity = '1';
       setTimeout(() => { if (rowEl) rowEl.style.transition = ''; }, duration + 50);
     }
@@ -910,8 +912,8 @@
   }
 
   .bbl-text.bbl-emoji-text {
-    font-size: min(180px, 40vw);
-    line-height: 1.15;
+    font-size: min(56px, 14vw);
+    line-height: 1.2;
   }
 
   /* === STICKER BUBBLE === */
@@ -927,7 +929,7 @@
   }
 
   .bbl-text.bbl-sticker-text {
-    font-size: min(220px, 62vw);
+    font-size: min(120px, 36vw);
     line-height: 1;
     margin: 0;
     display: block;
@@ -1204,7 +1206,7 @@
                 0 0 0 0 color-mix(in srgb, var(--color-primary) 0%, transparent);
     will-change: opacity, transform, box-shadow;
     letter-spacing: 0.01em;
-    animation: swipeIndicatorIn 200ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    animation: swipeIndicatorIn 180ms cubic-bezier(0.4, 0, 0.2, 1) both;
   }
 
   @keyframes swipeIndicatorIn {

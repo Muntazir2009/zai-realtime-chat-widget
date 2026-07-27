@@ -120,12 +120,7 @@ class PrefsStore {
       this.applyAnimationSpeed(this.animationSpeed);
       this.applyWallpaperOpacity(this.chatWallpaperOpacity);
       this.applyCompactMode(this.compactMode);
-      // Apply glass effect class on load
-      if (typeof document !== 'undefined') {
-        const root = document.documentElement;
-        root.classList.toggle('nav-liquid-glass', this.glassEffect === 'liquid');
-        root.classList.toggle('nav-standard-glass', this.glassEffect === 'standard');
-      }
+      // No glass effect classes needed (matte design)
     }
   }
 
@@ -219,11 +214,6 @@ class PrefsStore {
   setGlassEffect(effect: GlassEffect): void {
     this.glassEffect = effect;
     this.persist();
-    if (typeof document !== 'undefined') {
-      const root = document.documentElement;
-      root.classList.toggle('nav-liquid-glass', effect === 'liquid');
-      root.classList.toggle('nav-standard-glass', effect === 'standard');
-    }
   }
 
   // Customisation setters

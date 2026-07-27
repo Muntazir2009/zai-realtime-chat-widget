@@ -52,7 +52,7 @@
     gap: 0;
     padding: 8px 4px 8px 0;
     flex-shrink: 0;
-    animation: replyIn 200ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    animation: replyIn 200ms cubic-bezier(0.4, 0, 0.2, 1) both;
     background: transparent;
   }
 
@@ -125,7 +125,7 @@
     border: none;
     cursor: pointer;
     flex-shrink: 0;
-    transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1), background 150ms ease;
+    transition: background 150ms ease;
     -webkit-tap-highlight-color: transparent;
   }
   .reply-cancel:active { transform: scale(0.85); background: var(--input-bg); }

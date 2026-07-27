@@ -344,7 +344,7 @@
     flex-shrink: 0;
     padding-left: 16px;
     padding-right: 16px;
-    animation: inputSlideUp 250ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    animation: inputSlideUp 200ms cubic-bezier(0.4, 0, 0.2, 1) both;
   }
 
   @keyframes inputSlideUp {
@@ -443,9 +443,7 @@
     }
   }
 
-  /* Input row — fully opaque by default for maximum readability; a premium
-     frosted-glass variant (.input-row-glass) is opt-in via the Input Bar Style
-     setting. */
+  /* Input row — premium matte with 3D depth */
   .input-row {
     display: flex;
     align-items: center;
@@ -453,43 +451,51 @@
     padding: 6px 8px 6px 6px;
     border-radius: 24px;
     background: var(--bg-surface);
-    border: 1px solid color-mix(in srgb, white 10%, transparent);
-    border-bottom-color: color-mix(in srgb, black 15%, transparent);
-    border-right-color: color-mix(in srgb, black 8%, transparent);
+    border: 0.5px solid color-mix(in srgb, white 8%, transparent);
+    border-bottom-color: color-mix(in srgb, black 12%, transparent);
+    border-right-color: color-mix(in srgb, black 6%, transparent);
     box-shadow:
-      inset 0 1px 0 color-mix(in srgb, white 18%, transparent),
-      inset 0 -1px 0 color-mix(in srgb, black 6%, transparent),
-      0 -1px 0 color-mix(in srgb, white 5%, transparent),
-      0 2px 4px color-mix(in srgb, black 8%, transparent),
-      0 6px 20px color-mix(in srgb, black 5%, transparent);
+      /* Inner top highlight */
+      inset 0 0.5px 0 color-mix(in srgb, white 14%, transparent),
+      /* Inner bottom subtle shadow */
+      inset 0 -0.5px 0.5px color-mix(in srgb, black 5%, transparent),
+      /* Outer elevation */
+      0 1px 2px color-mix(in srgb, black 6%, transparent),
+      0 3px 8px color-mix(in srgb, black 8%, transparent),
+      0 6px 16px color-mix(in srgb, black 4%, transparent);
     transition: background-color 200ms ease, box-shadow 300ms ease, border-color 300ms ease;
     width: 100%;
   }
 
-  /* Liquid Glass variant — premium frosted glass, still readable (72% surface) */
   .input-row.input-row-glass {
-    background: color-mix(in srgb, var(--bg-surface) 72%, transparent);
-    backdrop-filter: blur(32px) saturate(200%);
-    -webkit-backdrop-filter: blur(32px) saturate(200%);
+    /* Glass variant: slightly elevated appearance */
+    box-shadow:
+      inset 0 0.5px 0 color-mix(in srgb, white 16%, transparent),
+      inset 0 -0.5px 0.5px color-mix(in srgb, black 5%, transparent),
+      0 1px 2px color-mix(in srgb, black 8%, transparent),
+      0 4px 10px color-mix(in srgb, black 10%, transparent),
+      0 8px 20px color-mix(in srgb, black 5%, transparent);
   }
 
   .input-row-focused {
     background: var(--bg-surface);
-    border-color: color-mix(in srgb, black 15%, transparent);
-    border-bottom-color: color-mix(in srgb, black 12%, transparent);
-    border-right-color: color-mix(in srgb, black 6%, transparent);
+    border-color: color-mix(in srgb, black 10%, transparent);
+    border-bottom-color: color-mix(in srgb, black 8%, transparent);
     box-shadow:
-      inset 0 1px 0 color-mix(in srgb, white 22%, transparent),
-      inset 0 -1px 0 color-mix(in srgb, black 5%, transparent),
-      0 -1px 0 color-mix(in srgb, white 8%, transparent),
-      0 0 0 3px color-mix(in srgb, black 5%, transparent),
-      0 4px 12px color-mix(in srgb, black 7%, transparent),
-      0 8px 28px color-mix(in srgb, black 4%, transparent);
+      inset 0 0.5px 0 color-mix(in srgb, white 18%, transparent),
+      inset 0 -0.5px 0.5px color-mix(in srgb, black 4%, transparent),
+      0 0 0 2.5px color-mix(in srgb, black 4%, transparent),
+      0 2px 6px color-mix(in srgb, black 6%, transparent),
+      0 6px 16px color-mix(in srgb, black 5%, transparent);
   }
 
-  /* For glass variant, raise surface opacity slightly on focus for clarity */
   .input-row.input-row-glass.input-row-focused {
-    background: color-mix(in srgb, var(--bg-surface) 84%, transparent);
+    box-shadow:
+      inset 0 0.5px 0 color-mix(in srgb, white 20%, transparent),
+      inset 0 -0.5px 0.5px color-mix(in srgb, black 4%, transparent),
+      0 0 0 2.5px color-mix(in srgb, black 5%, transparent),
+      0 3px 8px color-mix(in srgb, black 8%, transparent),
+      0 8px 20px color-mix(in srgb, black 5%, transparent);
   }
 
   .input-row-active {
@@ -497,7 +503,7 @@
   }
 
   .input-row.input-row-glass.input-row-active {
-    background: color-mix(in srgb, var(--bg-elevated, var(--bg-surface)) 76%, transparent);
+    background: var(--bg-elevated, var(--bg-surface));
   }
 
   .input-row-picker-open {
@@ -540,14 +546,13 @@
     background: transparent;
     color: var(--text-tertiary);
     cursor: pointer;
-    transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1),
-                color 150ms ease,
+    transition: color 150ms ease,
                 background 150ms ease;
     -webkit-tap-highlight-color: transparent;
   }
 
   .input-action-btn:active {
-    transform: scale(0.88);
+    transform: scale(0.92);
   }
 
   .input-action-btn.action-active {
@@ -580,8 +585,7 @@
     background: linear-gradient(180deg, color-mix(in srgb, var(--color-primary) 90%, white), var(--color-primary));
     color: var(--color-primary-foreground);
     cursor: pointer;
-    transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1),
-                box-shadow 250ms ease,
+    transition: box-shadow 250ms ease,
                 background-color 200ms ease;
     box-shadow:
       0 2px 4px color-mix(in srgb, black 15%, transparent),
@@ -591,7 +595,7 @@
   }
 
   .send-btn:active {
-    transform: scale(0.88);
+    transform: scale(0.92);
     box-shadow:
       0 1px 2px color-mix(in srgb, black 12%, transparent),
       0 1px 4px color-mix(in srgb, var(--color-primary) 20%, transparent),
