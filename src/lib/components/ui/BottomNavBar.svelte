@@ -22,42 +22,27 @@
 
   // ── Reactive state (low-frequency, used in template) ──
   let ripples = $state<{ id: number; x: number; y: number; tabId: TabId }[]>([]);
-  let longPressedTab = $state<TabId | null>(null);
 
-  // ── Animation state (high-frequency, NOT reactive — direct DOM writes) ──
-  let indX = 0;          // current translateX
-  let indVX = 0;         // velocity X
-  let targetX = 0;       // target translateX
+  // ── Indicator position (direct DOM — NOT reactive) ──
+  let currentX = 0;
+  let wasDragged = false;
 
   // Drag state
-  let isDragging = false;
-  let isGrabbed = false;
-  let indPointerId: number | null = null;
   let indDragEngaged = false;
+  let indPointerId: number | null = null;
   let dragStartX = 0;
   let dragStartIndX = 0;
   let lastDragX = 0;
   let lastDragT = 0;
   let dragVX = 0;
-  let rafId: number | null = null;
   let rippleId = 0;
 
   // ── Cached layout (avoids per-frame getBoundingClientRect) ──
   let cachedCenters: { centerX: number }[] = [];
 
-  // Spring constants — faster response, premium feel
-  const STIFFNESS = 0.24;       // was 0.20 — snappier
-  const DAMPING = 0.76;         // was 0.74 — slightly less oscillation
-  const VELOCITY_FACTOR = 0.55;
-  const MAGNETIC_STRENGTH = 0.16;
-  const MAGNETIC_MAX = 3.5;     // was 4 — subtler for compact size
-  const LONG_PRESS_MS = 450;    // was 500 — faster grab
-  const DRAG_THRESHOLD = 5;
-  const TAP_THRESHOLD = 4;
-
-  // Indicator: rounded capsule, ~15% smaller (was 44 → 38)
   const IND_SIZE = 38;
   const IND_HALF = IND_SIZE / 2;
+  const DRAG_THRESHOLD = 5;
 
   // ── Layout measurement (cached) ──
   function invalidateCenters() {
@@ -71,72 +56,40 @@
     });
   }
 
-  function measureActiveTab() {
+  function measureActiveTab(animated = true) {
     const idx = tabs.findIndex(t => t.id === uiStore.tab);
     const el = tabEls[idx];
     if (!el || !capsuleEl) return;
     invalidateCenters();
     const c = cachedCenters[idx];
     if (!c) return;
-    targetX = c.centerX - IND_HALF;
-    if (indX === 0 && indVX === 0) {
-      indX = targetX;
-      writeIndicator();
-    }
+    positionIndicator(c.centerX - IND_HALF, animated);
   }
 
-  // ── Spring animation loop ──
-  function applyMagneticTabs(indCenter: number) {
-    const cs = cachedCenters;
-    if (cs.length === 0) return;
-    const transforms: string[] = [];
-    for (let i = 0; i < tabEls.length; i++) {
-      const c = cs[i];
-      if (!c) { transforms.push(''); continue; }
-      const dist = indCenter - c.centerX;
-      const pull = Math.sign(dist) * Math.min(Math.abs(dist) * MAGNETIC_STRENGTH, MAGNETIC_MAX);
-      transforms.push(`translateX(${pull.toFixed(2)}px)`);
-    }
-    for (let i = 0; i < tabEls.length; i++) {
-      const el = tabEls[i];
-      if (el) el.style.transform = transforms[i];
-    }
-  }
-
-  function springStep() {
-    const fx = (targetX - indX) * STIFFNESS;
-    indVX = (indVX + fx) * DAMPING;
-    indX += indVX;
-
-    const indCenter = indX + IND_HALF;
-    writeIndicator();
-    applyMagneticTabs(indCenter);
-
-    const settled =
-      Math.abs(targetX - indX) < 0.3 &&
-      Math.abs(indVX) < 0.3;
-    if (!settled || isDragging) {
-      rafId = requestAnimationFrame(springStep);
-    } else {
-      rafId = null;
-      for (const el of tabEls) {
-        if (el) el.style.transform = '';
-      }
-    }
-  }
-
-  function ensureRaf() {
-    if (rafId === null) {
-      rafId = requestAnimationFrame(springStep);
-    }
-  }
-
-  function writeIndicator() {
+  // ── Indicator positioning ──
+  // CSS transition handles all smooth animation.
+  // animated=true → glides with CSS ease-in-out (250ms).
+  // animated=false → instant position (initial mount, resize, drag following).
+  function positionIndicator(x: number, animated: boolean) {
     if (!indicatorEl) return;
-    // GPU transform only. Subtle lift scale on grab (floating effect).
-    const scale = isGrabbed ? 1.05 : 1;
-    const lift = isGrabbed ? -2 : 0;  // translateY up when grabbed
-    indicatorEl.style.transform = `translateX(${indX.toFixed(2)}px) translateY(${lift}px) scale(${scale})`;
+    if (animated && wasDragged) {
+      // Post-drag: CSS transition is disabled. Use synchronous reflow to
+      // commit the current position, then re-enable transition and set target.
+      indicatorEl.style.transition = 'none';
+      indicatorEl.style.transform = `translateX(${currentX.toFixed(2)}px)`;
+      void indicatorEl.offsetHeight; // force reflow — browser commits no-transition state
+      indicatorEl.style.transition = '';
+      indicatorEl.style.transform = `translateX(${x.toFixed(2)}px)`;
+      wasDragged = false;
+    } else if (animated) {
+      // Normal tab switch: CSS transition already active, just set target
+      indicatorEl.style.transform = `translateX(${x.toFixed(2)}px)`;
+    } else {
+      // Instant: no animation (initial, resize, active drag)
+      indicatorEl.style.transition = 'none';
+      indicatorEl.style.transform = `translateX(${x.toFixed(2)}px)`;
+    }
+    currentX = x;
   }
 
   // ── Tab selection ──
@@ -145,10 +98,8 @@
     // If same tab BUT in a conversation → fall through to setTab (closes chat).
     if (uiStore.tab === id && uiStore.view !== 'conversation') return;
     uiStore.setTab(id);
-    requestAnimationFrame(() => {
-      measureActiveTab();
-      ensureRaf();
-    });
+    // Indicator repositioning is handled by the $effect on uiStore.tab.
+    // No duplicate RAF scheduling — only ONE code path sets the position.
   }
 
   // ── Ripple ──
@@ -161,33 +112,15 @@
     ripples = [...ripples, { id, x, y, tabId }];
     setTimeout(() => {
       ripples = ripples.filter(r => r.id !== id);
-    }, 600);
+    }, 500);
   }
 
-  // ── Long press ──
-  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  // ── Pointer handlers (for tabs) ──
   let pointerDownTab: TabId | null = null;
   let pointerDownX = 0;
   let pointerDownY = 0;
   let movedSinceDown = false;
 
-  function startLongPress(tabId: TabId) {
-    cancelLongPress();
-    longPressTimer = setTimeout(() => {
-      if (!movedSinceDown && pointerDownTab === tabId) {
-        longPressedTab = tabId;
-        setTimeout(() => { longPressedTab = null; }, 350);
-      }
-    }, LONG_PRESS_MS);
-  }
-  function cancelLongPress() {
-    if (longPressTimer) {
-      clearTimeout(longPressTimer);
-      longPressTimer = null;
-    }
-  }
-
-  // ── Pointer handlers (for tabs) ──
   function onTabPointerDown(e: PointerEvent, tabId: TabId) {
     if (e.button !== 0 && e.pointerType === 'mouse') return;
     pointerDownTab = tabId;
@@ -195,7 +128,6 @@
     pointerDownY = e.clientY;
     movedSinceDown = false;
     spawnRipple(e, tabId);
-    startLongPress(tabId);
   }
 
   function onTabPointerMove(e: PointerEvent) {
@@ -207,24 +139,21 @@
     if (!indDragEngaged && pointerDownTab === uiStore.tab) {
       if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
         indDragEngaged = true;
-        isDragging = true;
         movedSinceDown = true;
-        cancelLongPress();
         indPointerId = e.pointerId;
-        dragStartIndX = indX;
+        dragStartIndX = currentX;
         dragStartX = e.clientX;
         lastDragX = e.clientX;
         lastDragT = performance.now();
         dragVX = 0;
-        isGrabbed = true;
+        wasDragged = true;
         indicatorEl?.classList.add('indicator-grabbed');
         try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* ignore */ }
-        ensureRaf();
         return;
       }
     }
 
-    // Drag engaged → follow finger
+    // Drag engaged → follow finger directly (no CSS transition)
     if (indDragEngaged && indPointerId === e.pointerId) {
       const moveDx = e.clientX - dragStartX;
       let newX = dragStartIndX + moveDx;
@@ -241,9 +170,7 @@
           newX = maxX + (newX - maxX) * 0.4;
         }
       }
-      indX = newX;
-      targetX = newX;
-      indVX = 0;
+      positionIndicator(newX, false);
 
       const now = performance.now();
       const dt = now - lastDragT;
@@ -253,41 +180,31 @@
       }
       lastDragX = e.clientX;
       lastDragT = now;
-
-      writeIndicator();
-      applyMagneticTabs(indX + IND_HALF);
       return;
     }
 
-    if (Math.abs(dx) > TAP_THRESHOLD || Math.abs(dy) > TAP_THRESHOLD) {
+    if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
       movedSinceDown = true;
-      cancelLongPress();
     }
   }
 
   function onTabPointerUp(e: PointerEvent, tabId: TabId) {
-    cancelLongPress();
-
     if (indDragEngaged && indPointerId === e.pointerId) {
       try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* ignore */ }
-      isGrabbed = false;
       indicatorEl?.classList.remove('indicator-grabbed');
       indPointerId = null;
       indDragEngaged = false;
-      isDragging = false;
 
       const centers = cachedCenters;
-      if (centers.length === 0) {
-        measureActiveTab();
-        ensureRaf();
-      } else {
-        const indCenter = indX + IND_HALF;
+      if (centers.length > 0) {
+        const indCenter = currentX + IND_HALF;
         let nearestIdx = 0;
         let nearestDist = Infinity;
         for (let i = 0; i < centers.length; i++) {
           const d = Math.abs(centers[i].centerX - indCenter);
           if (d < nearestDist) { nearestDist = d; nearestIdx = i; }
         }
+        // Velocity projection for snap target
         const projectedCenter = indCenter + dragVX * 120;
         let projectedIdx = nearestIdx;
         let projectedDist = Infinity;
@@ -295,13 +212,14 @@
           const d = Math.abs(centers[i].centerX - projectedCenter);
           if (d < projectedDist) { projectedDist = d; projectedIdx = i; }
         }
-        targetX = centers[projectedIdx].centerX - IND_HALF;
-        indVX = dragVX * VELOCITY_FACTOR * 16;
         const snappedTabId = tabs[projectedIdx].id;
         if (uiStore.tab !== snappedTabId) {
           uiStore.setTab(snappedTabId);
         }
-        ensureRaf();
+        // Animate to snapped position — CSS transition handles smooth glide
+        positionIndicator(centers[projectedIdx].centerX - IND_HALF, true);
+      } else {
+        measureActiveTab(true);
       }
       pointerDownTab = null;
       movedSinceDown = false;
@@ -309,24 +227,18 @@
     }
 
     if (pointerDownTab === tabId && !movedSinceDown) {
-      if (longPressedTab !== tabId) {
-        selectTab(tabId);
-      }
+      selectTab(tabId);
     }
     pointerDownTab = null;
     movedSinceDown = false;
   }
 
   function onTabPointerCancel() {
-    cancelLongPress();
     if (indDragEngaged) {
-      isGrabbed = false;
-      isDragging = false;
       indDragEngaged = false;
       indPointerId = null;
       indicatorEl?.classList.remove('indicator-grabbed');
-      measureActiveTab();
-      ensureRaf();
+      measureActiveTab(true);
     }
     pointerDownTab = null;
     movedSinceDown = false;
@@ -337,15 +249,13 @@
 
   onMount(() => {
     requestAnimationFrame(() => {
-      measureActiveTab();
-      writeIndicator();
+      measureActiveTab(false); // initial position: no animation
     });
 
     if (typeof ResizeObserver !== 'undefined' && capsuleEl) {
       resizeObserver = new ResizeObserver(() => {
         invalidateCenters();
-        measureActiveTab();
-        ensureRaf();
+        measureActiveTab(false); // resize: instant reposition
       });
       resizeObserver.observe(capsuleEl);
     }
@@ -355,24 +265,19 @@
 
   function onResize() {
     invalidateCenters();
-    measureActiveTab();
-    ensureRaf();
+    measureActiveTab(false);
   }
 
   onDestroy(() => {
-    if (rafId !== null) cancelAnimationFrame(rafId);
-    if (longPressTimer) clearTimeout(longPressTimer);
     if (resizeObserver) resizeObserver.disconnect();
     window.removeEventListener('resize', onResize);
   });
 
-  // Re-measure when the active tab changes
+  // React to tab changes — ONE code path positions the indicator.
+  // CSS transition provides the smooth glide automatically.
   $effect(() => {
     const _t = uiStore.tab;
-    requestAnimationFrame(() => {
-      measureActiveTab();
-      ensureRaf();
-    });
+    measureActiveTab(true);
   });
 </script>
 
@@ -415,7 +320,6 @@
       <button
         class="liquid-tab"
         class:tab-active={isActive}
-        class:tab-longpressed={longPressedTab === tab.id}
         role="tab"
         aria-selected={isActive}
         aria-label={tab.label}
@@ -490,16 +394,12 @@
 
   /* ── Real Liquid Glass mode: layered blur + fresnel + refraction overlay ── */
   :global(.nav-liquid-glass) .liquid-capsule {
-    /* Layered blur for depth: stronger saturation + brightness for refraction feel */
     backdrop-filter: blur(24px) saturate(200%) brightness(1.10);
     -webkit-backdrop-filter: blur(24px) saturate(200%) brightness(1.10);
     background:
-      /* top internal reflection */
       linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.03) 35%, rgba(255, 255, 255, 0) 50%),
-      /* fresnel edge light (brighter at top/bottom edges) */
       radial-gradient(120% 100% at 50% 0%, rgba(255, 255, 255, 0.12) 0%, transparent 45%),
       radial-gradient(120% 100% at 50% 100%, rgba(255, 255, 255, 0.08) 0%, transparent 45%),
-      /* base tint — more transparent for deeper glass */
       rgba(24, 24, 28, 0.38);
     border: 0.5px solid rgba(255, 255, 255, 0.26);
     box-shadow:
@@ -510,8 +410,7 @@
       0 0 0 0.5px rgba(255, 255, 255, 0.10);
   }
 
-  /* Refraction overlay — a pseudo-layer with SVG filter for subtle distortion.
-     This sits ABOVE the backdrop but BELOW tabs/icons, so icons stay crisp. */
+  /* Refraction overlay */
   .capsule-refraction {
     position: absolute;
     inset: 0;
@@ -519,7 +418,6 @@
     pointer-events: none;
     z-index: 0;
     opacity: 0;
-    /* Subtle noise texture for refraction simulation */
     background:
       radial-gradient(80% 60% at 30% 20%, rgba(255, 255, 255, 0.06) 0%, transparent 50%),
       radial-gradient(80% 60% at 70% 80%, rgba(255, 255, 255, 0.04) 0%, transparent 50%);
@@ -546,7 +444,7 @@
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0) 70%);
   }
 
-  /* Fresnel edge lighting — brighter at horizontal edges (left/right) */
+  /* Fresnel edge lighting */
   .capsule-fresnel {
     position: absolute;
     inset: 0;
@@ -564,7 +462,7 @@
       linear-gradient(180deg, rgba(255, 255, 255, 0.10) 0%, transparent 20%, transparent 80%, rgba(255, 255, 255, 0.08) 100%);
   }
 
-  /* ── Active indicator (rounded capsule, floating) ── */
+  /* ── Active indicator (rounded capsule, constant size) ── */
   .liquid-indicator {
     position: absolute;
     top: 50%;
@@ -572,12 +470,11 @@
     width: 38px;
     height: 38px;
     margin-top: -19px;
-    /* Rounded capsule (pill) — full radius = half of height */
+    /* Rounded capsule — constant size, never resizes or stretches */
     border-radius: 19px;
     background:
       linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.04) 100%),
       rgba(72, 72, 78, 0.88);
-    /* Reduced shadow, floating appearance */
     box-shadow:
       0 2px 8px rgba(0, 0, 0, 0.20),
       0 1px 2px rgba(0, 0, 0, 0.10),
@@ -589,10 +486,12 @@
     pointer-events: none;
     will-change: transform;
     -webkit-tap-highlight-color: transparent;
-    transition: box-shadow 200ms cubic-bezier(0.22, 1, 0.36, 1), background 200ms ease;
+    /* Smooth glide: Material ease-in-out, no overshoot, no bounce */
+    transition: transform 250ms cubic-bezier(0.4, 0, 0.2, 1),
+                box-shadow 200ms cubic-bezier(0.22, 1, 0.36, 1),
+                background 200ms ease;
   }
   :global(.nav-liquid-glass) .liquid-indicator {
-    /* Premium glass indicator with refraction */
     background:
       linear-gradient(180deg, rgba(255, 255, 255, 0.20) 0%, rgba(255, 255, 255, 0.06) 50%, rgba(255, 255, 255, 0.10) 100%),
       rgba(60, 60, 66, 0.70);
@@ -605,6 +504,7 @@
       0 -0.5px 0.5px rgba(0, 0, 0, 0.10) inset,
       0 0 0 0.5px rgba(255, 255, 255, 0.10);
   }
+  /* Grabbed state — subtle shadow lift, no scale/translate changes */
   .liquid-indicator.indicator-grabbed {
     background:
       linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.06) 100%),
@@ -633,41 +533,26 @@
     user-select: none;
     overflow: hidden;
     border-radius: 18px;
-    transition:
-      color 200ms cubic-bezier(0.22, 1, 0.36, 1),
-      transform 120ms cubic-bezier(0.22, 1, 0.36, 1);
-    will-change: transform;
+    /* Color transition only — no transform animations on tabs */
+    transition: color 200ms cubic-bezier(0.22, 1, 0.36, 1);
     touch-action: manipulation;
-  }
-
-  .liquid-tab:active {
-    transform: scale(0.90);
   }
 
   .tab-icon-wrap {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
     flex-shrink: 0;
+    /* No transforms — icon stays perfectly still */
   }
 
   .liquid-tab.tab-active {
     color: #ffffff;
   }
-  .liquid-tab.tab-active .tab-icon-wrap {
-    transform: scale(1.10);
-  }
 
   :global(.liquid-tab .tab-icon) {
-    transition: transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
     display: block;
-    /* Sharper icon rendering */
     shape-rendering: geometricPrecision;
-  }
-
-  .liquid-tab.tab-longpressed {
-    transform: scale(0.84);
   }
 
   /* ── Ripple ── */
@@ -679,7 +564,7 @@
     background: rgba(255, 255, 255, 0.28);
     transform: translate(-50%, -50%) scale(0);
     pointer-events: none;
-    animation: tabRipple 600ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    animation: tabRipple 500ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
     z-index: 0;
   }
   @keyframes tabRipple {
@@ -703,7 +588,7 @@
     line-height: 15px;
     text-align: center;
     box-shadow: 0 1px 4px rgba(239, 68, 68, 0.4);
-    animation: badgeScaleIn 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    animation: badgeScaleIn 300ms cubic-bezier(0.4, 0, 0.2, 1) both;
     pointer-events: none;
     z-index: 3;
   }
@@ -758,15 +643,14 @@
 
   /* ── Reduced motion ── */
   @media (prefers-reduced-motion: reduce) {
-    .liquid-tab,
-    .tab-icon-wrap,
     .liquid-indicator,
-    :global(.liquid-tab .tab-icon) {
+    .tab-ripple {
       transition-duration: 1ms !important;
+      animation-duration: 1ms !important;
     }
   }
 
-  /* ── Graceful degradation: disable SVG filter on low-end (coarse pointer + small screen) ── */
+  /* ── Graceful degradation: disable SVG filter on low-end ── */
   @media (pointer: coarse) and (max-width: 360px) {
     :global(.nav-liquid-glass) .liquid-capsule {
       filter: none;

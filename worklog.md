@@ -2671,3 +2671,39 @@ Stage Summary:
   - Glass Effects toggle: Standard↔Liquid Glass switches CSS class + persists ✓
   - Liquid Glass: backdrop-filter enhanced, SVG refraction overlay active, icons NOT distorted ✓
   - VLM ratings: Standard 6/10, Liquid Glass 9/10 ("subtle indicator, translucent liquid-like sheen, significantly more premium")
+
+---
+Task ID: 8
+Agent: Main Agent
+Task: Refine BottomNavBar — remove spring animation, fix double pill, optimize performance, constant indicator size
+
+Work Log:
+- Read and analyzed the full BottomNavBar.svelte (~778 lines) to understand the existing spring physics engine
+- Identified root causes of all reported issues:
+  1. Spring physics (stiffness=0.24, damping=0.76) caused oscillation/overshoot — perceived as "exaggerated and playful"
+  2. `selectTab()` AND `$effect` both called `measureActiveTab()` + `ensureRaf()` → two animation kicks → "double active pill"
+  3. Per-frame `applyMagneticTabs()` called `el.style.transform` on every tab → layout thrashing → "noticeably laggy"
+  4. Bounce easing `cubic-bezier(0.34, 1.56, 0.64, 1)` on icon-wrap and scale transforms → exaggerated animations
+- Replaced the entire spring physics engine (springStep, ensureRaf, applyMagneticTabs, writeIndicator, ~60 lines of RAF loop code) with CSS `transition: transform 250ms cubic-bezier(0.4, 0, 0.2, 1)` (Material Design standard ease-in-out)
+- Implemented `positionIndicator(x, animated)` function with three modes:
+  - Normal tab switch: CSS transition handles smooth glide (0ms overhead)
+  - Initial/resize: `transition: none` for instant positioning
+  - Post-drag: synchronous reflow to re-enable transition after drag
+- Fixed double pill: removed duplicate RAF scheduling from `selectTab()` — only `$effect` positions the indicator
+- Removed all layout-thrashing per-frame operations: no magnetic tab movement, no spring RAF loop
+- Removed all exaggerated animations: scale(1.10) on active icon, scale(0.90) on press, scale(0.84) on long press, bounce easing
+- Removed long press visual entirely (longPressedTab state, startLongPress, cancelLongPress, timer management)
+- Kept drag-to-snap functionality with velocity projection (EMA 0.6/0.4, 120ms projection, 0.4x edge resistance)
+- Simplified ripple animation to use Material ease-in-out (was cubic-bezier(0.22,1,0.36,1))
+- Preserved all glass styling, theme variants, liquid glass mode, SVG displacement filter, Fresnel lighting
+
+Stage Summary:
+- Spring physics completely removed — replaced with GPU-accelerated CSS transitions
+- No overshoot, no bounce, no elastic movement — smooth 250ms ease-in-out glide
+- Double pill eliminated — single code path for indicator positioning
+- Performance optimized — zero RAF loops, zero per-frame DOM writes on tabs, zero layout thrashing
+- Indicator maintains constant 38×38px capsule size — no resize, no stretch, no scale
+- File reduced from 778 lines to ~530 lines (removed ~250 lines of spring/drag/magnetic code)
+- All pre-existing warnings preserved (33 baseline TS errors unchanged)
+- One new expected warning: `.liquid-indicator.indicator-grabbed` unused CSS selector (class added via classList.add, not template binding)
+- Vite compiles cleanly, no errors
