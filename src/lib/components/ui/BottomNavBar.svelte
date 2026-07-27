@@ -125,11 +125,9 @@
         dragVX = 0;
         indicatorEl?.classList.add('indicator-grabbed');
 
-        // Capture pointer on the CAPSULE so we get events across ALL tabs
-        // This is the key fix: capture on parent, not the individual tab button
-        if (capsuleEl) {
-          try { capsuleEl.setPointerCapture(dragPointerId!); } catch { /* ignore */ }
-        }
+        // Attach document-level listeners for cross-element tracking
+        // This ensures the indicator follows the finger across the ENTIRE screen
+        attachDocDragListeners();
       }
     }, LONG_PRESS_MS);
   }
@@ -139,6 +137,30 @@
       clearTimeout(longPressTimer);
       longPressTimer = null;
     }
+  }
+
+  // ── Document-level drag handlers for cross-element tracking ──
+  function onDocPointerMove(e: PointerEvent) {
+    if (!dragEngaged || e.pointerId !== dragPointerId) return;
+    e.preventDefault();
+    onDragMove(e);
+  }
+
+  function onDocPointerUp(e: PointerEvent) {
+    if (!dragEngaged) return;
+    onDragUp(e);
+  }
+
+  function attachDocDragListeners() {
+    document.addEventListener('pointermove', onDocPointerMove, { passive: false });
+    document.addEventListener('pointerup', onDocPointerUp);
+    document.addEventListener('pointercancel', onDocPointerUp);
+  }
+
+  function detachDocDragListeners() {
+    document.removeEventListener('pointermove', onDocPointerMove);
+    document.removeEventListener('pointerup', onDocPointerUp);
+    document.removeEventListener('pointercancel', onDocPointerUp);
   }
 
   // ── Global drag handlers (attached to capsule during drag) ──
@@ -178,10 +200,8 @@
   function onDragUp(e: PointerEvent) {
     if (!dragEngaged || e.pointerId !== dragPointerId) return;
 
-    // Release capture from capsule
-    if (capsuleEl) {
-      try { capsuleEl.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
-    }
+    // Remove document-level drag listeners
+    detachDocDragListeners();
 
     indicatorEl?.classList.remove('indicator-grabbed');
     dragPointerId = null;
@@ -277,6 +297,7 @@
       dragEngaged = false;
       isGrabbed = true;
       dragPointerId = null;
+      detachDocDragListeners();
       indicatorEl?.classList.remove('indicator-grabbed');
       measureActiveTab(true);
     }
@@ -311,6 +332,7 @@
   onDestroy(() => {
     if (resizeObserver) resizeObserver.disconnect();
     if (longPressTimer) clearTimeout(longPressTimer);
+    detachDocDragListeners();
     window.removeEventListener('resize', onResize);
   });
 
@@ -471,10 +493,8 @@
       rgba(62, 62, 68, 1) 0%,
       rgba(54, 54, 60, 1) 100%
     );
-    /* Single clean elevation shadow — NO inset shadows that look like a border */
-    box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.15),
-      0 2px 4px rgba(0, 0, 0, 0.10);
+    /* Single soft elevation — no stacked shadows that look like a duplicate pill */
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
     transform: translateX(0);
     transform-origin: center;
     z-index: 1;
@@ -487,7 +507,7 @@
     contain: layout style;
   }
 
-  /* Grabbed state — slightly brighter, no shadow change */
+  /* Grabbed state — slightly brighter, same shadow */
   /* svelte-ignore css_unused_selector */
   .nav-indicator.indicator-grabbed {
     background: linear-gradient(
@@ -495,10 +515,7 @@
       rgba(72, 72, 78, 1) 0%,
       rgba(64, 64, 70, 1) 100%
     );
-    /* Keep same shadow — no transition on shadow */
-    box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.15),
-      0 2px 4px rgba(0, 0, 0, 0.10);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
   }
 
   /* ── Tabs ── */
