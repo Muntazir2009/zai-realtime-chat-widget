@@ -2768,3 +2768,31 @@ Stage Summary:
 - Swipe-to-reply: smooth natural gesture, no jitter/lag
 - Emoji: balanced modern size (56px typed, 120px sticker)
 - All bounce/spring easings removed across nav, input, reply, swipe
+
+---
+Task ID: 9a
+Agent: Main Agent
+Task: Fix BottomNavBar drag constraint bug, double indicator, and shadow refinement
+
+Work Log:
+- Diagnosed root cause of drag failing when finger leaves tab: `onpointerleave` on each tab was cancelling drag immediately, and pointer capture was on individual tab button (not parent)
+- Fixed drag: moved `onpointermove`/`onpointerup` handlers to capsule element (parent), so drag works across entire nav bar
+- Added `capsuleEl.setPointerCapture()` instead of tab-level capture — ensures all pointer events fire on capsule regardless of which child the finger is over
+- Removed `onpointerleave` from tab buttons entirely — was the #1 cause of drag cancellation
+- Added `touch-action: none` on capsule to prevent browser interference with touch gestures
+- Split pointer handlers: tab-level handlers handle pre-drag (tap detection, long press setup), capsule-level handlers handle active drag movement
+- Fixed double indicator: removed `box-shadow` from indicator CSS transition — was causing shadow morphing during tab switch that looked like a second pill
+- Removed inset shadows from indicator (`inset 0 0.5px 0 rgba(255,255,255,0.18)`, `inset 0 -0.5px 0.5px rgba(0,0,0,0.12)`) — these created a visible border/outline that appeared as a second pill underneath
+- Replaced with single clean elevation shadow: `0 1px 2px rgba(0,0,0,0.15), 0 2px 4px rgba(0,0,0,0.10)` — soft, small blur radius, low opacity
+- Made `.indicator-grabbed` shadow identical to base — no shadow transition on grab/release
+- Added `contain: layout style` on indicator for GPU compositing isolation
+- Reduced long press from 350ms to 300ms for faster drag engagement
+- Added svelte-ignore comments for a11y warnings on capsule div
+
+Stage Summary:
+- Drag now works across entire nav bar (not constrained to original tab)
+- Single indicator rendered — no double pill, no ghost shadow, no duplicate layers
+- Clean soft shadow with no visible outline or border effect
+- Indicator transition: only `transform` is animated (no shadow/background transitions)
+- Performance: GPU-only transforms during drag, `will-change: transform`, `contain: layout style`
+- Error count: 33 errors (unchanged baseline), 94 warnings (down from 95)

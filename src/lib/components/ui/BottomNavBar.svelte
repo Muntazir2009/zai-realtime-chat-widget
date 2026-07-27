@@ -46,8 +46,7 @@
 
   const IND_SIZE = 38;
   const IND_HALF = IND_SIZE / 2;
-  const LONG_PRESS_MS = 350;
-  const DRAG_THRESHOLD = 8;
+  const LONG_PRESS_MS = 300;
   const TAP_THRESHOLD = 6;
 
   // ── Layout measurement (cached) ──
@@ -116,7 +115,7 @@
     cancelLongPress();
     longPressTimer = setTimeout(() => {
       if (!movedSinceDown && pointerDownTab === uiStore.tab) {
-        // Long press confirmed — activate drag
+        // Long press confirmed — activate drag mode
         dragEngaged = true;
         isGrabbed = true;
         dragStartIndX = currentX;
@@ -125,6 +124,12 @@
         lastDragT = performance.now();
         dragVX = 0;
         indicatorEl?.classList.add('indicator-grabbed');
+
+        // Capture pointer on the CAPSULE so we get events across ALL tabs
+        // This is the key fix: capture on parent, not the individual tab button
+        if (capsuleEl) {
+          try { capsuleEl.setPointerCapture(dragPointerId!); } catch { /* ignore */ }
+        }
       }
     }, LONG_PRESS_MS);
   }
@@ -136,14 +141,97 @@
     }
   }
 
-  // ── Pointer handlers ──
+  // ── Global drag handlers (attached to capsule during drag) ──
+  function onDragMove(e: PointerEvent) {
+    if (!dragEngaged || e.pointerId !== dragPointerId) return;
+
+    // Only horizontal movement
+    const moveDx = e.clientX - dragStartX;
+    let newX = dragStartIndX + moveDx;
+
+    // Horizontal clamp with elastic edge resistance
+    const centers = cachedCenters;
+    if (centers.length > 0) {
+      const minCenter = centers[0].centerX;
+      const maxCenter = centers[centers.length - 1].centerX;
+      const minX = minCenter - IND_HALF;
+      const maxX = maxCenter - IND_HALF;
+      if (newX < minX) {
+        newX = minX + (newX - minX) * 0.3;
+      } else if (newX > maxX) {
+        newX = maxX + (newX - maxX) * 0.3;
+      }
+    }
+    positionIndicator(newX, false);
+
+    // Velocity tracking (EMA for smooth snap)
+    const now = performance.now();
+    const dt = now - lastDragT;
+    if (dt > 0) {
+      const instantVX = (e.clientX - lastDragX) / dt;
+      dragVX = dragVX * 0.6 + instantVX * 0.4;
+    }
+    lastDragX = e.clientX;
+    lastDragT = now;
+  }
+
+  function onDragUp(e: PointerEvent) {
+    if (!dragEngaged || e.pointerId !== dragPointerId) return;
+
+    // Release capture from capsule
+    if (capsuleEl) {
+      try { capsuleEl.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+    }
+
+    indicatorEl?.classList.remove('indicator-grabbed');
+    dragPointerId = null;
+    dragEngaged = false;
+    isGrabbed = true; // mark so positionIndicator uses reflow trick
+
+    const centers = cachedCenters;
+    if (centers.length > 0) {
+      const indCenter = currentX + IND_HALF;
+      // Find nearest tab
+      let nearestIdx = 0;
+      let nearestDist = Infinity;
+      for (let i = 0; i < centers.length; i++) {
+        const d = Math.abs(centers[i].centerX - indCenter);
+        if (d < nearestDist) { nearestDist = d; nearestIdx = i; }
+      }
+      // Velocity projection for snap target
+      const projectedCenter = indCenter + dragVX * 120;
+      let projectedIdx = nearestIdx;
+      let projectedDist = Infinity;
+      for (let i = 0; i < centers.length; i++) {
+        const d = Math.abs(centers[i].centerX - projectedCenter);
+        if (d < projectedDist) { projectedDist = d; projectedIdx = i; }
+      }
+      const snappedTabId = tabs[projectedIdx].id;
+      if (uiStore.tab !== snappedTabId) {
+        uiStore.setTab(snappedTabId);
+      }
+      positionIndicator(centers[projectedIdx].centerX - IND_HALF, true);
+    } else {
+      measureActiveTab(true);
+    }
+    pointerDownTab = null;
+    movedSinceDown = false;
+  }
+
+  // ── Pointer handlers (on individual tab buttons) ──
   function onTabPointerDown(e: PointerEvent, tabId: TabId) {
     if (e.button !== 0 && e.pointerType === 'mouse') return;
+    e.preventDefault(); // Prevent text selection, context menu
+
     pointerDownTab = tabId;
     pointerDownX = e.clientX;
     pointerDownY = e.clientY;
     movedSinceDown = false;
     spawnRipple(e, tabId);
+
+    // Store pointerId immediately for capture
+    dragPointerId = e.pointerId;
+
     // Only start long press on the ACTIVE tab (that's the draggable indicator)
     if (tabId === uiStore.tab) {
       startLongPress();
@@ -152,95 +240,25 @@
 
   function onTabPointerMove(e: PointerEvent) {
     if (!pointerDownTab) return;
+
+    // If drag is already engaged, don't process here — handled by capsule listeners
+    if (dragEngaged) return;
+
+    // Before drag engages, check for movement to cancel long press (tap detection)
     const dx = e.clientX - pointerDownX;
     const dy = e.clientY - pointerDownY;
-
-    // If we haven't engaged drag yet, check for movement to cancel long press
-    if (!dragEngaged) {
-      if (Math.abs(dx) > TAP_THRESHOLD || Math.abs(dy) > TAP_THRESHOLD) {
-        movedSinceDown = true;
-        cancelLongPress();
-      }
-      return;
-    }
-
-    // Drag engaged — follow finger horizontally only
-    if (dragPointerId === null) {
-      // First move after long press activation — capture pointer
-      dragPointerId = e.pointerId;
+    if (Math.abs(dx) > TAP_THRESHOLD || Math.abs(dy) > TAP_THRESHOLD) {
       movedSinceDown = true;
-      try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* ignore */ }
-    }
-
-    if (e.pointerId === dragPointerId) {
-      const moveDx = e.clientX - dragStartX;
-      let newX = dragStartIndX + moveDx;
-
-      // Horizontal clamp with elastic edge resistance
-      const centers = cachedCenters;
-      if (centers.length > 0) {
-        const minCenter = centers[0].centerX;
-        const maxCenter = centers[centers.length - 1].centerX;
-        const minX = minCenter - IND_HALF;
-        const maxX = maxCenter - IND_HALF;
-        if (newX < minX) {
-          newX = minX + (newX - minX) * 0.3;
-        } else if (newX > maxX) {
-          newX = maxX + (newX - maxX) * 0.3;
-        }
-      }
-      positionIndicator(newX, false);
-
-      // Velocity tracking (EMA for smooth snap)
-      const now = performance.now();
-      const dt = now - lastDragT;
-      if (dt > 0) {
-        const instantVX = (e.clientX - lastDragX) / dt;
-        dragVX = dragVX * 0.6 + instantVX * 0.4;
-      }
-      lastDragX = e.clientX;
-      lastDragT = now;
+      cancelLongPress();
     }
   }
 
   function onTabPointerUp(e: PointerEvent, tabId: TabId) {
     cancelLongPress();
 
-    if (dragEngaged && dragPointerId !== null && e.pointerId === dragPointerId) {
-      try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* ignore */ }
-      indicatorEl?.classList.remove('indicator-grabbed');
-      dragPointerId = null;
-      dragEngaged = false;
-      isGrabbed = true; // mark so positionIndicator uses reflow trick
-
-      const centers = cachedCenters;
-      if (centers.length > 0) {
-        const indCenter = currentX + IND_HALF;
-        // Find nearest tab
-        let nearestIdx = 0;
-        let nearestDist = Infinity;
-        for (let i = 0; i < centers.length; i++) {
-          const d = Math.abs(centers[i].centerX - indCenter);
-          if (d < nearestDist) { nearestDist = d; nearestIdx = i; }
-        }
-        // Velocity projection for snap target
-        const projectedCenter = indCenter + dragVX * 120;
-        let projectedIdx = nearestIdx;
-        let projectedDist = Infinity;
-        for (let i = 0; i < centers.length; i++) {
-          const d = Math.abs(centers[i].centerX - projectedCenter);
-          if (d < projectedDist) { projectedDist = d; projectedIdx = i; }
-        }
-        const snappedTabId = tabs[projectedIdx].id;
-        if (uiStore.tab !== snappedTabId) {
-          uiStore.setTab(snappedTabId);
-        }
-        positionIndicator(centers[projectedIdx].centerX - IND_HALF, true);
-      } else {
-        measureActiveTab(true);
-      }
-      pointerDownTab = null;
-      movedSinceDown = false;
+    // If drag was engaged, it's already handled by onDragUp via pointer capture
+    if (dragEngaged) {
+      // Let the capsule-level handler clean up
       return;
     }
 
@@ -250,9 +268,10 @@
     }
     pointerDownTab = null;
     movedSinceDown = false;
+    dragPointerId = null;
   }
 
-  function onTabPointerCancel(e: PointerEvent) {
+  function onTabPointerCancel() {
     cancelLongPress();
     if (dragEngaged) {
       dragEngaged = false;
@@ -310,7 +329,14 @@
   role="tablist"
   aria-label="Main navigation"
 >
-  <div class="nav-capsule" bind:this={capsuleEl}>
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="nav-capsule"
+    bind:this={capsuleEl}
+    onpointermove={onDragMove}
+    onpointerup={onDragUp}
+    onpointercancel={onTabPointerCancel}
+  >
     <!-- Subtle inner highlight -->
     <div class="capsule-highlight" aria-hidden="true"></div>
 
@@ -335,7 +361,6 @@
         onpointermove={onTabPointerMove}
         onpointerup={(e) => onTabPointerUp(e, tab.id)}
         onpointercancel={onTabPointerCancel}
-        onpointerleave={onTabPointerCancel}
       >
         <span class="tab-icon-wrap">
           <tab.icon size={20} class="tab-icon" strokeWidth={isActive ? 2.3 : 1.7} />
@@ -410,6 +435,7 @@
       /* Inner bottom shadow */
       inset 0 -0.5px 0.5px rgba(0, 0, 0, 0.15);
     isolation: isolate;
+    touch-action: none;
   }
 
   /* Subtle inner highlight — top edge lighting */
@@ -441,52 +467,38 @@
     border-radius: 19px;
     /* 3D raised appearance with subtle depth */
     background: linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.16) 0%,
-      rgba(255, 255, 255, 0.06) 50%,
-      rgba(0, 0, 0, 0.06) 100%
-    ),
-    linear-gradient(
       160deg,
       rgba(62, 62, 68, 1) 0%,
       rgba(54, 54, 60, 1) 100%
     );
+    /* Single clean elevation shadow — NO inset shadows that look like a border */
     box-shadow:
-      /* Elevation shadow */
-      0 1px 3px rgba(0, 0, 0, 0.20),
-      0 2px 6px rgba(0, 0, 0, 0.14),
-      /* Inner top highlight */
-      inset 0 0.5px 0 rgba(255, 255, 255, 0.18),
-      /* Inner bottom edge */
-      inset 0 -0.5px 0.5px rgba(0, 0, 0, 0.12);
+      0 1px 2px rgba(0, 0, 0, 0.15),
+      0 2px 4px rgba(0, 0, 0, 0.10);
     transform: translateX(0);
     transform-origin: center;
     z-index: 1;
     pointer-events: none;
     will-change: transform;
     -webkit-tap-highlight-color: transparent;
-    /* Smooth glide */
-    transition: transform 250ms cubic-bezier(0.4, 0, 0.2, 1),
-                box-shadow 200ms ease;
+    /* Only transition transform — NO shadow/background transitions */
+    transition: transform 250ms cubic-bezier(0.4, 0, 0.2, 1);
+    /* GPU compositing isolation */
+    contain: layout style;
   }
 
-  /* Grabbed state — lifted shadow, no resize */
+  /* Grabbed state — slightly brighter, no shadow change */
+  /* svelte-ignore css_unused_selector */
   .nav-indicator.indicator-grabbed {
     background: linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.20) 0%,
-      rgba(255, 255, 255, 0.08) 50%,
-      rgba(0, 0, 0, 0.06) 100%
-    ),
-    linear-gradient(
       160deg,
       rgba(72, 72, 78, 1) 0%,
       rgba(64, 64, 70, 1) 100%
     );
+    /* Keep same shadow — no transition on shadow */
     box-shadow:
-      0 2px 6px rgba(0, 0, 0, 0.28),
-      0 4px 12px rgba(0, 0, 0, 0.16),
-      inset 0 0.5px 0 rgba(255, 255, 255, 0.22);
+      0 1px 2px rgba(0, 0, 0, 0.15),
+      0 2px 4px rgba(0, 0, 0, 0.10);
   }
 
   /* ── Tabs ── */
@@ -508,7 +520,7 @@
     overflow: hidden;
     border-radius: 18px;
     transition: color 200ms ease;
-    touch-action: manipulation;
+    touch-action: none;
   }
 
   .tab-icon-wrap {
@@ -583,7 +595,6 @@
   }
   :global(.dark) .nav-indicator {
     background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(0, 0, 0, 0.08) 100%),
       linear-gradient(160deg, rgba(50, 50, 56, 1), rgba(44, 44, 50, 1));
   }
 
@@ -601,7 +612,6 @@
   }
   :global(.amoled) .nav-indicator {
     background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.10) 0%, rgba(0, 0, 0, 0.10) 100%),
       linear-gradient(160deg, rgba(36, 36, 42, 1), rgba(32, 32, 38, 1));
   }
 
@@ -619,7 +629,6 @@
   }
   :global(.crimson-dark) .nav-indicator {
     background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.10) 0%, rgba(0, 0, 0, 0.08) 100%),
       linear-gradient(160deg, rgba(50, 40, 52, 1), rgba(44, 36, 46, 1));
   }
 
