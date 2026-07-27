@@ -21,15 +21,15 @@
 
   // ── Reactive state (low-frequency, used in template) ──
   let ripples = $state<{ id: number; x: number; y: number; tabId: TabId }[]>([]);
+  let dragHoveredTab: TabId | null = $state(null);
 
   // ── Indicator position (direct DOM — NOT reactive) ──
   let currentX = 0;
   let isGrabbed = false;
 
-  // Drag state — long press to grab, then horizontal drag
+  // ── Drag state: horizontal movement engages drag, no long press ──
   let dragEngaged = false;
   let dragPointerId: number | null = null;
-  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
   let dragStartX = 0;
   let dragStartIndX = 0;
   let lastDragX = 0;
@@ -46,8 +46,7 @@
 
   const IND_SIZE = 38;
   const IND_HALF = IND_SIZE / 2;
-  const LONG_PRESS_MS = 300;
-  const TAP_THRESHOLD = 6;
+  const DRAG_THRESHOLD = 10;
 
   // ── Layout measurement (cached) ──
   function invalidateCenters() {
@@ -110,32 +109,30 @@
     }, 500);
   }
 
-  // ── Long press for drag activation ──
-  function startLongPress() {
-    cancelLongPress();
-    longPressTimer = setTimeout(() => {
-      if (!movedSinceDown && pointerDownTab === uiStore.tab) {
-        // Long press confirmed — activate drag mode
-        dragEngaged = true;
-        isGrabbed = true;
-        dragStartIndX = currentX;
-        dragStartX = pointerDownX;
-        lastDragX = pointerDownX;
-        lastDragT = performance.now();
-        dragVX = 0;
-        indicatorEl?.classList.add('indicator-grabbed');
+  // ── Engage drag: horizontal movement threshold, no long press ──
+  function tryEngageDrag(e: PointerEvent) {
+    if (dragEngaged) return;
+    const dx = e.clientX - pointerDownX;
+    const dy = e.clientY - pointerDownY;
+    // Require dominant horizontal movement exceeding threshold
+    if (Math.abs(dx) > DRAG_THRESHOLD && Math.abs(dx) > Math.abs(dy) * 1.2) {
+      movedSinceDown = true;
+      dragEngaged = true;
+      isGrabbed = true;
+      // Record the indicator position at the moment drag engages
+      const activeIdx = tabs.findIndex(t => t.id === uiStore.tab);
+      dragStartIndX = cachedCenters[activeIdx]?.centerX - IND_HALF ?? currentX;
+      dragStartX = e.clientX;
+      lastDragX = e.clientX;
+      lastDragT = performance.now();
+      dragVX = 0;
+      indicatorEl?.classList.add('indicator-grabbed');
 
-        // Attach document-level listeners for cross-element tracking
-        // This ensures the indicator follows the finger across the ENTIRE screen
-        attachDocDragListeners();
-      }
-    }, LONG_PRESS_MS);
-  }
-
-  function cancelLongPress() {
-    if (longPressTimer) {
-      clearTimeout(longPressTimer);
-      longPressTimer = null;
+      // Document-level listeners for cross-element tracking
+      attachDocDragListeners();
+    } else if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
+      // Significant movement but not horizontal-dominant — cancel tap
+      movedSinceDown = true;
     }
   }
 
@@ -163,15 +160,34 @@
     document.removeEventListener('pointercancel', onDocPointerUp);
   }
 
-  // ── Global drag handlers (attached to capsule during drag) ──
+  // ── Find which tab center the finger is closest to ──
+  function findHoveredTab(clientX: number): TabId | null {
+    if (!capsuleEl || cachedCenters.length === 0) return null;
+    const capsuleRect = capsuleEl.getBoundingClientRect();
+    const localX = clientX - capsuleRect.left + capsuleRect.width / 2 - capsuleRect.width / 2;
+    // Use simple pointer position vs tab centers
+    const fingerCenter = clientX - capsuleRect.left;
+    let bestDist = Infinity;
+    let bestTab: TabId | null = null;
+    for (let i = 0; i < tabs.length; i++) {
+      const d = Math.abs(cachedCenters[i].centerX - fingerCenter);
+      if (d < bestDist) {
+        bestDist = d;
+        bestTab = tabs[i].id;
+      }
+    }
+    return bestTab;
+  }
+
+  // ── Drag move: indicator follows finger, hovered tab feedback ──
   function onDragMove(e: PointerEvent) {
     if (!dragEngaged || e.pointerId !== dragPointerId) return;
 
-    // Only horizontal movement
+    // Horizontal-only movement from drag start
     const moveDx = e.clientX - dragStartX;
     let newX = dragStartIndX + moveDx;
 
-    // Horizontal clamp with elastic edge resistance
+    // Elastic edge resistance
     const centers = cachedCenters;
     if (centers.length > 0) {
       const minCenter = centers[0].centerX;
@@ -179,14 +195,18 @@
       const minX = minCenter - IND_HALF;
       const maxX = maxCenter - IND_HALF;
       if (newX < minX) {
-        newX = minX + (newX - minX) * 0.3;
+        newX = minX + (newX - minX) * 0.25;
       } else if (newX > maxX) {
-        newX = maxX + (newX - maxX) * 0.3;
+        newX = maxX + (newX - maxX) * 0.25;
       }
     }
     positionIndicator(newX, false);
 
-    // Velocity tracking (EMA for smooth snap)
+    // Update hovered tab (reactive — template picks it up)
+    const hovered = findHoveredTab(e.clientX);
+    dragHoveredTab = hovered;
+
+    // Velocity tracking (EMA for snap projection)
     const now = performance.now();
     const dt = now - lastDragT;
     if (dt > 0) {
@@ -207,6 +227,7 @@
     dragPointerId = null;
     dragEngaged = false;
     isGrabbed = true; // mark so positionIndicator uses reflow trick
+    dragHoveredTab = null; // clear hover state
 
     const centers = cachedCenters;
     if (centers.length > 0) {
@@ -218,7 +239,7 @@
         const d = Math.abs(centers[i].centerX - indCenter);
         if (d < nearestDist) { nearestDist = d; nearestIdx = i; }
       }
-      // Velocity projection for snap target
+      // Velocity projection for snap target (120ms lookahead)
       const projectedCenter = indCenter + dragVX * 120;
       let projectedIdx = nearestIdx;
       let projectedDist = Infinity;
@@ -241,44 +262,33 @@
   // ── Pointer handlers (on individual tab buttons) ──
   function onTabPointerDown(e: PointerEvent, tabId: TabId) {
     if (e.button !== 0 && e.pointerType === 'mouse') return;
-    e.preventDefault(); // Prevent text selection, context menu
+    e.preventDefault();
 
     pointerDownTab = tabId;
     pointerDownX = e.clientX;
     pointerDownY = e.clientY;
     movedSinceDown = false;
-    spawnRipple(e, tabId);
-
-    // Store pointerId immediately for capture
     dragPointerId = e.pointerId;
 
-    // Only start long press on the ACTIVE tab (that's the draggable indicator)
-    if (tabId === uiStore.tab) {
-      startLongPress();
-    }
+    // Ensure cached centers are fresh before any potential drag
+    invalidateCenters();
+
+    spawnRipple(e, tabId);
   }
 
   function onTabPointerMove(e: PointerEvent) {
-    if (!pointerDownTab) return;
+    if (!pointerDownTab || e.pointerId !== dragPointerId) return;
 
-    // If drag is already engaged, don't process here — handled by capsule listeners
+    // If drag is already engaged, handled by document listeners
     if (dragEngaged) return;
 
-    // Before drag engages, check for movement to cancel long press (tap detection)
-    const dx = e.clientX - pointerDownX;
-    const dy = e.clientY - pointerDownY;
-    if (Math.abs(dx) > TAP_THRESHOLD || Math.abs(dy) > TAP_THRESHOLD) {
-      movedSinceDown = true;
-      cancelLongPress();
-    }
+    // Check if movement qualifies for drag engagement
+    tryEngageDrag(e);
   }
 
   function onTabPointerUp(e: PointerEvent, tabId: TabId) {
-    cancelLongPress();
-
-    // If drag was engaged, it's already handled by onDragUp via pointer capture
     if (dragEngaged) {
-      // Let the capsule-level handler clean up
+      // Let the document-level handler clean up
       return;
     }
 
@@ -292,11 +302,11 @@
   }
 
   function onTabPointerCancel() {
-    cancelLongPress();
     if (dragEngaged) {
       dragEngaged = false;
       isGrabbed = true;
       dragPointerId = null;
+      dragHoveredTab = null;
       detachDocDragListeners();
       indicatorEl?.classList.remove('indicator-grabbed');
       measureActiveTab(true);
@@ -331,7 +341,6 @@
 
   onDestroy(() => {
     if (resizeObserver) resizeObserver.disconnect();
-    if (longPressTimer) clearTimeout(longPressTimer);
     detachDocDragListeners();
     window.removeEventListener('resize', onResize);
   });
@@ -339,7 +348,6 @@
   // React to tab changes — SINGLE code path positions the indicator
   $effect(() => {
     const _t = uiStore.tab;
-    // Don't use reflow trick for programmatic tab switches (only post-drag)
     isGrabbed = false;
     measureActiveTab(true);
   });
@@ -355,8 +363,6 @@
   <div
     class="nav-capsule"
     bind:this={capsuleEl}
-    onpointermove={onDragMove}
-    onpointerup={onDragUp}
     onpointercancel={onTabPointerCancel}
   >
     <!-- Subtle inner highlight -->
@@ -372,9 +378,11 @@
     <!-- tabs (icons only) -->
     {#each tabs as tab, i (tab.id)}
       {@const isActive = uiStore.tab === tab.id}
+      {@const isDragHovered = dragHoveredTab === tab.id}
       <button
         class="nav-tab"
         class:tab-active={isActive}
+        class:tab-drag-hover={isDragHovered && !isActive}
         role="tab"
         aria-selected={isActive}
         aria-label={tab.label}
@@ -448,13 +456,10 @@
     );
     border: 0.5px solid rgba(255, 255, 255, 0.08);
     box-shadow:
-      /* Outer elevation shadow */
       0 1px 2px rgba(0, 0, 0, 0.18),
       0 4px 12px rgba(0, 0, 0, 0.22),
       0 8px 24px rgba(0, 0, 0, 0.12),
-      /* Inner top highlight */
       inset 0 0.5px 0 rgba(255, 255, 255, 0.12),
-      /* Inner bottom shadow */
       inset 0 -0.5px 0.5px rgba(0, 0, 0, 0.15);
     isolation: isolate;
     touch-action: none;
@@ -487,13 +492,11 @@
     height: 38px;
     margin-top: -19px;
     border-radius: 19px;
-    /* 3D raised appearance with subtle depth */
     background: linear-gradient(
       160deg,
       rgba(62, 62, 68, 1) 0%,
       rgba(54, 54, 60, 1) 100%
     );
-    /* Single soft elevation — no stacked shadows that look like a duplicate pill */
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
     transform: translateX(0);
     transform-origin: center;
@@ -501,13 +504,12 @@
     pointer-events: none;
     will-change: transform;
     -webkit-tap-highlight-color: transparent;
-    /* Only transition transform — NO shadow/background transitions */
-    transition: transform 250ms cubic-bezier(0.4, 0, 0.2, 1);
-    /* GPU compositing isolation */
+    /* Premium easing — fast attack, smooth settle, no overshoot */
+    transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
     contain: layout style;
   }
 
-  /* Grabbed state — slightly brighter, same shadow */
+  /* Grabbed state — slightly elevated */
   /* svelte-ignore css_unused_selector */
   .nav-indicator.indicator-grabbed {
     background: linear-gradient(
@@ -515,7 +517,7 @@
       rgba(72, 72, 78, 1) 0%,
       rgba(64, 64, 70, 1) 100%
     );
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
   }
 
   /* ── Tabs ── */
@@ -536,7 +538,7 @@
     user-select: none;
     overflow: hidden;
     border-radius: 18px;
-    transition: color 200ms ease;
+    transition: color 200ms cubic-bezier(0.22, 1, 0.36, 1);
     touch-action: none;
   }
 
@@ -545,10 +547,22 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    /* Smooth scale transition for drag hover feedback */
+    transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   .nav-tab.tab-active {
     color: #ffffff;
+  }
+
+  /* Drag hover: icon scales up subtly, color brightens */
+  /* svelte-ignore css_unused_selector */
+  .nav-tab.tab-drag-hover {
+    color: rgba(255, 255, 255, 0.85);
+  }
+  /* svelte-ignore css_unused_selector */
+  .nav-tab.tab-drag-hover .tab-icon-wrap {
+    transform: scale(1.10);
   }
 
   :global(.nav-tab .tab-icon) {
@@ -565,7 +579,7 @@
     background: rgba(255, 255, 255, 0.20);
     transform: translate(-50%, -50%) scale(0);
     pointer-events: none;
-    animation: tabRipple 500ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    animation: tabRipple 500ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
     z-index: 0;
   }
   @keyframes tabRipple {
@@ -589,7 +603,7 @@
     line-height: 15px;
     text-align: center;
     box-shadow: 0 1px 3px rgba(239, 68, 68, 0.35);
-    animation: badgeScaleIn 250ms cubic-bezier(0.4, 0, 0.2, 1) both;
+    animation: badgeScaleIn 250ms cubic-bezier(0.22, 1, 0.36, 1) both;
     pointer-events: none;
     z-index: 3;
   }
@@ -652,6 +666,8 @@
   /* ── Reduced motion ── */
   @media (prefers-reduced-motion: reduce) {
     .nav-indicator,
+    .tab-icon-wrap,
+    .nav-tab,
     .tab-ripple,
     .unread-badge {
       transition-duration: 1ms !important;
