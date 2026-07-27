@@ -199,10 +199,17 @@
     }
   });
 
-  let typingNames = $derived.by(() => {
-    if (!chatStore.activeChatId || !authStore.user) return [];
-    const chatId = chatStore.activeChatId;
-    return chatStore.typingDisplayNames.get(chatId) ?? [];
+  // ── Typing names — uses $state+$effect for reliable cross-module reactivity ──
+  let typingNames: string[] = $state([]);
+  $effect(() => {
+    if (!chatStore.activeChatId || !authStore.user) {
+      typingNames = [];
+      return;
+    }
+    const id = chatStore.activeChatId;
+    // Read the map reference to establish dependency
+    const map = chatStore.typingDisplayNames;
+    typingNames = map.get(id) ?? [];
   });
 
   let sortedPinned = $derived.by(() => {

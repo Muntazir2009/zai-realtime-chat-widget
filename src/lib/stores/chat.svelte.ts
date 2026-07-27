@@ -987,6 +987,10 @@ class ChatStore {
     }
     // Clear internal typing state
     this._typingUids.clear();
+    // Also clear the reactive display names so the UI updates immediately
+    if (this.typingDisplayNames.size > 0) {
+      this.typingDisplayNames = new Map();
+    }
   }
 
   // ============================================================

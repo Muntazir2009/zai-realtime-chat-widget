@@ -2852,3 +2852,24 @@ Stage Summary:
 - Indicator glides smoothly with 220ms premium easing
 - Architecture cleaner: removed long press timer complexity entirely
 
+---
+Task ID: 12
+Agent: Main Agent
+Task: Fix typing indicator regression — indicator not showing when other user types
+
+Work Log:
+- Investigated full typing indicator data flow: InputBar → PresenceManager → RTDB → ChatStore → Conversation → TypingIndicator
+- Found two TypingIndicator.svelte files: simple old one (src/components/) and complex new one (src/lib/)
+- Root cause 1: TypingIndicator.svelte at $lib/ had unreliable `rendering` state machine — starts `false`, relies on `$effect` to set `true`. If effect tracking fails on mount, indicator never renders
+- Root cause 2: Conversation.svelte used `$derived.by()` to read from `chatStore.typingDisplayNames` (a `$state` Map on a class instance) — potential Svelte 5 cross-module reactivity tracking issue
+- Root cause 3: `detachTypingListener()` cleared internal `_typingUids` but NOT reactive `typingDisplayNames`, leaving stale data
+- Fix 1: Rewrote TypingIndicator.svelte — removed `rendering` state machine entirely. Now uses CSS transition (opacity + transform) controlled by single `visible` state. Always renders when mounted (parent `{#if}` controls DOM presence)
+- Fix 2: Changed Conversation.svelte `typingNames` from `$derived.by()` to `$state` + `$effect` pattern for more reliable cross-module reactivity
+- Fix 3: Added `typingDisplayNames = new Map()` to `detachTypingListener()` to clear reactive state
+- Replaced glass-blur bubble with matte background (var(--bg-elevated)) for consistency with app's matte aesthetic
+- Build passes with zero errors
+
+Stage Summary:
+- Typing indicator should now reliably show in both header (text + bouncing dots) and floating input area (bubble + animated dots + label)
+- More robust reactivity: $state+$effect pattern is more reliable than $derived.by for cross-module class instance state
+- Cleaner TypingIndicator: simpler state machine, CSS-only transitions, no animation timing edge cases

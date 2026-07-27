@@ -12,43 +12,32 @@
   // Show IMMEDIATELY when typing starts (no show-debounce) so the indicator
   // is never missed for brief typing bursts. Keep a hide-debounce so a
   // momentary stop/resume doesn't flicker.
-  let visible = $state(false);
-  let rendering = $state(false);
+  let visible = $state(usernames.length > 0);
   let hideTimer: ReturnType<typeof setTimeout> | null = null;
-  let exitTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const HIDE_DELAY = 500;
-  const EXIT_DURATION = 280;
+  const HIDE_DELAY = 600;
 
   $effect(() => {
     // Track the reactive dependency
     const hasUsers = usernames.length > 0;
 
     if (hasUsers) {
-      // Clear pending hide / exit — typing is active
+      // Clear pending hide — typing is active
       if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-      if (exitTimer) { clearTimeout(exitTimer); exitTimer = null; }
       // Show immediately (no debounce) — never miss a typing event
       visible = true;
-      rendering = true;
     } else {
       // Debounce hide — avoids flicker on brief stop/resume
       if (visible && !hideTimer) {
         hideTimer = setTimeout(() => {
           visible = false;
           hideTimer = null;
-          // Keep in DOM for exit animation
-          exitTimer = setTimeout(() => {
-            rendering = false;
-            exitTimer = null;
-          }, EXIT_DURATION);
         }, HIDE_DELAY);
       }
     }
 
     return () => {
       if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-      if (exitTimer) { clearTimeout(exitTimer); exitTimer = null; }
     };
   });
 
@@ -65,11 +54,10 @@
   const dotColor = $derived(accentColor ?? 'var(--color-primary)');
 </script>
 
-{#if rendering}
+{#if usernames.length > 0}
   <div
     class="typing-root"
-    class:is-entering={visible}
-    class:is-exiting={!visible}
+    class:is-visible={visible}
     role="status"
     aria-label={label}
     aria-live="polite"
@@ -107,14 +95,22 @@
     gap: 10px;
     padding: 2px 0 4px;
     will-change: transform, opacity;
-    animation: typingEnter 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    transition: opacity 200ms cubic-bezier(0.22, 1, 0.36, 1),
+                transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
   }
 
-  .typing-root.is-exiting {
-    animation: typingExit var(--exit-dur, 280ms) cubic-bezier(0.4, 0, 1, 1) both;
+  .typing-root:not(.is-visible) {
+    opacity: 0;
+    transform: translateY(4px) scale(0.95);
+    pointer-events: none;
   }
 
-  /* ── Glass bubble ── */
+  .typing-root.is-visible {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  /* ── Matte bubble ── */
   .typing-bubble {
     display: flex;
     align-items: center;
@@ -123,11 +119,9 @@
     padding: 10px 16px;
     border-radius: var(--radius-md, 12px) var(--radius-md, 12px)
       var(--radius-md, 12px) 5px;
-    background: var(--glass-bg, rgba(255, 255, 255, 0.72));
-    backdrop-filter: var(--glass-blur, blur(20px) saturate(200%));
-    -webkit-backdrop-filter: var(--glass-blur, blur(20px) saturate(200%));
-    border: var(--glass-border, 1px solid rgba(5, 150, 105, 0.08));
-    box-shadow: var(--glass-shadow, 0 4px 24px rgba(0, 0, 0, 0.06));
+    background: var(--bg-elevated, rgba(255, 255, 255, 0.72));
+    border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.06));
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   }
 
   /* ── Dots ── */
@@ -185,28 +179,6 @@
   /* ────────────────────────────
      Keyframes — GPU only
      ──────────────────────────── */
-
-  @keyframes typingEnter {
-    from {
-      opacity: 0;
-      transform: translateY(8px) scale(0.92);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-  }
-
-  @keyframes typingExit {
-    from {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-    to {
-      opacity: 0;
-      transform: translateY(4px) scale(0.94);
-    }
-  }
 
   @keyframes dotBreathe {
     0%, 100% {
