@@ -53,7 +53,7 @@
   });
 
   // --- Computed label ---
-  const label = $derived(() => {
+  const label = $derived.by(() => {
     const n = usernames.length;
     if (n === 0) return '';
     if (n === 1) return `${usernames[0]} is typing`;
@@ -71,7 +71,7 @@
     class:is-entering={visible}
     class:is-exiting={!visible}
     role="status"
-    aria-label={label()}
+    aria-label={label}
     aria-live="polite"
   >
     <!-- Optional avatar dot -->
@@ -93,8 +93,8 @@
     </div>
 
     <!-- Label -->
-    {#if label()}
-      <span class="typing-label">{label()}</span>
+    {#if label}
+      <span class="typing-label">{label}</span>
     {/if}
   </div>
 {/if}
