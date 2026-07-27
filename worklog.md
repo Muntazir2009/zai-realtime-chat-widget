@@ -2707,3 +2707,64 @@ Stage Summary:
 - All pre-existing warnings preserved (33 baseline TS errors unchanged)
 - One new expected warning: `.liquid-indicator.indicator-grabbed` unused CSS selector (class added via classList.add, not template binding)
 - Vite compiles cleanly, no errors
+
+---
+Task ID: 9
+Agent: Main Agent
+Task: Comprehensive refinement — draggable nav, double pill fix, premium matte style, swipe polish, emoji fix
+
+Work Log:
+- Completely rewrote BottomNavBar.svelte with premium matte design:
+  - Removed ALL liquid glass effects: SVG displacement filter, sheen layer, fresnel layer, refraction overlay, backdrop-filter blur
+  - New design: premium matte dark surface with 3D depth using layered gradients (160deg direction), inner top highlights, outer elevation shadows, inset bottom shadows
+  - Clean single-indicator architecture: ONE div.liquid-nav-indicator, z-index 1, pointer-events none
+  - Removed all glass CSS variants (.nav-liquid-glass overrides)
+  - Kept theme variants (dark, amoled, crimson-dark) with matching matte values
+- Implemented proper draggable navigation:
+  - Long press (350ms) on active tab activates drag
+  - Horizontal-only drag following with pointer capture
+  - Elastic edge resistance (0.3x multiplier past tab bounds)
+  - Velocity tracking (EMA 0.6/0.4) for snap target prediction
+  - Reflow trick on release to re-enable CSS transition for smooth snap
+  - No accidental activation: movement > TAP_THRESHOLD(6px) cancels long press
+  - Constant indicator size throughout drag (no scale, no translateY)
+- Fixed double active indicator:
+  - Root cause: selectTab() AND $effect both triggered measureActiveTab()
+  - Fix: selectTab() only calls uiStore.setTab(). $effect is the sole positioning path
+  - isGrabbed flag properly managed between drag and programmatic tab switches
+- Optimized tab switch performance:
+  - Zero RAF loops, zero per-frame DOM writes
+  - CSS transition only: 250ms cubic-bezier(0.4, 0, 0.2, 1)
+  - GPU composited transform (will-change: transform)
+  - No magnetic tab movement (removed per-frame style.transform on tabs)
+- Updated InputBar.svelte:
+  - Removed backdrop-filter blur(32px) saturate(200%) from .input-row-glass
+  - Premium matte 3D shadows (inner highlight, outer elevation, proper stacking)
+  - Removed bounce easing from buttons: scale(0.92) instead of scale(0.88)
+  - Removed cubic-bezier(0.34, 1.56, 0.64, 1) transitions
+  - Smooth slide-up animation with standard easing
+- Improved swipe-to-reply in MessageBubble.svelte:
+  - Smoothstep easing curve for natural finger tracking (t²(3-2t))
+  - Reduced rubber-band resistance (0.25x vs 0.3x)
+  - Touch slop reduced (12px vs 14px) for faster engagement
+  - Better velocity calculation using final touch position
+  - Consistent Material easing (0.4, 0, 0.2, 1) for all transitions
+  - Removed scale(0.97) from snap — cleaner, no jitter
+  - Faster trigger (130ms snap, 280ms return)
+- Fixed emoji sizing:
+  - Typed emoji-only: min(56px, 14vw) — was min(180px, 40vw), way too large
+  - Sticker emoji: min(120px, 36vw) — was min(220px, 62vw)
+- ReplyPreview: Removed bounce easing, standard ease-in-out
+- prefsStore: Removed nav-liquid-glass class toggling (no longer needed)
+- Removed all bounce/spring easings across components for consistent premium feel
+
+Stage Summary:
+- 5 files modified, 294 insertions, 324 deletions (net -30 lines, cleaner code)
+- BottomNavBar reduced to ~400 lines with premium matte design
+- Drag fully working: long press to activate, horizontal drag, velocity snap
+- Single indicator guaranteed — no double pill, no ghost layers
+- Tab switching: instant feel with 250ms smooth CSS glide
+- Input bar: clean matte 3D appearance, no glass blur
+- Swipe-to-reply: smooth natural gesture, no jitter/lag
+- Emoji: balanced modern size (56px typed, 120px sticker)
+- All bounce/spring easings removed across nav, input, reply, swipe
