@@ -1,79 +1,99 @@
-import { execSync } from 'child_process';
+import { spawn } from 'child_process';
+import { createServer } from 'http';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-function jsonResponse(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Range',
-    },
+function sendJson(res, data, status = 200) {
+  res.writeHead(status, {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Range',
+  });
+  res.end(JSON.stringify(data));
+}
+
+function runWorker(action, query) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('node', [
+      join(__dirname, 'search-worker.mjs'),
+      action,
+      query,
+    ], {
+      timeout: 45000,
+      cwd: __dirname,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', (d) => { stdout += d.toString(); });
+    child.stderr.on('data', (d) => { stderr += d.toString(); });
+
+    child.on('close', (code) => {
+      if (code === 0 && stdout) {
+        try { resolve(JSON.parse(stdout)); }
+        catch { resolve({ tracks: [] }); }
+      } else {
+        reject(new Error(stderr || `exit ${code}`));
+      }
+    });
+    child.on('error', reject);
   });
 }
 
-const server = Bun.serve({
-  port: 3010,
-  fetch(req) {
-    const url = new URL(req.url);
-    const path = url.pathname;
+const server = createServer(async (req, res) => {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const path = url.pathname;
 
-    // CORS preflight
-    if (req.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Range',
-      }});
+  // CORS preflight
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Range',
+    });
+    res.end();
+    return;
+  }
+
+  if (path === '/health') {
+    return sendJson(res, { status: 'ok', uptime: process.uptime() });
+  }
+
+  if (path === '/search') {
+    const q = url.searchParams.get('q');
+    if (!q?.trim()) return sendJson(res, { error: 'Missing query' }, 400);
+    try {
+      console.log(`[YT-Proxy] Searching: "${q.trim()}"`);
+      const result = await runWorker('search', q.trim());
+      console.log(`[YT-Proxy] Found ${result.tracks?.length ?? 0} tracks`);
+      return sendJson(res, result);
+    } catch (err) {
+      console.error('[YT-Proxy] Search error:', err.message);
+      return sendJson(res, { error: err.message.substring(0, 200) }, 500);
     }
+  }
 
-    // Health check
-    if (path === '/health') {
-      return jsonResponse({ status: 'ok', uptime: process.uptime() });
+  if (path === '/resolve') {
+    const q = url.searchParams.get('q');
+    if (!q?.trim()) return sendJson(res, { error: 'Missing query' }, 400);
+    try {
+      console.log(`[YT-Proxy] Resolving: "${q.trim()}"`);
+      const result = await runWorker('resolve', q.trim());
+      return sendJson(res, result);
+    } catch (err) {
+      console.error('[YT-Proxy] Resolve error:', err.message);
+      return sendJson(res, { error: err.message.substring(0, 200) }, 500);
     }
+  }
 
-    // Search
-    if (path === '/search') {
-      const q = url.searchParams.get('q');
-      if (!q?.trim()) return jsonResponse({ error: 'Missing query' }, 400);
-
-      try {
-        const result = execSync(
-          `node "${join(__dirname, 'search-worker.mjs')}" search "${q.replace(/"/g, '\\"')}"`,
-          { timeout: 30000, encoding: 'utf8' }
-        );
-        return jsonResponse(JSON.parse(result));
-      } catch (err) {
-        const errorMsg = err.stderr?.toString() || err.message;
-        console.error('[YT-Proxy] Search error:', errorMsg);
-        return jsonResponse({ error: errorMsg.substring(0, 200) }, 500);
-      }
-    }
-
-    // Resolve
-    if (path === '/resolve') {
-      const q = url.searchParams.get('q');
-      if (!q?.trim()) return jsonResponse({ error: 'Missing query' }, 400);
-
-      try {
-        const result = execSync(
-          `node "${join(__dirname, 'search-worker.mjs')}" resolve "${q.replace(/"/g, '\\"')}"`,
-          { timeout: 30000, encoding: 'utf8' }
-        );
-        return jsonResponse(JSON.parse(result));
-      } catch (err) {
-        const errorMsg = err.stderr?.toString() || err.message;
-        console.error('[YT-Proxy] Resolve error:', errorMsg);
-        return jsonResponse({ error: errorMsg.substring(0, 200) }, 500);
-      }
-    }
-
-    return jsonResponse({ error: 'Not found' }, 404);
-  },
+  sendJson(res, { error: 'Not found' }, 404);
 });
 
-console.log(`[YT-Proxy] Server running at http://localhost:3010`);
+server.listen(3010, () => {
+  console.log(`[YT-Proxy] Server running at http://localhost:3010`);
+});

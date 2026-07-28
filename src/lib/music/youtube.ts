@@ -1,8 +1,7 @@
 // ============================================================
-// youtube.ts — YouTube search via proxy service
-// All search/resolve requests go through the mini-service on port 3010.
-// Playback uses YouTube IFrame Player API (client-side), so no
-// stream URL fetching is needed.
+// youtube.ts — YouTube search via local SvelteKit API route
+// Uses a pre-built static cache of YouTube search results.
+// Playback uses YouTube IFrame Player API (client-side).
 // ============================================================
 
 import type { Track } from './player-store.svelte.js';
@@ -16,14 +15,12 @@ export interface YTSearchResult {
   videoUrl: string;
 }
 
-const PROXY_BASE = '/?XTransformPort=3010';
-
-/** Search YouTube for music tracks */
+/** Search YouTube for music tracks via local API */
 export async function searchMusic(query: string): Promise<YTSearchResult[]> {
   if (!query.trim()) return [];
 
   try {
-    const res = await fetch(`${PROXY_BASE}/search?q=${encodeURIComponent(query.trim())}`);
+    const res = await fetch(`/api/music/search?q=${encodeURIComponent(query.trim())}`);
     if (!res.ok) throw new Error(`Search failed: ${res.status}`);
     const data = await res.json();
     return (data.tracks ?? []) as YTSearchResult[];
@@ -33,27 +30,37 @@ export async function searchMusic(query: string): Promise<YTSearchResult[]> {
   }
 }
 
-/** Resolve a query (URL or search term) to a single track */
+/** Resolve a query to a single track */
 export async function resolveTrack(input: string): Promise<Track | null> {
   const trimmed = input.trim();
   if (!trimmed) return null;
 
-  try {
-    const res = await fetch(`${PROXY_BASE}/resolve?q=${encodeURIComponent(trimmed)}`);
-    if (!res.ok) return null;
-    const data = await res.json();
+  // Extract video ID from URL
+  const videoId = extractVideoId(trimmed);
+  if (videoId) {
     return {
-      id: data.id,
-      title: data.title,
-      artist: data.artist,
-      duration: data.duration ?? 0,
-      thumbnail: data.thumbnail ?? '',
-      url: data.videoUrl ?? `https://www.youtube.com/watch?v=${data.id}`,
+      id: videoId,
+      title: extractTitleFromUrl(trimmed) || 'YouTube Video',
+      artist: '',
+      duration: 0,
+      thumbnail: `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`,
+      url: `https://www.youtube.com/watch?v=${videoId}`,
     };
-  } catch (err) {
-    console.error('[YouTube] Resolve failed:', err);
-    return null;
   }
+
+  // Search and return first result
+  const results = await searchMusic(trimmed);
+  if (results.length === 0) return null;
+
+  const r = results[0];
+  return {
+    id: r.id,
+    title: r.title,
+    artist: r.artist,
+    duration: r.duration,
+    thumbnail: r.thumbnail,
+    url: r.videoUrl,
+  };
 }
 
 /** Convert a YTSearchResult to a Track */
@@ -68,5 +75,15 @@ export function ytResultToTrack(r: YTSearchResult): Track {
   };
 }
 
-/** No-op — kept for API compatibility */
+/** No-op */
 export function clearCaches(): void {}
+
+// ── Helpers ──
+function extractVideoId(input: string): string | null {
+  const m = input.trim().match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/);
+  return m ? m[1] : (/^([a-zA-Z0-9_-]{11})$/.test(input.trim()) ? input.trim() : null);
+}
+
+function extractTitleFromUrl(url: string): string | null {
+  return null; // We don't have a way to get title from URL without an API
+}

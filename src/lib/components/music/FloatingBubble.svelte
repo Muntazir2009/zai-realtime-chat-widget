@@ -1,8 +1,7 @@
 <script lang="ts">
   /**
-   * FloatingBubble — Premium draggable orb that expands into MiniPlayer.
-   * Lazy loads the player module on first tap.
-   * Monochrome, matte, premium aesthetic.
+   * FloatingBubble — Premium 44px draggable orb that expands into MiniPlayer.
+   * Monochrome matte aesthetic with waveform equalizer when playing.
    */
 
   import { playerStore } from '$lib/music/player-store.svelte.js';
@@ -33,8 +32,8 @@
   onMount(() => {
     if (!_positionInitialized && typeof window !== 'undefined') {
       _positionInitialized = true;
-      bubbleX = window.innerWidth - 56;
-      bubbleY = window.innerHeight - 160;
+      bubbleX = window.innerWidth - 60;
+      bubbleY = window.innerHeight - 170;
     }
   });
 
@@ -97,9 +96,9 @@
     const midX = window.innerWidth / 2;
     const pad = 14;
     const minY = 60;
-    const maxY = window.innerHeight - 100;
+    const maxY = window.innerHeight - 110;
 
-    bubbleX = bubbleX < midX ? pad : window.innerWidth - 48 - pad;
+    bubbleX = bubbleX < midX ? pad : window.innerWidth - 52 - pad;
     bubbleY = Math.max(minY, Math.min(maxY, bubbleY));
   }
 
@@ -107,16 +106,16 @@
   const progress = $derived(
     playerStore.duration > 0 ? playerStore.currentTime / playerStore.duration : 0
   );
-  const circumference = 2 * Math.PI * 17;
+  const circumference = 2 * Math.PI * 19;
 
   // ── Computed expanded position (keep near bubble, clamped to viewport) ──
   const expandedX = $derived.by(() => {
     if (typeof window === 'undefined') return 0;
-    return Math.max(12, Math.min(bubbleX - 118, window.innerWidth - 292));
+    return Math.max(12, Math.min(bubbleX - 126, window.innerWidth - 320));
   });
   const expandedY = $derived.by(() => {
     if (typeof window === 'undefined') return 0;
-    return Math.max(12, Math.min(bubbleY - 180, window.innerHeight - 440));
+    return Math.max(12, Math.min(bubbleY - 200, window.innerHeight - 480));
   });
 </script>
 
@@ -133,17 +132,17 @@
   >
     <!-- Progress ring -->
     {#if hasTrack}
-      <svg class="fb-ring" viewBox="0 0 40 40">
+      <svg class="fb-ring" viewBox="0 0 44 44">
         <circle
-          cx="20" cy="20" r="17"
+          cx="22" cy="22" r="19"
           fill="none"
           stroke="var(--text-primary)"
           stroke-width="1.5"
           stroke-dasharray={circumference}
           stroke-dashoffset={circumference * (1 - progress)}
           stroke-linecap="round"
-          transform="rotate(-90 20 20)"
-          opacity="0.25"
+          transform="rotate(-90 22 22)"
+          opacity="0.3"
         />
       </svg>
     {/if}
@@ -156,20 +155,21 @@
     >
       {#if hasTrack && playerStore.currentTrack?.thumbnail}
         <img class="fb-thumb" src={playerStore.currentTrack.thumbnail} alt="" />
+        <!-- Waveform overlay when playing -->
+        {#if isPlaying}
+          <span class="fb-wave-wrap">
+            <span class="fb-wave"><span></span><span></span><span></span><span></span><span></span></span>
+          </span>
+        {/if}
       {:else}
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M9 18V5l12-2v13"/>
           <circle cx="6" cy="18" r="3"/>
           <circle cx="18" cy="16" r="3"/>
         </svg>
       {/if}
     </button>
-
-    <!-- Pulse dot when playing -->
-    {#if isPlaying}
-      <span class="fb-dot"></span>
-    {/if}
   </div>
 {/if}
 
@@ -196,8 +196,8 @@
     top: 0;
     left: 0;
     z-index: 200;
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     touch-action: none;
     -webkit-user-select: none;
     user-select: none;
@@ -212,17 +212,18 @@
 
   /* ── Bubble body ── */
   .fb-body {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--bg-elevated, #1a1a1a);
-    border: 1px solid var(--border-subtle, rgba(255,255,255,0.08));
+    background: var(--bg-elevated, #181818);
+    border: 1px solid var(--border-subtle, rgba(255,255,255,0.07));
     box-shadow:
-      0 1px 3px rgba(0,0,0,0.12),
-      0 4px 12px rgba(0,0,0,0.08);
+      0 1px 2px rgba(0,0,0,0.08),
+      0 4px 16px rgba(0,0,0,0.14),
+      0 0 0 1px rgba(255,255,255,0.02);
     color: var(--text-secondary, #888);
     overflow: hidden;
     cursor: grab;
@@ -235,16 +236,16 @@
   .fb-body:active {
     cursor: grabbing;
     box-shadow:
-      0 2px 6px rgba(0,0,0,0.15),
-      0 8px 24px rgba(0,0,0,0.12);
+      0 2px 8px rgba(0,0,0,0.18),
+      0 8px 28px rgba(0,0,0,0.16);
     transform: scale(0.95);
   }
 
   .fb-dragging .fb-body {
     box-shadow:
-      0 4px 12px rgba(0,0,0,0.2),
-      0 12px 32px rgba(0,0,0,0.15);
-    transform: scale(1.05);
+      0 4px 16px rgba(0,0,0,0.24),
+      0 16px 40px rgba(0,0,0,0.18);
+    transform: scale(1.06);
     transition: box-shadow 100ms, transform 100ms;
   }
 
@@ -252,7 +253,42 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
-    border-radius: 50%;
+  }
+
+  /* ── Waveform overlay ── */
+  .fb-wave-wrap {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.45);
+  }
+
+  .fb-wave {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    height: 18px;
+  }
+
+  .fb-wave span {
+    display: block;
+    width: 2.5px;
+    border-radius: 2px;
+    background: var(--text-primary, #fff);
+    animation: wavePulse 1.2s ease-in-out infinite;
+  }
+
+  .fb-wave span:nth-child(1) { height: 30%; animation-delay: 0ms; }
+  .fb-wave span:nth-child(2) { height: 70%; animation-delay: 100ms; }
+  .fb-wave span:nth-child(3) { height: 100%; animation-delay: 200ms; }
+  .fb-wave span:nth-child(4) { height: 50%; animation-delay: 300ms; }
+  .fb-wave span:nth-child(5) { height: 80%; animation-delay: 150ms; }
+
+  @keyframes wavePulse {
+    0%, 100% { transform: scaleY(0.4); opacity: 0.7; }
+    50% { transform: scaleY(1); opacity: 1; }
   }
 
   /* ── Progress ring ── */
@@ -260,28 +296,9 @@
     position: absolute;
     top: 0;
     left: 0;
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     pointer-events: none;
-  }
-
-  /* ── Pulse indicator ── */
-  .fb-dot {
-    position: absolute;
-    bottom: 0;
-    right: 0;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--text-primary, #fff);
-    opacity: 0.6;
-    animation: dotPulse 2.4s ease-in-out infinite;
-    pointer-events: none;
-  }
-
-  @keyframes dotPulse {
-    0%, 100% { transform: scale(1); opacity: 0.6; }
-    50% { transform: scale(1.4); opacity: 0.2; }
   }
 
   /* ── Expanded player wrapper ── */
@@ -295,29 +312,30 @@
 
   /* ── Loading state ── */
   .fp-loading {
-    width: 268px;
-    height: 180px;
+    width: 300px;
+    height: 200px;
     display: flex;
     align-items: center;
     justify-content: center;
     border-radius: 20px;
-    background: var(--bg-elevated, #1a1a1a);
-    border: 1px solid var(--border-subtle, rgba(255,255,255,0.08));
+    background: var(--bg-elevated, #181818);
+    border: 1px solid var(--border-subtle, rgba(255,255,255,0.07));
     box-shadow:
-      0 4px 16px rgba(0,0,0,0.12),
-      0 16px 48px rgba(0,0,0,0.10);
-    animation: fpIn 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+      0 2px 4px rgba(0,0,0,0.06),
+      0 8px 24px rgba(0,0,0,0.14),
+      0 0 0 1px rgba(255,255,255,0.02);
+    animation: fpIn 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 
   @keyframes fpIn {
-    from { opacity: 0; transform: scale(0.92) translateY(6px); }
+    from { opacity: 0; transform: scale(0.92) translateY(10px); }
     to   { opacity: 1; transform: scale(1) translateY(0); }
   }
 
   .fp-spinner {
-    width: 18px;
-    height: 18px;
-    border: 2px solid var(--border-subtle, rgba(255,255,255,0.1));
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--border-subtle, rgba(255,255,255,0.08));
     border-top-color: var(--text-primary, #fff);
     border-radius: 50%;
     animation: spin 700ms linear infinite;

@@ -1,1 +1,23 @@
+Listening 3010
+Request: GET /search
+Spawning worker: search hello
+Worker done, code: 0 stdout len: 4575 stderr: 
 [YT-Proxy] Server running at http://localhost:3010
+[YT-Proxy] Server running at http://localhost:3010
+[YT-Proxy] Searching: "hello"
+[YT-Proxy] Found 15 tracks
+[YT-Cache] Server running at http://localhost:3010
+[Cache] Miss, searching: "hello"
+[YT-Proxy] Pre-warming 8 queries...
+  "hello": 15 tracks
+  "music": 15 tracks
+  "top hits": 15 tracks
+  "trending": 15 tracks
+  "pop": 15 tracks
+  "rock": 15 tracks
+  "lofi": 15 tracks
+  "edm": 15 tracks
+[YT-Proxy] Cache warmed
+[YT-Proxy] Cached server running at http://localhost:3010 (8 queries cached)
+[YT-Proxy] Loaded 8 cached queries
+[YT-Proxy] Cached server running at http://localhost:3010 (8 queries cached)
