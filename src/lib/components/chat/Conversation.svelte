@@ -25,6 +25,7 @@
   import { format, formatDistanceToNow, isToday, isYesterday, startOfDay } from 'date-fns';
   import EasterEggFx from './EasterEggFx.svelte';
   import WallpaperPicker from './WallpaperPicker.svelte';
+  import { tick } from 'svelte';
 
   let messagesContainer: HTMLDivElement | undefined = $state();
   let showMenu = $state(false);
@@ -199,18 +200,10 @@
     }
   });
 
-  // ── Typing names — uses $state+$effect for reliable cross-module reactivity ──
-  let typingNames: string[] = $state([]);
-  $effect(() => {
-    if (!chatStore.activeChatId || !authStore.user) {
-      typingNames = [];
-      return;
-    }
-    const id = chatStore.activeChatId;
-    // Read the map reference to establish dependency
-    const map = chatStore.typingDisplayNames;
-    typingNames = map.get(id) ?? [];
-  });
+  // ── Typing names — read directly from chatStore.activeTypingNames ──
+  // This is a simple $state<string[]> that gets reassigned on every typing
+  // event, guaranteeing reliable Svelte 5 reactivity.
+  let typingNames = $derived(chatStore.activeTypingNames);
 
   let sortedPinned = $derived.by(() => {
     return Array.from(chatStore.pinnedMessages.entries())
@@ -866,7 +859,16 @@
     await chatStore.toggleStar(chatStore.activeChatId, msg);
   }
 
-  function handleEditMessage(msg: Message) { editingMsg = msg; editText = msg.c; }
+  function handleEditMessage(msg: Message) {
+    editingMsg = msg;
+    editText = msg.c;
+    // Focus edit textarea after DOM update
+    tick().then(() => {
+      const el = document.querySelector('.edit-input') as HTMLTextAreaElement | null;
+      el?.focus();
+      el?.setSelectionRange(el.value.length, el.value.length);
+    });
+  }
 
   // Screen-level reaction picker state
   let reactionPickerMsg: Message | null = $state(null);

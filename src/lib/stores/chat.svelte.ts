@@ -60,8 +60,10 @@ class ChatStore {
 
   // ---- Presence & typing ----
   presence: Map<string, PresenceState> = $state(new Map());
-  // Typing: simple reactive array per chat — reassigned on every change
-  // to guarantee Svelte 5 $derived triggers.
+  // Typing: simple reactive array for the ACTIVE chat only.
+  // Reassigned on every change to guarantee Svelte 5 reactivity.
+  activeTypingNames: string[] = $state([]);
+  // Keep a Map for non-active chats too (used by inbox preview if needed)
   typingDisplayNames: Map<string, string[]> = $state(new Map()); // chatId → [displayNames]
   private _typingUids: Map<string, Set<string>> = new Map(); // internal tracking (non-reactive)
 
@@ -354,6 +356,9 @@ class ChatStore {
     this.activeChatId = chatId;
     this.reactions = new Map();
 
+    // Refresh activeTypingNames from existing map (if typing was tracked before open)
+    this.activeTypingNames = (this.typingDisplayNames.get(chatId) ?? []).slice();
+
     const meta = this.chats.get(chatId);
     if (!meta) await this.fetchChatMeta(chatId);
 
@@ -427,6 +432,10 @@ class ChatStore {
       const msg: Message = { ...raw, edited: raw.edited ?? false };
       const idx = this.messages.findIndex((m) => m.id === msg.id);
       if (idx !== -1) {
+        const existing = this.messages[idx]!;
+        // Skip if the content already matches our optimistic update —
+        // prevents a visual flicker when our own edit echoes back from RTDB.
+        if (existing.c === msg.c && existing.edited === msg.edited) return;
         this.messages = this.messages.map((m) => (m.id === msg.id ? msg : m));
       }
     });
@@ -941,25 +950,33 @@ class ChatStore {
     }
   }
 
-  /** Sync the internal _typingUids set to the reactive typingDisplayNames map */
+  /** Sync the internal _typingUids set to the reactive typingDisplayNames map
+   *  AND the activeTypingNames array (for the currently active chat) */
   private _updateTypingDisplayNames(chatId: string): void {
     const uidSet = this._typingUids.get(chatId);
     const myUid = authStore.user?.id;
-    if (!uidSet || uidSet.size === 0) {
-      // Clear typing display
-      if (this.typingDisplayNames.has(chatId)) {
-        const m = new Map(this.typingDisplayNames);
-        m.delete(chatId);
-        this.typingDisplayNames = m;
-      }
-      return;
+    let names: string[] = [];
+    if (uidSet && uidSet.size > 0) {
+      names = Array.from(uidSet)
+        .filter(uid => uid !== myUid)
+        .map(uid => this.userDict.get(uid)?.displayName ?? 'Someone');
     }
-    const names = Array.from(uidSet)
-      .filter(uid => uid !== myUid)
-      .map(uid => this.userDict.get(uid)?.displayName ?? 'Someone');
+
+    // Update the Map (for inbox/other chats)
     const m = new Map(this.typingDisplayNames);
-    m.set(chatId, names);
+    if (names.length === 0) {
+      m.delete(chatId);
+    } else {
+      m.set(chatId, names);
+    }
     this.typingDisplayNames = m;
+
+    // Update the simple reactive array for the ACTIVE chat — this is what
+    // the Conversation component reads. Reassigning an array is the most
+    // reliable way to trigger Svelte 5 reactivity.
+    if (this.activeChatId === chatId) {
+      this.activeTypingNames = names.slice();
+    }
   }
 
   private clearTypingSafetyTimeout(chatId: string, uid: string): void {
@@ -987,9 +1004,12 @@ class ChatStore {
     }
     // Clear internal typing state
     this._typingUids.clear();
-    // Also clear the reactive display names so the UI updates immediately
+    // Clear the reactive state so the UI updates immediately
     if (this.typingDisplayNames.size > 0) {
       this.typingDisplayNames = new Map();
+    }
+    if (this.activeTypingNames.length > 0) {
+      this.activeTypingNames = [];
     }
   }
 
