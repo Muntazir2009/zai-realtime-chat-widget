@@ -2924,3 +2924,23 @@ Stage Summary:
 - Fully lazy loaded — youtubei.js only loads on first bubble tap
 - 7 slash commands integrated into InputBar
 - Monochrome premium design matching app aesthetic
+---
+Task ID: 14
+Agent: Main Agent
+Task: Fix floating music player not visible — move to page level
+
+Work Log:
+- Diagnosed issue: FloatingBubble was nested inside Conversation.svelte, which only renders when view === 'conversation'
+- When user was on chat list, global, or settings tabs, the bubble was completely invisible
+- Moved FloatingBubble dynamic import from Conversation.svelte to +page.svelte (page level)
+- Guarded with `view !== 'loading' && view !== 'auth'` so it only shows for authenticated users
+- Fixed Svelte 5 reactivity warning: `MiniPlayerComponent` changed from plain `let` to `$state()`
+- Fixed `svelte:component` deprecation (replaced with Svelte 5 dynamic component syntax)
+- Fixed self-closing tags on non-void HTML elements (div, span)
+- Verified via agent-browser that page renders correctly (auth screen loads, bubble hidden on auth)
+- Committed as 290f537f and pushed to origin/main
+
+Stage Summary:
+- FloatingBubble now renders at page level, visible on all authenticated views
+- Previously was only visible inside Conversation (when a chat was actively open)
+- Key files modified: +page.svelte, Conversation.svelte, FloatingBubble.svelte
