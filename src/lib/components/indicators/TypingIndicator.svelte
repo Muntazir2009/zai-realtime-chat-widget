@@ -12,7 +12,7 @@
   // Show IMMEDIATELY when typing starts (no show-debounce) so the indicator
   // is never missed for brief typing bursts. Keep a hide-debounce so a
   // momentary stop/resume doesn't flicker.
-  let visible = $state(usernames.length > 0);
+  let visible = $state(false);
   let hideTimer: ReturnType<typeof setTimeout> | null = null;
 
   const HIDE_DELAY = 600;

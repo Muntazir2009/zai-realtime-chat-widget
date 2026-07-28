@@ -2896,3 +2896,31 @@ Stage Summary:
 - Typing indicator should now be bulletproof: simple array reassignment, no Map.get() dependency issues
 - Edit no longer flickers: RTDB echo is detected and skipped
 - Toasts are now slim, elegant bars — fast, minimal, professional
+---
+Task ID: 14
+Agent: Main Agent
+Task: Add floating music player with YouTube search, slash commands, lazy loading
+
+Work Log:
+- Installed youtubei.js@17.2.0
+- Created src/lib/music/ module: player-store.svelte.ts, audio.ts, youtube.ts, music-utils.ts
+- Created src/lib/components/music/ module: FloatingBubble.svelte, MiniPlayer.svelte, SearchSheet.svelte, QueuePanel.svelte
+- Audio service: singleton HTMLAudioElement, rAF time loop, stream URL playback
+- YouTube service: lazy Innertube init, search with 50-entry cache, audio stream extraction
+- Player store: Svelte 5 runes, reactive state for status/track/queue/progress/volume/search
+- FloatingBubble: draggable orb, edge-snapping, SVG progress ring, lazy MiniPlayer load on first tap
+- MiniPlayer: monochrome matte card, album art, controls, scrubbing progress bar, tab system
+- SearchSheet: debounced search (350ms), thumbnail results, tap-to-play
+- QueuePanel: numbered list, active track highlight, remove/clear, tap to play
+- Slash commands in InputBar: /play, /queue, /pause, /resume, /skip, /nowplaying, /volume
+- Integrated FloatingBubble into Conversation.svelte with dynamic import
+- Design: monochrome, matte surfaces, subtle shadows, thin borders, premium easing
+- Fixed TypingIndicator $state warning
+- Build passes, all new files modular and isolated from chat UI
+
+Stage Summary:
+- Complete music player feature: floating bubble → mini player → search/queue
+- YouTube-based music search and playback via youtubei.js
+- Fully lazy loaded — youtubei.js only loads on first bubble tap
+- 7 slash commands integrated into InputBar
+- Monochrome premium design matching app aesthetic
