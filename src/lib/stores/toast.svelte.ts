@@ -44,8 +44,8 @@ class ToastStore {
   ): void {
     if (typeof requestAnimationFrame === 'undefined' || !message.trim()) return;
 
-    // Truncate long messages for bar style
-    const truncated = message.length > 80 ? message.slice(0, 77) + '...' : message;
+    // Truncate long messages for Dynamic Island pill style
+    const truncated = message.length > 50 ? message.slice(0, 47) + '…' : message;
 
     // If a toast with the same message is already visible, reset it
     const existing = this.toasts.find(
