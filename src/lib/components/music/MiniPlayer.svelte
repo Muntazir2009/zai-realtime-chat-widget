@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
-   * MiniPlayer — Premium floating player with segmented tab navigation.
-   * Monochrome, matte surfaces, clear visual hierarchy.
+   * MiniPlayer — Premium floating music player.
+   * Clean layout: album art, track info, controls, tabs, panel.
    */
 
   import { playerStore } from '$lib/music/player-store.svelte.js';
@@ -11,7 +11,6 @@
   import QueuePanel from './QueuePanel.svelte';
   import { onMount } from 'svelte';
 
-  // Ensure the hidden YouTube iframe container is created on mount
   onMount(() => {
     audioService.ensureContainer();
   });
@@ -25,13 +24,16 @@
     if (!progressRef || playerStore.duration <= 0) return;
     e.stopPropagation();
     isDraggingProgress = true;
-    const rect = progressRef.getBoundingClientRect();
-    dragRatio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    playerStore.seek(dragRatio);
+    updateProgress(e);
   }
 
   function handleProgressMove(e: PointerEvent) {
     if (!isDraggingProgress || !progressRef) return;
+    updateProgress(e);
+  }
+
+  function updateProgress(e: PointerEvent) {
+    if (!progressRef) return;
     const rect = progressRef.getBoundingClientRect();
     dragRatio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     playerStore.seek(dragRatio);
@@ -55,71 +57,48 @@
 
   const isPlaying = $derived(playerStore.status === 'playing');
   const isLoading = $derived(playerStore.status === 'loading');
-  const statusLabel = $derived.by(() => {
-    switch (playerStore.status) {
-      case 'loading': return 'Loading…';
-      case 'playing': return 'Playing';
-      case 'paused': return 'Paused';
-      case 'error': return 'Error';
-      default: return 'Ready';
-    }
-  });
 </script>
 
 <svelte:window onpointermove={handleProgressMove} onpointerup={handleProgressUp} />
 
 <div class="mp">
-  <!-- ── Header bar ── -->
+  <!-- ── Header: close + track info ── -->
   <div class="mp-header">
-    <div class="mp-status-row">
-      {#if playerStore.currentTrack}
-        <div class="mp-art-wrap">
-          <img
-            class="mp-art"
-            class:mp-art-spin={isPlaying}
-            src={playerStore.currentTrack.thumbnail}
-            alt=""
-          />
-          {#if isPlaying}
-            <span class="mp-art-wave">
-              <span></span><span></span><span></span><span></span>
-            </span>
-          {/if}
+    <button class="mp-close" onclick={() => playerStore.collapse()} aria-label="Close player">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+      </svg>
+    </button>
+
+    {#if playerStore.currentTrack}
+      <div class="mp-track-info">
+        <img class="mp-thumb" src={playerStore.currentTrack.thumbnail} alt="" />
+        <div class="mp-meta">
+          <p class="mp-title">{truncate(playerStore.currentTrack.title, 30)}</p>
+          <p class="mp-artist">{playerStore.currentTrack.artist || 'Unknown Artist'}</p>
         </div>
-        <div class="mp-info">
-          <p class="mp-title">{truncate(playerStore.currentTrack.title, 32)}</p>
-          <p class="mp-artist">{playerStore.currentTrack.artist}</p>
-        </div>
-      {:else}
-        <div class="mp-art-wrap mp-art-empty">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      </div>
+    {:else}
+      <div class="mp-track-info">
+        <div class="mp-thumb-empty">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
           </svg>
         </div>
-        <div class="mp-info">
-          <p class="mp-title mp-title-empty">No track playing</p>
-          <p class="mp-artist mp-artist-empty">Search music to get started</p>
+        <div class="mp-meta">
+          <p class="mp-title mp-title-dim">No track playing</p>
+          <p class="mp-artist">Search to get started</p>
         </div>
-      {/if}
-    </div>
-
-    <!-- Close button -->
-    <button class="mp-close" onclick={() => playerStore.collapse()} aria-label="Close player">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-        stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-        <line x1="18" y1="6" x2="6" y2="18"/>
-        <line x1="6" y1="6" x2="18" y2="18"/>
-      </svg>
-    </button>
+      </div>
+    {/if}
   </div>
 
   <!-- ── Progress bar ── -->
   {#if playerStore.currentTrack}
-    <div class="mp-prog" bind:this={progressRef} onpointerdown={handleProgressDown}>
-      <div class="mp-prog-bar">
-        <div class="mp-prog-fill" style="width: {progress * 100}%;"></div>
-        <div class="mp-prog-thumb" style="left: {progress * 100}%;"></div>
+    <div class="mp-prog-wrap" bind:this={progressRef} onpointerdown={handleProgressDown}>
+      <div class="mp-prog-track">
+        <div class="mp-prog-fill" style="width: {progress * 100}%"></div>
+        <div class="mp-prog-thumb-el" style="left: {progress * 100}%"></div>
       </div>
       <div class="mp-times">
         <span>{formatDuration(playerStore.currentTime)}</span>
@@ -131,109 +110,98 @@
   {/if}
 
   <!-- ── Transport controls ── -->
-  <div class="mp-controls">
-    <!-- Previous -->
-    <button class="mp-btn mp-btn-secondary" onclick={() => playerStore.playPrevious()} aria-label="Previous track">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+  <div class="mp-transport">
+    <button class="mp-btn mp-btn-sm" onclick={() => playerStore.playPrevious()} aria-label="Previous">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
         <path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/>
       </svg>
     </button>
 
-    <!-- Play / Pause (primary) -->
-    <button class="mp-btn mp-btn-primary" onclick={() => playerStore.togglePlayPause()} aria-label={isPlaying ? 'Pause' : 'Play'}>
-      {#if isPlaying}
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-          <rect x="6" y="4" width="4" height="16" rx="1"/>
-          <rect x="14" y="4" width="4" height="16" rx="1"/>
+    <button class="mp-btn mp-btn-play" onclick={() => playerStore.togglePlayPause()} aria-label={isPlaying ? 'Pause' : 'Play'}>
+      {#if isLoading}
+        <span class="mp-spinner"></span>
+      {:else if isPlaying}
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <rect x="6" y="4" width="4" height="16" rx="1.5"/>
+          <rect x="14" y="4" width="4" height="16" rx="1.5"/>
         </svg>
-      {:else if isLoading}
-        <span class="mp-btn-loader"></span>
       {:else}
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-          <polygon points="7 4 20 12 7 20"/>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+          <polygon points="8 5 20 12 8 19"/>
         </svg>
       {/if}
     </button>
 
-    <!-- Next -->
-    <button class="mp-btn mp-btn-secondary" onclick={() => playerStore.playNext()} aria-label="Next track">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+    <button class="mp-btn mp-btn-sm" onclick={() => playerStore.playNext()} aria-label="Next">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
         <path d="M16 18h2V6h-2zm-2-6L5.5 6v12z"/>
       </svg>
     </button>
   </div>
 
-  <!-- ── Segmented tab control ── -->
-  <div class="mp-seg">
-    <button
-      class="mp-seg-btn"
-      class:mp-seg-on={currentTab === 'player'}
-      onclick={() => { playerStore.isSearchOpen = false; playerStore.isQueueOpen = false; }}
-    >
-      Now Playing
+  <!-- ── Tab navigation ── -->
+  <div class="mp-tabs">
+    <button class="mp-tab" class:mp-tab-active={currentTab === 'player'}
+      onclick={() => { playerStore.isSearchOpen = false; playerStore.isQueueOpen = false; }}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none"/>
+      </svg>
+      <span>Now</span>
     </button>
-    <button
-      class="mp-seg-btn"
-      class:mp-seg-on={currentTab === 'search'}
-      onclick={() => playerStore.toggleSearch()}
-    >
-      Search
+    <button class="mp-tab" class:mp-tab-active={currentTab === 'search'} onclick={() => playerStore.toggleSearch()}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <span>Search</span>
     </button>
-    <button
-      class="mp-seg-btn"
-      class:mp-seg-on={currentTab === 'queue'}
-      onclick={() => playerStore.toggleQueue()}
-    >
-      Queue{#if playerStore.queue.length > 0} ({playerStore.queue.length}){/if}
+    <button class="mp-tab" class:mp-tab-active={currentTab === 'queue'} onclick={() => playerStore.toggleQueue()}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+      </svg>
+      <span>Queue{#if playerStore.queue.length > 0} ({playerStore.queue.length}){/if}</span>
     </button>
   </div>
 
-  <!-- ── Panel area ── -->
+  <!-- ── Panel ── -->
   <div class="mp-panel">
     {#if playerStore.isSearchOpen}
       <SearchSheet />
     {:else if playerStore.isQueueOpen}
       <QueuePanel />
-    {:else}
-      <div class="mp-now-playing">
-        {#if playerStore.currentTrack}
-          <div class="mp-np-art">
-            <img
-              src={playerStore.currentTrack.thumbnail}
-              alt=""
-              class:mp-np-art-spin={isPlaying}
-            />
-            {#if isPlaying}
-              <span class="mp-np-eq">
-                <span></span><span></span><span></span><span></span><span></span>
-              </span>
-            {/if}
-          </div>
-          <div class="mp-np-details">
-            <p class="mp-np-title">{playerStore.currentTrack.title}</p>
-            <p class="mp-np-artist">{playerStore.currentTrack.artist}</p>
-            <p class="mp-np-status">{statusLabel}</p>
-          </div>
-        {:else}
-          <div class="mp-np-empty">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"
-              style="opacity: 0.2;">
-              <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
-            </svg>
-            <span>No music playing</span>
-            <span class="mp-np-hint">Search for songs to start listening</span>
-          </div>
+    {:else if playerStore.currentTrack}
+      <div class="mp-now">
+        <div class="mp-now-art">
+          <img src={playerStore.currentTrack.thumbnail} alt="" class:spinning={isPlaying} />
+          {#if isPlaying}
+            <div class="mp-now-eq">
+              <i></i><i></i><i></i><i></i><i></i>
+            </div>
+          {/if}
+        </div>
+        <p class="mp-now-title">{playerStore.currentTrack.title}</p>
+        <p class="mp-now-artist">{playerStore.currentTrack.artist || 'Unknown Artist'}</p>
+        {#if playerStore.status === 'loading'}
+          <p class="mp-now-status">Buffering…</p>
+        {:else if playerStore.status === 'paused'}
+          <p class="mp-now-status">Paused</p>
+        {:else if playerStore.status === 'playing'}
+          <p class="mp-now-status">Playing</p>
         {/if}
+      </div>
+    {:else}
+      <div class="mp-empty-panel">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.12">
+          <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+        </svg>
+        <span>Search for songs to start listening</span>
       </div>
     {/if}
   </div>
 
-  <!-- ── Error banner ── -->
+  <!-- ── Error ── -->
   {#if playerStore.status === 'error' && playerStore.errorMessage}
     <div class="mp-error">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-        stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
         <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
       </svg>
       <span>{playerStore.errorMessage}</span>
@@ -246,47 +214,37 @@
   .mp {
     display: flex;
     flex-direction: column;
-    width: 300px;
-    max-height: 460px;
+    width: 310px;
+    max-height: 480px;
     border-radius: 20px;
-    background: var(--bg-elevated, #181818);
+    background: var(--bg-elevated, #1a1a1a);
     border: 1px solid var(--border-subtle, rgba(255,255,255,0.06));
     box-shadow:
-      0 1px 2px rgba(0,0,0,0.06),
-      0 4px 12px rgba(0,0,0,0.10),
-      0 16px 48px rgba(0,0,0,0.14),
-      0 0 0 1px rgba(255,255,255,0.02);
+      0 2px 4px rgba(0,0,0,0.06),
+      0 8px 24px rgba(0,0,0,0.12),
+      0 24px 64px rgba(0,0,0,0.16);
     overflow: hidden;
-    position: relative;
-    animation: mpEnter 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: mpSlideIn 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 
-  @keyframes mpEnter {
-    from { opacity: 0; transform: scale(0.93) translateY(12px); }
-    to   { opacity: 1; transform: scale(1) translateY(0); }
+  @keyframes mpSlideIn {
+    from { opacity: 0; transform: scale(0.94) translateY(8px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
   }
 
-  /* ── Header bar ── */
+  /* ── Header ── */
   .mp-header {
     display: flex;
     align-items: center;
-    padding: 12px 12px 10px 14px;
-    gap: 8px;
-  }
-
-  .mp-status-row {
-    display: flex;
-    align-items: center;
     gap: 10px;
-    flex: 1;
-    min-width: 0;
+    padding: 12px 12px 8px 14px;
   }
 
   .mp-close {
-    width: 32px;
-    height: 32px;
-    border-radius: 10px;
-    border: 1px solid var(--border-subtle, rgba(255,255,255,0.06));
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: none;
     background: var(--bg-surface, rgba(255,255,255,0.04));
     color: var(--text-tertiary, #666);
     display: flex;
@@ -294,88 +252,49 @@
     justify-content: center;
     cursor: pointer;
     flex-shrink: 0;
-    opacity: 0.7;
-    transition: opacity 150ms, background 150ms, color 150ms;
-    -webkit-tap-highlight-color: transparent;
+    transition: all 150ms;
     padding: 0;
     outline: none;
+    -webkit-tap-highlight-color: transparent;
   }
 
-  .mp-close:hover, .mp-close:active {
-    opacity: 1;
-    background: var(--border-subtle, rgba(255,255,255,0.10));
-    color: var(--text-primary, #fff);
-  }
+  .mp-close:hover { color: var(--text-secondary, #aaa); background: var(--bg-surface, rgba(255,255,255,0.08)); }
+  .mp-close:active { color: var(--text-primary, #fff); transform: scale(0.92); }
 
-  /* ── Album art ── */
-  .mp-art-wrap {
-    width: 44px;
-    height: 44px;
-    border-radius: 10px;
-    flex-shrink: 0;
-    overflow: hidden;
-    background: var(--bg-surface, rgba(255,255,255,0.04));
-    position: relative;
+  /* ── Track info in header ── */
+  .mp-track-info {
     display: flex;
     align-items: center;
-    justify-content: center;
-    color: var(--text-tertiary, #555);
-  }
-
-  .mp-art-empty {
-    border-radius: 50%;
-  }
-
-  .mp-art {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  .mp-art-spin {
-    animation: artRotate 12s linear infinite;
-  }
-
-  @keyframes artRotate { to { transform: rotate(360deg); } }
-
-  /* ── Small wave indicator on art ── */
-  .mp-art-wave {
-    position: absolute;
-    bottom: 2px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    align-items: center;
-    gap: 1.5px;
-    height: 10px;
-  }
-
-  .mp-art-wave span {
-    display: block;
-    width: 2px;
-    border-radius: 1px;
-    background: var(--text-primary, #fff);
-    animation: miniWave 0.9s ease-in-out infinite;
-  }
-
-  .mp-art-wave span:nth-child(1) { height: 30%; animation-delay: 0ms; }
-  .mp-art-wave span:nth-child(2) { height: 70%; animation-delay: 120ms; }
-  .mp-art-wave span:nth-child(3) { height: 100%; animation-delay: 240ms; }
-  .mp-art-wave span:nth-child(4) { height: 55%; animation-delay: 360ms; }
-
-  @keyframes miniWave {
-    0%, 100% { transform: scaleY(0.4); opacity: 0.8; }
-    50% { transform: scaleY(1); opacity: 1; }
-  }
-
-  /* ── Track info ── */
-  .mp-info {
+    gap: 10px;
     flex: 1;
     min-width: 0;
   }
 
+  .mp-thumb {
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    object-fit: cover;
+    flex-shrink: 0;
+    background: var(--bg-surface, rgba(255,255,255,0.04));
+  }
+
+  .mp-thumb-empty {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: var(--bg-surface, rgba(255,255,255,0.04));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-tertiary, #444);
+    flex-shrink: 0;
+  }
+
+  .mp-meta { flex: 1; min-width: 0; }
+
   .mp-title {
-    font-size: 13.5px;
+    font-size: 13px;
     font-weight: 600;
     line-height: 1.3;
     color: var(--text-primary, #fff);
@@ -385,66 +304,48 @@
     white-space: nowrap;
   }
 
-  .mp-title-empty {
-    color: var(--text-tertiary, #555);
-    font-weight: 500;
-    font-size: 13px;
-  }
+  .mp-title-dim { color: var(--text-tertiary, #555); font-weight: 500; }
 
   .mp-artist {
-    font-size: 12px;
-    font-weight: 400;
+    font-size: 11.5px;
     color: var(--text-tertiary, #666);
-    line-height: 1.3;
+    margin: 1px 0 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    margin: 2px 0 0;
   }
 
-  .mp-artist-empty {
-    color: var(--text-tertiary, #444);
-    font-size: 11px;
-  }
-
-  /* ── Progress bar ── */
-  .mp-prog {
-    padding: 2px 16px 0;
+  /* ── Progress ── */
+  .mp-prog-wrap {
+    padding: 4px 16px 0;
     cursor: pointer;
     touch-action: none;
-    -webkit-tap-highlight-color: transparent;
   }
 
-  .mp-prog-spacer {
-    height: 20px;
-  }
+  .mp-prog-spacer { height: 24px; }
 
-  .mp-prog-bar {
-    height: 4px;
-    border-radius: 4px;
-    background: var(--border-subtle, rgba(255,255,255,0.10));
+  .mp-prog-track {
+    height: 3px;
+    border-radius: 3px;
+    background: var(--bg-surface, rgba(255,255,255,0.08));
     position: relative;
-    transition: height 120ms ease;
+    transition: height 100ms;
   }
 
-  .mp-prog:active .mp-prog-bar {
-    height: 6px;
-  }
+  .mp-prog-wrap:active .mp-prog-track { height: 5px; }
 
   .mp-prog-fill {
     height: 100%;
-    border-radius: 4px;
+    border-radius: 3px;
     background: var(--text-primary, #fff);
-    opacity: 0.65;
-    transition: opacity 120ms;
+    opacity: 0.5;
+    transition: opacity 100ms;
     will-change: width;
   }
 
-  .mp-prog:active .mp-prog-fill {
-    opacity: 1;
-  }
+  .mp-prog-wrap:active .mp-prog-fill { opacity: 0.9; }
 
-  .mp-prog-thumb {
+  .mp-prog-thumb-el {
     position: absolute;
     top: 50%;
     width: 12px;
@@ -453,37 +354,34 @@
     background: var(--text-primary, #fff);
     transform: translate(-50%, -50%);
     opacity: 0;
-    transition: opacity 150ms ease;
-    box-shadow: 0 0 6px rgba(0,0,0,0.3);
+    transition: opacity 120ms;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
     pointer-events: none;
   }
 
-  .mp-prog:hover .mp-prog-thumb,
-  .mp-prog:active .mp-prog-thumb {
-    opacity: 1;
-  }
+  .mp-prog-wrap:hover .mp-prog-thumb-el,
+  .mp-prog-wrap:active .mp-prog-thumb-el { opacity: 1; }
 
   .mp-times {
     display: flex;
     justify-content: space-between;
-    padding-top: 5px;
+    padding-top: 4px;
   }
 
   .mp-times span {
-    font-size: 10.5px;
+    font-size: 10px;
     color: var(--text-tertiary, #555);
     font-variant-numeric: tabular-nums;
     font-weight: 500;
-    letter-spacing: 0.02em;
   }
 
   /* ── Transport controls ── */
-  .mp-controls {
+  .mp-transport {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 16px;
-    padding: 8px 16px 10px;
+    gap: 20px;
+    padding: 6px 16px 10px;
   }
 
   .mp-btn {
@@ -492,59 +390,42 @@
     justify-content: center;
     border: none;
     cursor: pointer;
-    border-radius: 50%;
-    transition: background 120ms, transform 120ms, opacity 120ms;
+    transition: all 120ms cubic-bezier(0.22, 1, 0.36, 1);
     -webkit-tap-highlight-color: transparent;
     padding: 0;
     outline: none;
   }
 
-  .mp-btn:active {
-    transform: scale(0.92);
+  .mp-btn:active { transform: scale(0.90); }
+
+  .mp-btn-sm {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-secondary, #999);
   }
 
-  /* Secondary buttons (prev/next) */
-  .mp-btn-secondary {
-    width: 40px;
-    height: 40px;
-    background: var(--bg-surface, rgba(255,255,255,0.05));
-    color: var(--text-secondary, #aaa);
-    border: 1px solid var(--border-subtle, rgba(255,255,255,0.06));
-  }
+  .mp-btn-sm:hover { color: var(--text-primary, #fff); background: var(--bg-surface, rgba(255,255,255,0.06)); }
+  .mp-btn-sm:active { color: var(--text-primary, #fff); background: var(--bg-surface, rgba(255,255,255,0.10)); transform: scale(0.90); }
 
-  .mp-btn-secondary:hover {
-    background: var(--border-subtle, rgba(255,255,255,0.10));
-    color: var(--text-primary, #fff);
-  }
-
-  .mp-btn-secondary:active {
-    background: var(--border-subtle, rgba(255,255,255,0.14));
-    transform: scale(0.92);
-  }
-
-  /* Primary button (play/pause) */
-  .mp-btn-primary {
-    width: 50px;
-    height: 50px;
+  .mp-btn-play {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
     background: var(--text-primary, #fff);
-    color: var(--bg-elevated, #181818);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15), 0 0 0 1px rgba(255,255,255,0.04);
+    color: var(--bg-elevated, #1a1a1a);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(255,255,255,0.06);
   }
 
-  .mp-btn-primary:hover {
-    filter: brightness(1.05);
-  }
+  .mp-btn-play:hover { filter: brightness(1.06); box-shadow: 0 4px 16px rgba(0,0,0,0.18); }
+  .mp-btn-play:active { filter: brightness(0.94); transform: scale(0.90); }
 
-  .mp-btn-primary:active {
-    opacity: 0.88;
-    transform: scale(0.92);
-  }
-
-  .mp-btn-loader {
-    width: 16px;
-    height: 16px;
+  .mp-spinner {
+    width: 18px;
+    height: 18px;
     border: 2px solid rgba(0,0,0,0.12);
-    border-top-color: rgba(0,0,0,0.65);
+    border-top-color: rgba(0,0,0,0.6);
     border-radius: 50%;
     animation: spin 600ms linear infinite;
     display: block;
@@ -552,48 +433,49 @@
 
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* ── Segmented tab control ── */
-  .mp-seg {
+  /* ── Tabs ── */
+  .mp-tabs {
     display: flex;
-    margin: 0 14px;
-    background: var(--bg-surface, rgba(255,255,255,0.04));
+    margin: 0 12px;
+    background: var(--bg-surface, rgba(255,255,255,0.03));
     border-radius: 10px;
     padding: 3px;
     gap: 2px;
   }
 
-  .mp-seg-btn {
+  .mp-tab {
     flex: 1;
-    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    height: 32px;
     border: none;
     border-radius: 8px;
     background: transparent;
-    color: var(--text-tertiary, #666);
-    font-size: 11.5px;
+    color: var(--text-tertiary, #555);
+    font-size: 11px;
     font-weight: 550;
     font-family: inherit;
     cursor: pointer;
-    transition: background 180ms ease, color 180ms ease;
+    transition: all 180ms ease;
     -webkit-tap-highlight-color: transparent;
-    padding: 0;
+    padding: 0 4px;
     outline: none;
   }
 
-  .mp-seg-btn:hover {
-    color: var(--text-secondary, #aaa);
-  }
+  .mp-tab:hover { color: var(--text-secondary, #999); }
+  .mp-tab:active { transform: scale(0.97); }
 
-  .mp-seg-on {
-    background: var(--bg-elevated, #222);
+  .mp-tab-active {
+    background: var(--bg-elevated, #252525);
     color: var(--text-primary, #fff);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.18);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
   }
 
-  .mp-seg-on:hover {
-    color: var(--text-primary, #fff);
-  }
+  .mp-tab-active:hover { color: var(--text-primary, #fff); }
 
-  /* ── Panel area ── */
+  /* ── Panel ── */
   .mp-panel {
     flex: 1;
     min-height: 0;
@@ -601,18 +483,18 @@
     overflow: hidden;
   }
 
-  /* ── Now playing view ── */
-  .mp-now-playing {
+  /* ── Now Playing ── */
+  .mp-now {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 16px 20px 12px;
-    gap: 12px;
+    padding: 12px 20px 10px;
+    gap: 8px;
   }
 
-  .mp-np-art {
-    width: 80px;
-    height: 80px;
+  .mp-now-art {
+    width: 72px;
+    height: 72px;
     border-radius: 16px;
     overflow: hidden;
     background: var(--bg-surface, rgba(255,255,255,0.04));
@@ -620,117 +502,102 @@
     position: relative;
   }
 
-  .mp-np-art img {
+  .mp-now-art img {
     width: 100%;
     height: 100%;
     object-fit: cover;
   }
 
-  .mp-np-art-spin {
-    animation: artRotate 12s linear infinite;
+  .mp-now-art img.spinning {
+    animation: artSpin 10s linear infinite;
   }
 
-  /* Wave equalizer overlay on now-playing art */
-  .mp-np-eq {
+  @keyframes artSpin { to { transform: rotate(360deg); } }
+
+  .mp-now-eq {
     position: absolute;
-    bottom: 6px;
+    bottom: 4px;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
-    align-items: center;
-    gap: 2.5px;
-    height: 16px;
+    align-items: flex-end;
+    gap: 2px;
+    height: 14px;
   }
 
-  .mp-np-eq span {
+  .mp-now-eq i {
     display: block;
-    width: 3px;
-    border-radius: 2px;
+    width: 2.5px;
+    border-radius: 1.5px;
     background: var(--text-primary, #fff);
-    animation: wavePulse 1.2s ease-in-out infinite;
-    box-shadow: 0 0 4px rgba(0,0,0,0.3);
+    animation: eqPulse 1s ease-in-out infinite;
   }
 
-  .mp-np-eq span:nth-child(1) { height: 30%; animation-delay: 0ms; }
-  .mp-np-eq span:nth-child(2) { height: 70%; animation-delay: 100ms; }
-  .mp-np-eq span:nth-child(3) { height: 100%; animation-delay: 200ms; }
-  .mp-np-eq span:nth-child(4) { height: 50%; animation-delay: 300ms; }
-  .mp-np-eq span:nth-child(5) { height: 80%; animation-delay: 150ms; }
+  .mp-now-eq i:nth-child(1) { height: 30%; animation-delay: 0ms; }
+  .mp-now-eq i:nth-child(2) { height: 75%; animation-delay: 120ms; }
+  .mp-now-eq i:nth-child(3) { height: 100%; animation-delay: 240ms; }
+  .mp-now-eq i:nth-child(4) { height: 50%; animation-delay: 80ms; }
+  .mp-now-eq i:nth-child(5) { height: 85%; animation-delay: 200ms; }
 
-  @keyframes wavePulse {
-    0%, 100% { transform: scaleY(0.35); opacity: 0.7; }
+  @keyframes eqPulse {
+    0%, 100% { transform: scaleY(0.3); opacity: 0.6; }
     50% { transform: scaleY(1); opacity: 1; }
   }
 
-  .mp-np-details {
-    text-align: center;
-    max-width: 100%;
-  }
-
-  .mp-np-title {
-    font-size: 14px;
+  .mp-now-title {
+    font-size: 13px;
     font-weight: 600;
     color: var(--text-primary, #fff);
+    text-align: center;
     margin: 0;
+    max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .mp-np-artist {
-    font-size: 12px;
+  .mp-now-artist {
+    font-size: 11.5px;
     color: var(--text-tertiary, #666);
-    margin: 3px 0 0;
+    margin: 0;
   }
 
-  .mp-np-status {
-    font-size: 10.5px;
+  .mp-now-status {
+    font-size: 10px;
     color: var(--text-tertiary, #444);
-    margin: 4px 0 0;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
     font-weight: 500;
+    margin: 0;
   }
 
-  /* ── Now playing empty state ── */
-  .mp-np-empty {
+  /* ── Empty panel ── */
+  .mp-empty-panel {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 6px;
-    padding: 16px 0;
-  }
-
-  .mp-np-empty > span {
-    font-size: 12px;
+    justify-content: center;
+    gap: 8px;
+    padding: 24px 16px;
     color: var(--text-tertiary, #555);
-    font-weight: 400;
+    font-size: 12px;
   }
 
-  .mp-np-hint {
-    font-size: 11px !important;
-    color: var(--text-tertiary, #3a3a3a) !important;
-    margin-top: -2px;
-  }
-
-  /* ── Error banner ── */
+  /* ── Error ── */
   .mp-error {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 10px 14px;
+    padding: 8px 14px;
     border-top: 1px solid rgba(239, 68, 68, 0.12);
-    background: rgba(239, 68, 68, 0.05);
+    background: rgba(239, 68, 68, 0.04);
   }
 
-  .mp-error svg {
-    color: var(--color-danger, #ef4444);
-    flex-shrink: 0;
-  }
+  .mp-error svg { color: #ef4444; flex-shrink: 0; }
 
   .mp-error span {
-    font-size: 11.5px;
-    color: var(--color-danger, #ef4444);
+    font-size: 11px;
+    color: #ef4444;
     line-height: 1.3;
   }
 </style>

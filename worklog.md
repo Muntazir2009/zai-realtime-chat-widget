@@ -3028,3 +3028,35 @@ Stage Summary:
 - Music playback uses YouTube IFrame Player API (from previous session)
 - All UI components redesigned with premium aesthetic
 - Committed as 34fe9939 and pushed
+
+---
+Task ID: music-search-fix-v2
+Agent: Main Agent
+Task: Fix music search "not found" error + improve player UI
+
+Work Log:
+- Diagnosed root cause: SvelteKit API route `/api/music/search` was failing because `readFileSync` with relative `__dirname` path couldn't resolve `search-cache.json` in Vite's bundled server output (path traversal from `.svelte-kit/output/` back to `src/lib/music/` fails)
+- This caused the API to throw on startup, returning a non-JSON error response to the browser
+- Browser's `fetch()` + `res.json()` threw `SyntaxError {}` because it got HTML error page instead of JSON
+- Fix 1: Rewrote `youtube.ts` to import `search-cache.json` directly as a client-side ES module import (Vite bundles JSON natively)
+- Search now runs 100% in the browser — no server API route needed at all
+- Added 5-level search: exact key → partial key → word-level key → track title+artist fuzzy → single-word track match
+- Fix 2: Rewrote `audio.ts` with YouTube IFrame API + automatic fallback to simple embed iframe
+- If the YT IFrame API script fails to load (sandbox network restrictions), it falls back to a simple `<iframe>` embed with autoplay
+- 8-second timeout on API script load, graceful degradation
+- Fix 3: Redesigned MiniPlayer.svelte with cleaner UI
+  - Tabs now have icons (play, search, list) alongside labels
+  - Close button moved to left side of header
+  - Track info in header row with album art
+  - Larger 52px play button with proper shadows
+  - Cleaner progress bar with hover-reveal thumb
+  - Fixed TypeScript error: `progressRef` null check
+- Removed broken API route dependency (kept +server.ts file but search no longer uses it)
+- Build passes: search-cache.json bundled as 223KB client chunk
+
+Stage Summary:
+- Search is now fully client-side — works even when dev server API routes fail
+- 42 pre-cached search categories covering popular music genres and artists
+- YouTube playback has automatic fallback for sandboxed environments
+- MiniPlayer UI redesigned with icon tabs and cleaner controls
+- Build verified: zero errors from modified files

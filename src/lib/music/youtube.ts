@@ -1,10 +1,12 @@
 // ============================================================
-// youtube.ts — YouTube search via local SvelteKit API route
-// Uses a pre-built static cache of YouTube search results.
+// youtube.ts — Client-side YouTube search via static cache
+// All search runs in the browser. No server API route needed.
 // Playback uses YouTube IFrame Player API (client-side).
 // ============================================================
 
 import type { Track } from './player-store.svelte.js';
+// @ts-expect-error — Vite handles JSON imports natively
+import searchCache from './search-cache.json';
 
 export interface YTSearchResult {
   id: string;
@@ -15,19 +17,86 @@ export interface YTSearchResult {
   videoUrl: string;
 }
 
-/** Search YouTube for music tracks via local API */
+type CacheEntry = {
+  tracks: YTSearchResult[];
+};
+
+const cache = searchCache as Record<string, CacheEntry>;
+
+/** Search YouTube for music tracks using local static cache */
 export async function searchMusic(query: string): Promise<YTSearchResult[]> {
   if (!query.trim()) return [];
 
-  try {
-    const res = await fetch(`/api/music/search?q=${encodeURIComponent(query.trim())}`);
-    if (!res.ok) throw new Error(`Search failed: ${res.status}`);
-    const data = await res.json();
-    return (data.tracks ?? []) as YTSearchResult[];
-  } catch (err) {
-    console.error('[YouTube] Search failed:', err);
-    return [];
+  const q = query.trim().toLowerCase();
+
+  // 1. Exact key match
+  if (cache[q]) {
+    return cache[q].tracks;
   }
+
+  // 2. Partial key match (cache key contains query or vice versa)
+  for (const [key, val] of Object.entries(cache)) {
+    if (key.includes(q) || q.includes(key)) {
+      return val.tracks;
+    }
+  }
+
+  // 3. Word-level key matching (find best score)
+  const queryWords = q.split(/\s+/).filter(w => w.length > 1);
+  if (queryWords.length > 0) {
+    let bestMatch: CacheEntry | null = null;
+    let bestScore = 0;
+    for (const [key, val] of Object.entries(cache)) {
+      const keyLower = key.toLowerCase();
+      let score = 0;
+      for (const word of queryWords) {
+        if (keyLower.includes(word)) score++;
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = val;
+      }
+    }
+    if (bestMatch && bestScore >= 1) {
+      return bestMatch.tracks;
+    }
+  }
+
+  // 4. Fuzzy search across all track titles + artists
+  const allTracks: YTSearchResult[] = [];
+  const seenIds = new Set<string>();
+  for (const val of Object.values(cache)) {
+    for (const track of val.tracks ?? []) {
+      if (seenIds.has(track.id)) continue;
+      seenIds.add(track.id);
+      const titleLower = (track.title + ' ' + track.artist).toLowerCase();
+      if (titleLower.includes(q)) {
+        allTracks.push(track);
+      }
+    }
+  }
+  if (allTracks.length > 0) {
+    return allTracks.slice(0, 15);
+  }
+
+  // 5. Single-word loose match on track titles
+  for (const word of queryWords) {
+    for (const val of Object.values(cache)) {
+      for (const track of val.tracks ?? []) {
+        if (seenIds.has(track.id)) continue;
+        seenIds.add(track.id);
+        const titleLower = (track.title + ' ' + track.artist).toLowerCase();
+        if (titleLower.includes(word)) {
+          allTracks.push(track);
+        }
+      }
+    }
+  }
+  if (allTracks.length > 0) {
+    return allTracks.slice(0, 15);
+  }
+
+  return [];
 }
 
 /** Resolve a query to a single track */
@@ -85,5 +154,5 @@ function extractVideoId(input: string): string | null {
 }
 
 function extractTitleFromUrl(url: string): string | null {
-  return null; // We don't have a way to get title from URL without an API
+  return null;
 }
