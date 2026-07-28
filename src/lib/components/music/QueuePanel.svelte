@@ -32,10 +32,13 @@
     {:else}
       {#each playerStore.queue as track, idx (track.id + idx)}
         {@const isActive = idx === playerStore.queueIndex}
-        <button
+        <div
           class="qp-row"
           class:qp-row-on={isActive}
+          role="button"
+          tabindex="0"
           onclick={() => { playerStore.queueIndex = idx; playerStore.playTrack(track); }}
+          onkeydown={(e) => { if (e.key === 'Enter') { playerStore.queueIndex = idx; playerStore.playTrack(track); } }}
         >
           <span class="qp-idx">
             {#if isActive && (playerStore.status === 'playing' || playerStore.status === 'loading')}
@@ -62,7 +65,7 @@
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
           </button>
-        </button>
+        </div>
       {/each}
     {/if}
   </div>

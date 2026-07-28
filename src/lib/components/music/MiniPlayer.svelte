@@ -5,9 +5,16 @@
    */
 
   import { playerStore } from '$lib/music/player-store.svelte.js';
+  import { audioService } from '$lib/music/audio.js';
   import { formatDuration, truncate } from '$lib/music/music-utils.js';
   import SearchSheet from './SearchSheet.svelte';
   import QueuePanel from './QueuePanel.svelte';
+  import { onMount } from 'svelte';
+
+  // Ensure the hidden YouTube iframe container is created on mount
+  onMount(() => {
+    audioService.ensureContainer();
+  });
 
   // ── Progress scrubbing ──
   let isDraggingProgress = $state(false);

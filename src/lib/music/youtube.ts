@@ -1,11 +1,11 @@
 // ============================================================
-// youtube.ts — YouTube search & stream via proxy service
-// All requests go through the mini-service on port 3010
-// to avoid CORS issues and keep youtubei.js on the server.
+// youtube.ts — YouTube search via proxy service
+// All search/resolve requests go through the mini-service on port 3010.
+// Playback uses YouTube IFrame Player API (client-side), so no
+// stream URL fetching is needed.
 // ============================================================
 
 import type { Track } from './player-store.svelte.js';
-import { extractVideoId } from './music-utils.js';
 
 export interface YTSearchResult {
   id: string;
@@ -33,37 +33,7 @@ export async function searchMusic(query: string): Promise<YTSearchResult[]> {
   }
 }
 
-/** Get a proxied audio stream URL for a video */
-export async function getAudioStreamUrl(videoId: string): Promise<string> {
-  // First try the relay endpoint (proxied to avoid CORS)
-  // The audio.ts service will handle the actual playback
-  try {
-    const res = await fetch(`${PROXY_BASE}/stream/${videoId}`);
-    if (res.ok) {
-      const data = await res.json();
-      if (data.url) return data.url;
-    }
-  } catch (err) {
-    console.error('[YouTube] Stream URL fetch failed, falling back to relay:', err);
-  }
-
-  // Fallback: use relay endpoint which proxies the actual bytes
-  return `${PROXY_BASE}/relay/${videoId}`;
-}
-
-/** Convert a YTSearchResult to a Track */
-export function ytResultToTrack(r: YTSearchResult): Track {
-  return {
-    id: r.id,
-    title: r.title,
-    artist: r.artist,
-    duration: r.duration,
-    thumbnail: r.thumbnail,
-    url: r.videoUrl,
-  };
-}
-
-/** Parse a /play or /queue command — if it's a URL, extract the ID */
+/** Resolve a query (URL or search term) to a single track */
 export async function resolveTrack(input: string): Promise<Track | null> {
   const trimmed = input.trim();
   if (!trimmed) return null;
@@ -86,5 +56,17 @@ export async function resolveTrack(input: string): Promise<Track | null> {
   }
 }
 
-/** Clear all caches (no-op since proxy handles caching) */
+/** Convert a YTSearchResult to a Track */
+export function ytResultToTrack(r: YTSearchResult): Track {
+  return {
+    id: r.id,
+    title: r.title,
+    artist: r.artist,
+    duration: r.duration,
+    thumbnail: r.thumbnail,
+    url: r.videoUrl,
+  };
+}
+
+/** No-op — kept for API compatibility */
 export function clearCaches(): void {}

@@ -1,10 +1,11 @@
 // ============================================================
 // player-store.svelte.ts — Reactive music player state (Svelte 5)
 // Singleton. Initialized lazily on first access.
+// Uses YouTube IFrame Player API for playback.
 // ============================================================
 
 import { audioService } from './audio.js';
-import { getAudioStreamUrl, type YTSearchResult, searchMusic, resolveTrack } from './youtube.js';
+import { type YTSearchResult, searchMusic, resolveTrack } from './youtube.js';
 
 export interface Track {
   id: string;
@@ -35,7 +36,6 @@ class PlayerStore {
   errorMessage = $state('');
 
   private _initialized = false;
-  private _streamResolve: ((url: string) => void) | null = null;
 
   /** Initialize audio callbacks (idempotent) */
   init(): void {
@@ -48,7 +48,10 @@ class PlayerStore {
         case 'loading': this.status = 'loading'; break;
         case 'playing': this.status = 'playing'; this.errorMessage = ''; break;
         case 'paused': this.status = 'paused'; break;
-        case 'error': this.status = 'error'; break;
+        case 'error':
+          this.status = 'error';
+          this.errorMessage = 'Playback error. Try another track.';
+          break;
       }
     });
 
@@ -66,17 +69,22 @@ class PlayerStore {
 
   async playTrack(track: Track): Promise<void> {
     this.init();
+    // Ensure the YouTube player container exists
+    audioService.ensureContainer();
+
     this.currentTrack = track;
     this.status = 'loading';
     this.errorMessage = '';
+    this.currentTime = 0;
+    this.duration = track.duration || 0;
 
     // If track is in queue, update queue index
     const idx = this.queue.findIndex(t => t.id === track.id);
     if (idx !== -1) this.queueIndex = idx;
 
     try {
-      const url = await getAudioStreamUrl(track.id);
-      await audioService.playStream(url);
+      // Play using YouTube video ID directly (IFrame API)
+      await audioService.playVideoById(track.id);
     } catch (err) {
       this.status = 'error';
       this.errorMessage = err instanceof Error ? err.message : 'Playback failed';
@@ -105,6 +113,8 @@ class PlayerStore {
       this.status = 'idle';
       this.currentTrack = null;
       this.queueIndex = -1;
+      this.currentTime = 0;
+      this.duration = 0;
       return;
     }
     const nextIdx = this.queueIndex >= 0 ? (this.queueIndex + 1) % this.queue.length : 0;
@@ -128,6 +138,10 @@ class PlayerStore {
     audioService.seek(ratio);
   }
 
+  seekTo(seconds: number): void {
+    audioService.seekTo(seconds);
+  }
+
   setVolume(v: number): void {
     this.volume = v;
     audioService.setVolume(v);
@@ -148,11 +162,9 @@ class PlayerStore {
     const newQueue = [...this.queue];
     newQueue.splice(index, 1);
 
-    // Adjust index
     if (index < this.queueIndex) {
       this.queueIndex = this.queueIndex - 1;
     } else if (index === this.queueIndex) {
-      // Currently playing track removed — stop
       audioService.stop();
       this.status = 'idle';
       this.currentTrack = null;
