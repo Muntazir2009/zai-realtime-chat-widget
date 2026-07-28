@@ -2968,3 +2968,37 @@ Stage Summary:
 - YouTube search fully functional via proxy
 - Streaming may require deployment on a real server for full functionality
 - Committed as e1b7b9dd and pushed
+
+---
+Task ID: music-fix
+Agent: Main Agent
+Task: Fix music player — YouTube IFrame API playback + stable proxy
+
+Work Log:
+- Read all music component files (FloatingBubble, MiniPlayer, SearchSheet, QueuePanel, audio.ts, youtube.ts, player-store)
+- Discovered YouTube blocks all streaming in this sandbox (Piped, Invidious, Cobalt all blocked/unavailable)
+- Rewrote audio.ts to use YouTube IFrame Player API (client-side) instead of HTMLAudioElement + server-side stream proxy
+- Simplified youtube.ts (search/resolve only, no stream URLs needed)
+- Updated player-store to use video ID directly for playback via IFrame API
+- Fixed QueuePanel nested button HTML error (button inside button = invalid HTML)
+- Discovered youtubei.js crashes Bun HTTP server when imported dynamically during request handling
+- Discovered Hono library not needed — plain Bun.serve works fine for this use case
+- Created two-file proxy architecture: server.mjs (Bun HTTP) + search-worker.mjs (Node.js with youtubei.js)
+  - server.mjs is lightweight Bun HTTP server that delegates heavy youtubei.js work to child_process
+  - search-worker.mjs runs youtubei.js in a separate Node.js process per request
+  - This avoids the crash that occurs when youtubei.js runs inside Bun's HTTP handler
+- Updated package.json for youtube-proxy (removed Hono dependency)
+- Ensure MiniPlayer creates hidden YouTube iframe container on mount
+
+Stage Summary:
+- YouTube search works end-to-end: SearchSheet → playerStore.search() → proxy /search → youtubei.js
+- YouTube resolve works: /play and /queue commands resolve tracks via proxy /resolve
+- Playback uses YouTube IFrame Player API (client-side), avoiding all server-side streaming restrictions
+- Proxy is stable: Bun HTTP server + child process worker pattern
+- Build succeeds without errors
+- Committed as ff0f5052 and pushed
+
+Key decisions:
+- YouTube IFrame Player API chosen over direct streaming (sandbox blocks all streaming APIs)
+- Child process pattern chosen for proxy (youtubei.js crashes Bun HTTP server)
+- Position memory bug was already fixed in previous session (e1b7b9dd)
