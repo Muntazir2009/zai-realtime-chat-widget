@@ -1,19 +1,20 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+// @ts-expect-error — Vite/SvelteKit handles JSON imports natively
+import cacheData from '$lib/music/search-cache.json';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const cachePath = join(__dirname, '../../../../lib/music/search-cache.json');
+type CacheEntry = {
+  tracks: Array<{
+    id: string;
+    title: string;
+    artist: string;
+    duration: number;
+    thumbnail: string;
+    videoUrl: string;
+  }>;
+};
 
-let cache: Record<string, { tracks: Array<{ id: string; title: string; artist: string; duration: number; thumbnail: string; videoUrl: string }> }> = {};
-
-try {
-  cache = JSON.parse(readFileSync(cachePath, 'utf8'));
-} catch {
-  console.error('[Music API] Failed to load search cache');
-}
+const cache: Record<string, CacheEntry> = cacheData as Record<string, CacheEntry>;
 
 export const GET: RequestHandler = async ({ url }) => {
   const q = url.searchParams.get('q')?.trim().toLowerCase();
@@ -33,7 +34,7 @@ export const GET: RequestHandler = async ({ url }) => {
 
   // Word-level matching
   const queryWords = q.split(/\s+/);
-  let bestMatch: { key: string; score: number; val: any } | null = null;
+  let bestMatch: { key: string; score: number; val: CacheEntry } | null = null;
   for (const [key, val] of Object.entries(cache)) {
     const keyLower = key.toLowerCase();
     let score = 0;
@@ -49,7 +50,7 @@ export const GET: RequestHandler = async ({ url }) => {
   }
 
   // Search track titles + artists across all cached results
-  const allTracks: any[] = [];
+  const allTracks: CacheEntry['tracks'] = [];
   const seenIds = new Set<string>();
   for (const val of Object.values(cache)) {
     for (const track of val.tracks ?? []) {
