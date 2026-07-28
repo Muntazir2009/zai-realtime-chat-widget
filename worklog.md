@@ -2873,3 +2873,26 @@ Stage Summary:
 - Typing indicator should now reliably show in both header (text + bouncing dots) and floating input area (bubble + animated dots + label)
 - More robust reactivity: $state+$effect pattern is more reliable than $derived.by for cross-module class instance state
 - Cleaner TypingIndicator: simpler state machine, CSS-only transitions, no animation timing edge cases
+---
+Task ID: 13
+Agent: Main Agent
+Task: Fix typing indicator (again), message editing glitch, redesign toasts
+
+Work Log:
+- Investigated typing indicator: Map.get() in $derived/$effect may not trigger Svelte 5 reactivity reliably when Map reference is reassigned
+- Added activeTypingNames: string[] as a simple reactive array on ChatStore
+- _updateTypingDisplayNames now also sets activeTypingNames when chatId matches activeChatId
+- openChat refreshes activeTypingNames from existing Map cache
+- detachTypingListener clears both typingDisplayNames and activeTypingNames
+- Conversation.svelte reads activeTypingNames via simple $derived (array reassignment = guaranteed reactivity)
+- Fixed message editing echo flicker: onChildChanged now skips update if content already matches optimistic state
+- Added auto-focus to edit textarea with cursor at end using tick()
+- Completely rewrote toast store: removed icons, action buttons, swipe, progress rAF complexity
+- Single visible toast (new replaces old), truncated at 80 chars, shorter durations
+- Rewrote ToastContainer: slim bar with type-colored left accent border, minimal DOM
+- Build passes, pushed commit 7754d729
+
+Stage Summary:
+- Typing indicator should now be bulletproof: simple array reassignment, no Map.get() dependency issues
+- Edit no longer flickers: RTDB echo is detected and skipped
+- Toasts are now slim, elegant bars — fast, minimal, professional
