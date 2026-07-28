@@ -1,187 +1,224 @@
 <script lang="ts">
   /**
-   * QueuePanel — Compact queue list for the mini player.
+   * QueuePanel — Queue list for the mini player.
    */
 
   import { playerStore } from '$lib/music/player-store.svelte.js';
   import { formatDuration, truncate } from '$lib/music/music-utils.js';
-
-  let dragIdx: number | null = $state(null);
 </script>
 
-<div class="queue-panel">
-  <div class="queue-header">
-    <span class="queue-title">Queue</span>
-    <span class="queue-count">{playerStore.queue.length} tracks</span>
+<div class="qp">
+  <!-- ── Header ── -->
+  <div class="qp-head">
+    <span class="qp-label">Queue</span>
+    <span class="qp-count">{playerStore.queue.length}</span>
     {#if playerStore.queue.length > 0}
-      <button class="queue-clear" onclick={() => playerStore.clearQueue()}>Clear</button>
+      <button class="qp-clear" onclick={() => playerStore.clearQueue()}>Clear</button>
     {/if}
   </div>
 
-  <div class="queue-list">
+  <!-- ── List ── -->
+  <div class="qp-list">
     {#if playerStore.queue.length === 0}
-      <div class="queue-empty">
-        <p>Queue is empty</p>
-        <p class="queue-empty-sub">Search and add songs to play</p>
+      <div class="qp-empty">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
+          style="opacity: 0.3;">
+          <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/>
+          <line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1" fill="currentColor"/><circle cx="4" cy="12" r="1" fill="currentColor"/><circle cx="4" cy="18" r="1" fill="currentColor"/>
+        </svg>
+        <span>No tracks queued</span>
       </div>
     {:else}
-      {#each playerStore.queue as track, idx (track.id)}
-        <div
-          class="queue-row"
-          class:is-active={idx === playerStore.queueIndex}
-          class:is-dragging={idx === dragIdx}
+      {#each playerStore.queue as track, idx (track.id + idx)}
+        {@const isActive = idx === playerStore.queueIndex}
+        <button
+          class="qp-row"
+          class:qp-row-on={isActive}
+          onclick={() => { playerStore.queueIndex = idx; playerStore.playTrack(track); }}
         >
-          <span class="queue-num">
-            {#if idx === playerStore.queueIndex && playerStore.status === 'playing'}
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
-                <rect x="3" y="3" width="4" height="18" rx="1"/>
-                <rect x="17" y="3" width="4" height="18" rx="1"/>
-              </svg>
+          <span class="qp-idx">
+            {#if isActive && (playerStore.status === 'playing' || playerStore.status === 'loading')}
+              <span class="qp-eq">
+                <span></span><span></span><span></span>
+              </span>
             {:else}
               {idx + 1}
             {/if}
           </span>
-          <img class="queue-thumb" src={track.thumbnail} alt="" loading="lazy" />
+          <img class="qp-thumb" src={track.thumbnail} alt="" loading="lazy" />
+          <div class="qp-info">
+            <p class="qp-title">{truncate(track.title, 42)}</p>
+            <p class="qp-artist">{truncate(track.artist, 24)}</p>
+          </div>
+          <span class="qp-dur">{formatDuration(track.duration)}</span>
           <button
-            class="queue-info"
-            onclick={() => { playerStore.queueIndex = idx; playerStore.playTrack(track); }}
-          >
-            <p class="queue-track-title">{truncate(track.title, 45)}</p>
-            <p class="queue-track-artist">{truncate(track.artist, 25)}</p>
-          </button>
-          <span class="queue-dur">{formatDuration(track.duration)}</span>
-          <button
-            class="queue-remove"
+            class="qp-del"
             onclick={(e) => { e.stopPropagation(); playerStore.removeFromQueue(idx); }}
-            aria-label="Remove"
+            aria-label="Remove from queue"
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
           </button>
-        </div>
+        </button>
       {/each}
     {/if}
   </div>
 </div>
 
 <style>
-  .queue-panel {
+  .qp {
     display: flex;
     flex-direction: column;
     height: 100%;
     overflow: hidden;
   }
 
-  .queue-header {
+  .qp-head {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 12px 14px 8px;
+    gap: 6px;
+    padding: 10px 14px 6px;
     flex-shrink: 0;
   }
 
-  .queue-title {
-    font-size: 14px;
+  .qp-label {
+    font-size: 13px;
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--text-primary, #fff);
   }
 
-  .queue-count {
+  .qp-count {
     font-size: 11px;
-    color: var(--text-tertiary);
+    font-weight: 500;
+    color: var(--text-tertiary, #555);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .qp-clear {
     margin-left: auto;
-  }
-
-  .queue-clear {
     font-size: 11px;
-    color: var(--text-tertiary);
+    font-weight: 500;
+    color: var(--text-tertiary, #666);
     background: none;
     border: none;
-    padding: 2px 6px;
-    border-radius: 4px;
+    padding: 3px 8px;
+    border-radius: 6px;
     cursor: pointer;
+    font-family: inherit;
+    -webkit-tap-highlight-color: transparent;
   }
 
-  .queue-clear:active {
-    color: var(--text-primary);
-    background: var(--border-subtle);
+  .qp-clear:active {
+    color: var(--text-primary, #fff);
+    background: var(--border-subtle, rgba(255,255,255,0.08));
   }
 
-  .queue-list {
+  .qp-list {
     flex: 1;
     overflow-y: auto;
     padding: 2px 6px;
     -webkit-overflow-scrolling: touch;
   }
 
-  .queue-list::-webkit-scrollbar { width: 0; }
+  .qp-list::-webkit-scrollbar { width: 0; }
 
-  .queue-row {
+  .qp-row {
     display: flex;
     align-items: center;
     gap: 8px;
+    width: 100%;
     padding: 6px 8px;
-    border-radius: 8px;
-    transition: background 150ms ease;
+    border-radius: 10px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    color: var(--text-primary, #fff);
+    font-family: inherit;
+    transition: background 120ms;
+    -webkit-tap-highlight-color: transparent;
+    outline: none;
   }
 
-  .queue-row.is-active {
-    background: var(--border-subtle);
+  .qp-row:active {
+    background: var(--border-subtle, rgba(255,255,255,0.06));
   }
 
-  .queue-row.is-dragging {
-    opacity: 0.5;
+  .qp-row-on {
+    background: rgba(255,255,255,0.04);
   }
 
-  .queue-num {
-    width: 16px;
+  .qp-idx {
+    width: 18px;
     text-align: center;
-    font-size: 11px;
-    color: var(--text-tertiary);
+    font-size: 10.5px;
+    color: var(--text-tertiary, #555);
     font-variant-numeric: tabular-nums;
+    font-weight: 500;
     flex-shrink: 0;
   }
 
-  .queue-row.is-active .queue-num {
-    color: var(--text-primary);
+  .qp-row-on .qp-idx {
+    color: var(--text-primary, #fff);
   }
 
-  .queue-thumb {
+  /* ── Equalizer ── */
+  .qp-eq {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 1.5px;
+    height: 12px;
+  }
+
+  .qp-eq span {
+    display: block;
+    width: 2px;
+    background: var(--text-primary, #fff);
+    border-radius: 1px;
+    animation: eqB 0.8s ease-in-out infinite;
+  }
+
+  .qp-eq span:nth-child(1) { height: 40%; animation-delay: 0ms; }
+  .qp-eq span:nth-child(2) { height: 80%; animation-delay: 150ms; }
+  .qp-eq span:nth-child(3) { height: 60%; animation-delay: 300ms; }
+
+  @keyframes eqB {
+    0%, 100% { transform: scaleY(0.5); }
+    50% { transform: scaleY(1); }
+  }
+
+  .qp-thumb {
     width: 36px;
     height: 36px;
-    border-radius: 5px;
+    border-radius: 8px;
     object-fit: cover;
     flex-shrink: 0;
-    background: var(--bg-surface);
+    background: var(--bg-surface, rgba(255,255,255,0.04));
   }
 
-  .queue-info {
+  .qp-info {
     flex: 1;
     min-width: 0;
-    background: none;
-    border: none;
-    text-align: left;
-    cursor: pointer;
-    padding: 2px 0;
-    font-family: inherit;
-    color: var(--text-primary);
   }
 
-  .queue-track-title {
-    font-size: 13px;
+  .qp-title {
+    font-size: 12.5px;
     font-weight: 500;
     line-height: 1.3;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     margin: 0;
+    color: var(--text-primary, #fff);
   }
 
-  .queue-track-artist {
+  .qp-artist {
     font-size: 11px;
-    color: var(--text-tertiary);
+    font-weight: 400;
+    color: var(--text-tertiary, #555);
     line-height: 1.3;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -189,50 +226,48 @@
     margin: 1px 0 0;
   }
 
-  .queue-dur {
-    font-size: 11px;
-    color: var(--text-tertiary);
+  .qp-dur {
+    font-size: 10.5px;
+    color: var(--text-tertiary, #555);
     font-variant-numeric: tabular-nums;
+    font-weight: 500;
     flex-shrink: 0;
   }
 
-  .queue-remove {
+  .qp-del {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: 26px;
+    height: 26px;
     border-radius: 6px;
     border: none;
     background: transparent;
-    color: var(--text-tertiary);
+    color: var(--text-tertiary, #555);
     cursor: pointer;
     flex-shrink: 0;
-    transition: background 150ms, color 150ms;
+    padding: 0;
+    transition: background 120ms, color 120ms;
+    -webkit-tap-highlight-color: transparent;
   }
 
-  .queue-remove:active {
-    background: var(--border-subtle);
-    color: var(--text-primary);
+  .qp-del:active {
+    background: rgba(239, 68, 68, 0.12);
+    color: #ef4444;
   }
 
-  .queue-empty {
+  /* ── Empty ── */
+  .qp-empty {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 40px 16px;
-    text-align: center;
+    gap: 6px;
+    padding: 28px 16px;
+    color: var(--text-tertiary, #555);
   }
 
-  .queue-empty p {
-    font-size: 13px;
-    color: var(--text-tertiary);
-    margin: 0;
-  }
-
-  .queue-empty-sub {
-    font-size: 11px !important;
-    margin-top: 4px !important;
-    opacity: 0.7;
+  .qp-empty span {
+    font-size: 11.5px;
+    font-weight: 400;
   }
 </style>

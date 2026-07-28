@@ -1,20 +1,22 @@
 <script lang="ts">
   /**
-   * FloatingBubble — Draggable orb that expands into MiniPlayer.
-   * Lazy loads the entire music module on first tap.
-   * Monochrome, minimal, premium.
+   * FloatingBubble — Premium draggable orb that expands into MiniPlayer.
+   * Lazy loads the player module on first tap.
+   * Monochrome, matte, premium aesthetic.
    */
 
   import { playerStore } from '$lib/music/player-store.svelte.js';
+  import { onMount } from 'svelte';
 
-  // ── State ──
+  // ── Reactive state ──
   let isExpanded = $derived(playerStore.isExpanded);
   let isPlaying = $derived(playerStore.status === 'playing');
   let hasTrack = $derived(!!playerStore.currentTrack);
 
-  // Bubble position (initialized to bottom-right)
+  // Bubble position — only set default once on mount
   let bubbleX = $state(0);
   let bubbleY = $state(0);
+  let _positionInitialized = false;
 
   // Drag state
   let isDragging = $state(false);
@@ -27,16 +29,14 @@
   let moduleLoaded = $state(false);
   let isLoading = $state(false);
 
-  // ── Lifecycle ──
-  $effect(() => {
-    if (!isExpanded) positionBubbleDefault();
+  // ── Lifecycle — position default only once ──
+  onMount(() => {
+    if (!_positionInitialized && typeof window !== 'undefined') {
+      _positionInitialized = true;
+      bubbleX = window.innerWidth - 56;
+      bubbleY = window.innerHeight - 160;
+    }
   });
-
-  function positionBubbleDefault() {
-    if (typeof window === 'undefined') return;
-    bubbleX = window.innerWidth - 60;
-    bubbleY = window.innerHeight - 180;
-  }
 
   // ── Lazy loading ──
   async function loadModule() {
@@ -69,7 +69,7 @@
     if (!isDragging) return;
     const dx = e.clientX - pointerDownPos.x;
     const dy = e.clientY - pointerDownPos.y;
-    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) dragMoved = true;
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) dragMoved = true;
     if (!dragMoved) return;
     bubbleX = bubbleStartPos.x + dx;
     bubbleY = bubbleStartPos.y + dy;
@@ -80,7 +80,6 @@
     document.removeEventListener('pointerup', onDocPointerUp);
 
     if (!dragMoved) {
-      // Tap — expand or load
       if (!isExpanded) {
         playerStore.expand();
         if (!moduleLoaded) loadModule();
@@ -88,7 +87,6 @@
         playerStore.collapse();
       }
     } else {
-      // Snap to nearest edge
       snapToEdge();
     }
     isDragging = false;
@@ -97,211 +95,232 @@
   function snapToEdge() {
     if (typeof window === 'undefined') return;
     const midX = window.innerWidth / 2;
-    const padding = 16;
-    const minY = 80;
-    const maxY = window.innerHeight - 140;
+    const pad = 14;
+    const minY = 60;
+    const maxY = window.innerHeight - 100;
 
-    // Snap X to nearest side
-    if (bubbleX < midX) {
-      bubbleX = padding;
-    } else {
-      bubbleX = window.innerWidth - 52 - padding;
-    }
-    // Clamp Y
+    bubbleX = bubbleX < midX ? pad : window.innerWidth - 48 - pad;
     bubbleY = Math.max(minY, Math.min(maxY, bubbleY));
   }
 
-  // ── Progress for bubble ring ──
+  // ── Progress ring ──
   const progress = $derived(
     playerStore.duration > 0 ? playerStore.currentTime / playerStore.duration : 0
   );
+  const circumference = 2 * Math.PI * 17;
 
-  const circumference = 2 * Math.PI * 18; // r=18
+  // ── Computed expanded position (keep near bubble, clamped to viewport) ──
+  const expandedX = $derived.by(() => {
+    if (typeof window === 'undefined') return 0;
+    return Math.max(12, Math.min(bubbleX - 118, window.innerWidth - 292));
+  });
+  const expandedY = $derived.by(() => {
+    if (typeof window === 'undefined') return 0;
+    return Math.max(12, Math.min(bubbleY - 180, window.innerHeight - 440));
+  });
 </script>
 
-<svelte:window onresize={() => { if (!isExpanded) snapToEdge(); }} />
+<svelte:window
+  onresize={() => { if (!isExpanded && _positionInitialized) snapToEdge(); }}
+/>
 
-<!-- Floating bubble (visible when collapsed) -->
+<!-- ── Collapsed Bubble ── -->
 {#if !isExpanded}
   <div
-    class="music-bubble"
+    class="fb-wrap"
+    class:fb-dragging={isDragging}
     style="transform: translate3d({bubbleX}px, {bubbleY}px, 0);"
-    onpointerdown={onBubblePointerDown}
-    role="button"
-    aria-label="Music player"
-    tabindex="0"
   >
-    <!-- Ring progress -->
+    <!-- Progress ring -->
     {#if hasTrack}
-      <svg class="bubble-ring" viewBox="0 0 44 44">
+      <svg class="fb-ring" viewBox="0 0 40 40">
         <circle
-          cx="22" cy="22" r="18"
+          cx="20" cy="20" r="17"
           fill="none"
           stroke="var(--text-primary)"
-          stroke-width="2"
-          stroke-dasharray="{circumference}"
-          stroke-dashoffset="{circumference * (1 - progress)}"
+          stroke-width="1.5"
+          stroke-dasharray={circumference}
+          stroke-dashoffset={circumference * (1 - progress)}
           stroke-linecap="round"
-          transform="rotate(-90 22 22)"
-          opacity="0.3"
+          transform="rotate(-90 20 20)"
+          opacity="0.25"
         />
       </svg>
     {/if}
 
-    <!-- Content -->
-    <div class="bubble-inner">
+    <!-- Bubble body -->
+    <button
+      class="fb-body"
+      onpointerdown={onBubblePointerDown}
+      aria-label="Music player"
+    >
       {#if hasTrack && playerStore.currentTrack?.thumbnail}
-        <img
-          class="bubble-thumb"
-          src={playerStore.currentTrack.thumbnail}
-          alt=""
-        />
+        <img class="fb-thumb" src={playerStore.currentTrack.thumbnail} alt="" />
       {:else}
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 18V5l12-2v13"/>
+          <circle cx="6" cy="18" r="3"/>
+          <circle cx="18" cy="16" r="3"/>
         </svg>
       {/if}
-    </div>
+    </button>
 
+    <!-- Pulse dot when playing -->
     {#if isPlaying}
-      <div class="bubble-pulse"></div>
+      <span class="fb-dot"></span>
     {/if}
   </div>
 {/if}
 
-<!-- Expanded player (lazy loaded) -->
+<!-- ── Expanded Player ── -->
 {#if isExpanded}
   <div
-    class="player-float"
-    style="transform: translate3d({Math.min(bubbleX, window.innerWidth - 296)}px, {Math.min(bubbleY, window.innerHeight - 440)}px, 0);"
+    class="fp-wrap"
+    style="transform: translate3d({expandedX}px, {expandedY}px, 0);"
   >
     {#if isLoading}
-      <div class="player-loading">
-        <span class="player-spinner"></span>
+      <div class="fp-loading">
+        <span class="fp-spinner"></span>
       </div>
     {:else if moduleLoaded && MiniPlayerComponent}
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
       <MiniPlayerComponent />
     {/if}
   </div>
 {/if}
 
 <style>
-  /* ── Bubble ── */
-  .music-bubble {
+  /* ── Bubble wrapper (positioning container) ── */
+  .fb-wrap {
     position: fixed;
     top: 0;
     left: 0;
-    z-index: 100;
-    width: 44px;
-    height: 44px;
-    cursor: grab;
+    z-index: 200;
+    width: 40px;
+    height: 40px;
     touch-action: none;
     -webkit-user-select: none;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
     will-change: transform;
+    transition: filter 200ms ease;
   }
 
-  .bubble-inner {
-    animation: bubblePop 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  .fb-wrap:active {
+    filter: brightness(0.95);
   }
 
-  @keyframes bubblePop {
-    from { opacity: 0; transform: scale(0.5); }
-    to { opacity: 1; transform: scale(1); }
-  }
-
-  .music-bubble:active {
-    cursor: grabbing;
-  }
-
-  .bubble-inner {
-    width: 44px;
-    height: 44px;
+  /* ── Bubble body ── */
+  .fb-body {
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border-subtle);
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08), 0 0 1px rgba(0, 0, 0, 0.04);
-    color: var(--text-secondary);
+    background: var(--bg-elevated, #1a1a1a);
+    border: 1px solid var(--border-subtle, rgba(255,255,255,0.08));
+    box-shadow:
+      0 1px 3px rgba(0,0,0,0.12),
+      0 4px 12px rgba(0,0,0,0.08);
+    color: var(--text-secondary, #888);
     overflow: hidden;
-    transition: box-shadow 200ms ease;
+    cursor: grab;
+    padding: 0;
+    outline: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: box-shadow 250ms ease, transform 150ms ease;
   }
 
-  .music-bubble:active .bubble-inner {
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+  .fb-body:active {
+    cursor: grabbing;
+    box-shadow:
+      0 2px 6px rgba(0,0,0,0.15),
+      0 8px 24px rgba(0,0,0,0.12);
+    transform: scale(0.95);
   }
 
-  .bubble-thumb {
+  .fb-dragging .fb-body {
+    box-shadow:
+      0 4px 12px rgba(0,0,0,0.2),
+      0 12px 32px rgba(0,0,0,0.15);
+    transform: scale(1.05);
+    transition: box-shadow 100ms, transform 100ms;
+  }
+
+  .fb-thumb {
     width: 100%;
     height: 100%;
     object-fit: cover;
+    border-radius: 50%;
   }
 
-  .bubble-ring {
+  /* ── Progress ring ── */
+  .fb-ring {
     position: absolute;
     top: 0;
     left: 0;
-    width: 44px;
-    height: 44px;
+    width: 40px;
+    height: 40px;
     pointer-events: none;
   }
 
-  .bubble-pulse {
+  /* ── Pulse indicator ── */
+  .fb-dot {
     position: absolute;
-    bottom: -1px;
-    right: -1px;
-    width: 10px;
-    height: 10px;
+    bottom: 0;
+    right: 0;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
-    background: var(--text-primary);
-    opacity: 0.5;
-    animation: pulse 2s ease-in-out infinite;
+    background: var(--text-primary, #fff);
+    opacity: 0.6;
+    animation: dotPulse 2.4s ease-in-out infinite;
+    pointer-events: none;
   }
 
-  @keyframes pulse {
-    0%, 100% { transform: scale(1); opacity: 0.5; }
-    50% { transform: scale(1.3); opacity: 0.2; }
+  @keyframes dotPulse {
+    0%, 100% { transform: scale(1); opacity: 0.6; }
+    50% { transform: scale(1.4); opacity: 0.2; }
   }
 
-  /* ── Expanded player ── */
-  .player-float {
+  /* ── Expanded player wrapper ── */
+  .fp-wrap {
     position: fixed;
     top: 0;
     left: 0;
-    z-index: 100;
+    z-index: 200;
     will-change: transform;
   }
 
-  .player-loading {
-    width: 280px;
-    height: 200px;
+  /* ── Loading state ── */
+  .fp-loading {
+    width: 268px;
+    height: 180px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 16px;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border-subtle);
-    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.12);
-    animation: mpIn 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    border-radius: 20px;
+    background: var(--bg-elevated, #1a1a1a);
+    border: 1px solid var(--border-subtle, rgba(255,255,255,0.08));
+    box-shadow:
+      0 4px 16px rgba(0,0,0,0.12),
+      0 16px 48px rgba(0,0,0,0.10);
+    animation: fpIn 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 
-  @keyframes mpIn {
-    from { opacity: 0; transform: scale(0.92); }
-    to   { opacity: 1; transform: scale(1); }
+  @keyframes fpIn {
+    from { opacity: 0; transform: scale(0.92) translateY(6px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
   }
 
-  .player-spinner {
-    width: 20px;
-    height: 20px;
-    border: 2px solid var(--border-subtle);
-    border-top-color: var(--text-primary);
+  .fp-spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--border-subtle, rgba(255,255,255,0.1));
+    border-top-color: var(--text-primary, #fff);
     border-radius: 50%;
-    animation: spin 600ms linear infinite;
+    animation: spin 700ms linear infinite;
     display: block;
   }
 

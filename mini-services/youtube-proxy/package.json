@@ -1,0 +1,14 @@
+{
+  "name": "youtube-proxy",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node index.mjs",
+    "dev": "node --watch index.mjs"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.0",
+    "hono": "^4.7.0",
+    "youtubei.js": "^17.2.0"
+  }
+}
