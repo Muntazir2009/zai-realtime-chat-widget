@@ -2944,3 +2944,27 @@ Stage Summary:
 - FloatingBubble now renders at page level, visible on all authenticated views
 - Previously was only visible inside Conversation (when a chat was actively open)
 - Key files modified: +page.svelte, Conversation.svelte, FloatingBubble.svelte
+---
+Task ID: 15
+Agent: Main Agent
+Task: Fix music player UI/UX + position memory + YouTube search/playback
+
+Work Log:
+- Diagnosed position reset bug: $effect called positionBubbleDefault() every time isExpanded changed to false
+- Fixed by using onMount for one-time default position, never resetting on collapse
+- Complete UI redesign of FloatingBubble: smaller 40px, drag scale effect, premium shadows
+- Complete UI redesign of MiniPlayer: 20px rounded card, close button, progress thumb, equalizer bars
+- Redesigned SearchSheet with clear button, per-result playing indicator
+- Redesigned QueuePanel with equalizer on active, red delete action
+- Created YouTube proxy mini-service (mini-services/youtube-proxy) using Hono + Node.js
+- Proxy runs on port 3010 with /search, /stream, /resolve, /relay endpoints
+- Search works perfectly (youtubei.js Innertube.create)
+- Streaming is limited by sandbox YouTube restrictions (login required for adaptive formats)
+- Updated youtube.ts to route all requests through proxy via XTransformPort gateway
+
+Stage Summary:
+- Music bubble now retains position when collapsed (major UX fix)
+- Premium UI redesign across all music components
+- YouTube search fully functional via proxy
+- Streaming may require deployment on a real server for full functionality
+- Committed as e1b7b9dd and pushed
