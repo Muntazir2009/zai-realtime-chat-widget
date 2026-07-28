@@ -22,8 +22,8 @@
   let pointerDownPos = { x: 0, y: 0 };
   let bubbleStartPos = { x: 0, y: 0 };
 
-  // Lazy loaded module
-  let MiniPlayerComponent: any = null;
+  // Lazy loaded module — must be $state for Svelte 5 reactivity
+  let MiniPlayerComponent: any = $state(null);
   let moduleLoaded = $state(false);
   let isLoading = $state(false);
 
@@ -82,12 +82,8 @@
     if (!dragMoved) {
       // Tap — expand or load
       if (!isExpanded) {
-        if (moduleLoaded) {
-          playerStore.expand();
-        } else {
-          playerStore.expand();
-          loadModule();
-        }
+        playerStore.expand();
+        if (!moduleLoaded) loadModule();
       } else {
         playerStore.collapse();
       }
@@ -169,7 +165,7 @@
     </div>
 
     {#if isPlaying}
-      <div class="bubble-pulse" />
+      <div class="bubble-pulse"></div>
     {/if}
   </div>
 {/if}
@@ -182,10 +178,11 @@
   >
     {#if isLoading}
       <div class="player-loading">
-        <span class="player-spinner" />
+        <span class="player-spinner"></span>
       </div>
     {:else if moduleLoaded && MiniPlayerComponent}
-      <svelte:component this={MiniPlayerComponent} />
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <MiniPlayerComponent />
     {/if}
   </div>
 {/if}
@@ -205,6 +202,15 @@
     user-select: none;
     -webkit-tap-highlight-color: transparent;
     will-change: transform;
+  }
+
+  .bubble-inner {
+    animation: bubblePop 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  @keyframes bubblePop {
+    from { opacity: 0; transform: scale(0.5); }
+    to { opacity: 1; transform: scale(1); }
   }
 
   .music-bubble:active {

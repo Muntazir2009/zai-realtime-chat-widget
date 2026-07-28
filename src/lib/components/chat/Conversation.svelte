@@ -27,13 +27,6 @@
   import WallpaperPicker from './WallpaperPicker.svelte';
   import { tick } from 'svelte';
 
-  // ── Lazy-loaded music bubble (lightweight — just imports the component reference) ──
-  let musicBubbleComponent: any = null;
-  // Dynamically import the bubble component (the heavy youtubei.js is loaded only on first tap)
-  import('$lib/components/music/FloatingBubble.svelte').then(mod => {
-    musicBubbleComponent = mod.default;
-  }).catch(() => {});
-
   let messagesContainer: HTMLDivElement | undefined = $state();
   let showMenu = $state(false);
   let showMediaGallery = $state(false);
@@ -1352,8 +1345,6 @@
     </div>
   {/if}
 
-  <!-- Floating Music Bubble (lazy — module loads on first tap) -->
-  <svelte:component this={musicBubbleComponent} />
 </div>
 
 <!-- Menu Overlay -->
