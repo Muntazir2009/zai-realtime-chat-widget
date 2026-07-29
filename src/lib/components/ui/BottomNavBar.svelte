@@ -27,7 +27,7 @@
   let currentX = 0;
   let isGrabbed = false;
 
-  // ── Drag state: horizontal movement engages drag, no long press ──
+  // ── Drag state ──
   let dragEngaged = false;
   let dragPointerId: number | null = null;
   let dragStartX = 0;
@@ -44,9 +44,9 @@
   // ── Cached layout ──
   let cachedCenters: { centerX: number }[] = [];
 
-  const IND_SIZE = 38;
+  const IND_SIZE = 40;
   const IND_HALF = IND_SIZE / 2;
-  const DRAG_THRESHOLD = 10;
+  const DRAG_THRESHOLD = 8;
 
   // ── Layout measurement (cached) ──
   function invalidateCenters() {
@@ -83,7 +83,6 @@
     } else if (animated) {
       indicatorEl.style.transform = `translateX(${x.toFixed(2)}px)`;
     } else {
-      // Instant: initial, resize, active drag
       indicatorEl.style.transition = 'none';
       indicatorEl.style.transform = `translateX(${x.toFixed(2)}px)`;
     }
@@ -106,20 +105,18 @@
     ripples = [...ripples, { id, x, y, tabId }];
     setTimeout(() => {
       ripples = ripples.filter(r => r.id !== id);
-    }, 500);
+    }, 450);
   }
 
-  // ── Engage drag: horizontal movement threshold, no long press ──
+  // ── Engage drag ──
   function tryEngageDrag(e: PointerEvent) {
     if (dragEngaged) return;
     const dx = e.clientX - pointerDownX;
     const dy = e.clientY - pointerDownY;
-    // Require dominant horizontal movement exceeding threshold
     if (Math.abs(dx) > DRAG_THRESHOLD && Math.abs(dx) > Math.abs(dy) * 1.2) {
       movedSinceDown = true;
       dragEngaged = true;
       isGrabbed = true;
-      // Record the indicator position at the moment drag engages
       const activeIdx = tabs.findIndex(t => t.id === uiStore.tab);
       dragStartIndX = (cachedCenters[activeIdx]?.centerX ?? currentX) - IND_HALF;
       dragStartX = e.clientX;
@@ -127,16 +124,13 @@
       lastDragT = performance.now();
       dragVX = 0;
       indicatorEl?.classList.add('indicator-grabbed');
-
-      // Document-level listeners for cross-element tracking
       attachDocDragListeners();
     } else if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
-      // Significant movement but not horizontal-dominant — cancel tap
       movedSinceDown = true;
     }
   }
 
-  // ── Document-level drag handlers for cross-element tracking ──
+  // ── Document-level drag handlers ──
   function onDocPointerMove(e: PointerEvent) {
     if (!dragEngaged || e.pointerId !== dragPointerId) return;
     e.preventDefault();
@@ -160,53 +154,42 @@
     document.removeEventListener('pointercancel', onDocPointerUp);
   }
 
-  // ── Find which tab center the finger is closest to ──
+  // ── Find hovered tab ──
   function findHoveredTab(clientX: number): TabId | null {
     if (!capsuleEl || cachedCenters.length === 0) return null;
-    const capsuleRect = capsuleEl.getBoundingClientRect();
-    const localX = clientX - capsuleRect.left + capsuleRect.width / 2 - capsuleRect.width / 2;
-    // Use simple pointer position vs tab centers
-    const fingerCenter = clientX - capsuleRect.left;
+    const fingerCenter = clientX - capsuleEl.getBoundingClientRect().left;
     let bestDist = Infinity;
     let bestTab: TabId | null = null;
     for (let i = 0; i < tabs.length; i++) {
       const d = Math.abs(cachedCenters[i].centerX - fingerCenter);
-      if (d < bestDist) {
-        bestDist = d;
-        bestTab = tabs[i].id;
-      }
+      if (d < bestDist) { bestDist = d; bestTab = tabs[i].id; }
     }
     return bestTab;
   }
 
-  // ── Drag move: indicator follows finger, hovered tab feedback ──
+  // ── Drag move ──
   function onDragMove(e: PointerEvent) {
     if (!dragEngaged || e.pointerId !== dragPointerId) return;
-
-    // Horizontal-only movement from drag start
     const moveDx = e.clientX - dragStartX;
     let newX = dragStartIndX + moveDx;
 
     // Elastic edge resistance
     const centers = cachedCenters;
     if (centers.length > 0) {
-      const minCenter = centers[0].centerX;
-      const maxCenter = centers[centers.length - 1].centerX;
-      const minX = minCenter - IND_HALF;
-      const maxX = maxCenter - IND_HALF;
+      const minX = centers[0].centerX - IND_HALF;
+      const maxX = centers[centers.length - 1].centerX - IND_HALF;
       if (newX < minX) {
-        newX = minX + (newX - minX) * 0.25;
+        newX = minX + (newX - minX) * 0.2;
       } else if (newX > maxX) {
-        newX = maxX + (newX - maxX) * 0.25;
+        newX = maxX + (newX - maxX) * 0.2;
       }
     }
     positionIndicator(newX, false);
 
-    // Update hovered tab (reactive — template picks it up)
     const hovered = findHoveredTab(e.clientX);
     dragHoveredTab = hovered;
 
-    // Velocity tracking (EMA for snap projection)
+    // Velocity tracking
     const now = performance.now();
     const dt = now - lastDragT;
     if (dt > 0) {
@@ -219,28 +202,24 @@
 
   function onDragUp(e: PointerEvent) {
     if (!dragEngaged || e.pointerId !== dragPointerId) return;
-
-    // Remove document-level drag listeners
     detachDocDragListeners();
-
     indicatorEl?.classList.remove('indicator-grabbed');
     dragPointerId = null;
     dragEngaged = false;
-    isGrabbed = true; // mark so positionIndicator uses reflow trick
-    dragHoveredTab = null; // clear hover state
+    isGrabbed = true;
+    dragHoveredTab = null;
 
     const centers = cachedCenters;
     if (centers.length > 0) {
       const indCenter = currentX + IND_HALF;
-      // Find nearest tab
       let nearestIdx = 0;
       let nearestDist = Infinity;
       for (let i = 0; i < centers.length; i++) {
         const d = Math.abs(centers[i].centerX - indCenter);
         if (d < nearestDist) { nearestDist = d; nearestIdx = i; }
       }
-      // Velocity projection for snap target (120ms lookahead)
-      const projectedCenter = indCenter + dragVX * 120;
+      // Velocity projection for snap (100ms lookahead)
+      const projectedCenter = indCenter + dragVX * 100;
       let projectedIdx = nearestIdx;
       let projectedDist = Infinity;
       for (let i = 0; i < centers.length; i++) {
@@ -263,36 +242,23 @@
   function onTabPointerDown(e: PointerEvent, tabId: TabId) {
     if (e.button !== 0 && e.pointerType === 'mouse') return;
     e.preventDefault();
-
     pointerDownTab = tabId;
     pointerDownX = e.clientX;
     pointerDownY = e.clientY;
     movedSinceDown = false;
     dragPointerId = e.pointerId;
-
-    // Ensure cached centers are fresh before any potential drag
     invalidateCenters();
-
     spawnRipple(e, tabId);
   }
 
   function onTabPointerMove(e: PointerEvent) {
     if (!pointerDownTab || e.pointerId !== dragPointerId) return;
-
-    // If drag is already engaged, handled by document listeners
     if (dragEngaged) return;
-
-    // Check if movement qualifies for drag engagement
     tryEngageDrag(e);
   }
 
   function onTabPointerUp(e: PointerEvent, tabId: TabId) {
-    if (dragEngaged) {
-      // Let the document-level handler clean up
-      return;
-    }
-
-    // Normal tap — select tab if not moved
+    if (dragEngaged) return;
     if (pointerDownTab === tabId && !movedSinceDown) {
       selectTab(tabId);
     }
@@ -322,7 +288,6 @@
     requestAnimationFrame(() => {
       measureActiveTab(false);
     });
-
     if (typeof ResizeObserver !== 'undefined' && capsuleEl) {
       resizeObserver = new ResizeObserver(() => {
         invalidateCenters();
@@ -345,7 +310,7 @@
     window.removeEventListener('resize', onResize);
   });
 
-  // React to tab changes — SINGLE code path positions the indicator
+  // React to tab changes — positions the indicator
   $effect(() => {
     const _t = uiStore.tab;
     isGrabbed = false;
@@ -365,17 +330,14 @@
     bind:this={capsuleEl}
     onpointercancel={onTabPointerCancel}
   >
-    <!-- Subtle inner highlight -->
-    <div class="capsule-highlight" aria-hidden="true"></div>
-
-    <!-- active indicator (fixed-size rounded capsule, behind tabs) -->
+    <!-- Sliding active indicator -->
     <div
       class="nav-indicator"
       bind:this={indicatorEl}
       aria-hidden="true"
     ></div>
 
-    <!-- tabs (icons only) -->
+    <!-- Tabs -->
     {#each tabs as tab, i (tab.id)}
       {@const isActive = uiStore.tab === tab.id}
       {@const isDragHovered = dragHoveredTab === tab.id}
@@ -393,7 +355,7 @@
         onpointercancel={onTabPointerCancel}
       >
         <span class="tab-icon-wrap">
-          <tab.icon size={20} class="tab-icon" strokeWidth={isActive ? 2.3 : 1.7} />
+          <tab.icon size={20} class="tab-icon" strokeWidth={isActive ? 2.2 : 1.6} />
         </span>
 
         {#if tab.id === 'dms' && totalUnread > 0}
@@ -415,7 +377,7 @@
 </nav>
 
 <style>
-  /* ── Nav root: centered at bottom, safe area padding ── */
+  /* ── Nav root: centered at bottom with safe area ── */
   .nav-root {
     position: fixed;
     left: 0;
@@ -426,98 +388,62 @@
     align-items: center;
     justify-content: center;
     pointer-events: none;
-    padding: 0 max(14px, env(safe-area-inset-left, 0px)) max(12px, env(safe-area-inset-bottom, 0px)) max(14px, env(safe-area-inset-right, 0px));
+    padding: 0 max(16px, env(safe-area-inset-left, 0px)) max(14px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-right, 0px));
   }
 
-  /* ── Capsule: premium matte with 3D depth ── */
+  /* ── Capsule: frosted glass container — matches header glass style ── */
   .nav-capsule {
     position: relative;
     pointer-events: auto;
     display: flex;
     align-items: center;
     gap: 0;
-    padding: 5px;
-    border-radius: 26px;
-    max-width: 220px;
+    padding: 4px;
+    border-radius: 28px;
+    max-width: 260px;
     width: 100%;
-    height: 48px;
-    /* Matte dark surface with subtle depth */
-    background: linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.10) 0%,
-      rgba(255, 255, 255, 0.04) 40%,
-      rgba(0, 0, 0, 0.04) 100%
-    ),
-    linear-gradient(
-      160deg,
-      rgba(40, 40, 46, 1) 0%,
-      rgba(32, 32, 38, 1) 50%,
-      rgba(28, 28, 34, 1) 100%
-    );
-    border: 0.5px solid rgba(255, 255, 255, 0.08);
+    height: 52px;
+    /* Frosted glass — same treatment as the header pill */
+    background: rgba(255, 255, 255, 0.42);
+    backdrop-filter: blur(40px) saturate(220%);
+    -webkit-backdrop-filter: blur(40px) saturate(220%);
+    border: 0.5px solid rgba(255, 255, 255, 0.30);
     box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.18),
-      0 4px 12px rgba(0, 0, 0, 0.22),
-      0 8px 24px rgba(0, 0, 0, 0.12),
-      inset 0 0.5px 0 rgba(255, 255, 255, 0.12),
-      inset 0 -0.5px 0.5px rgba(0, 0, 0, 0.15);
+      0 1px 3px rgba(0, 0, 0, 0.06),
+      0 4px 16px rgba(0, 0, 0, 0.08),
+      0 0.5px 0 rgba(255, 255, 255, 0.15) inset;
     isolation: isolate;
     touch-action: none;
+    overflow: hidden;
   }
 
-  /* Subtle inner highlight — top edge lighting */
-  .capsule-highlight {
-    position: absolute;
-    top: 0.5px;
-    left: 16px;
-    right: 16px;
-    height: 45%;
-    border-radius: 25px 25px 50% 50%;
-    background: linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.07) 0%,
-      rgba(255, 255, 255, 0.02) 60%,
-      transparent 100%
-    );
-    pointer-events: none;
-    z-index: 0;
-  }
-
-  /* ── Active indicator: rounded capsule, constant size ── */
+  /* ── Active indicator: cohesive sliding pill ── */
   .nav-indicator {
     position: absolute;
     top: 50%;
     left: 0;
-    width: 38px;
-    height: 38px;
-    margin-top: -19px;
-    border-radius: 19px;
-    background: linear-gradient(
-      160deg,
-      rgba(62, 62, 68, 1) 0%,
-      rgba(54, 54, 60, 1) 100%
-    );
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+    width: 40px;
+    height: 40px;
+    margin-top: -20px;
+    border-radius: 20px;
+    /* Slightly more opaque glass — blends with capsule, not a separate "bubble" */
+    background: rgba(0, 0, 0, 0.08);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
     transform: translateX(0);
     transform-origin: center;
     z-index: 1;
     pointer-events: none;
     will-change: transform;
     -webkit-tap-highlight-color: transparent;
-    /* Premium easing — fast attack, smooth settle, no overshoot */
-    transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+    /* Smooth snap with slight bounce */
+    transition: transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1);
     contain: layout style;
   }
 
-  /* Grabbed state — slightly elevated */
   /* svelte-ignore css_unused_selector */
   .nav-indicator.indicator-grabbed {
-    background: linear-gradient(
-      160deg,
-      rgba(72, 72, 78, 1) 0%,
-      rgba(64, 64, 70, 1) 100%
-    );
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+    background: rgba(0, 0, 0, 0.10);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.10);
   }
 
   /* ── Tabs ── */
@@ -532,13 +458,13 @@
     padding: 0;
     border: none;
     background: transparent;
-    color: rgba(235, 235, 240, 0.45);
+    color: rgba(100, 100, 110, 0.50);
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
     user-select: none;
-    overflow: hidden;
-    border-radius: 18px;
-    transition: color 200ms cubic-bezier(0.22, 1, 0.36, 1);
+    overflow: visible;
+    border-radius: 20px;
+    transition: color 250ms cubic-bezier(0.22, 1, 0.36, 1);
     touch-action: none;
   }
 
@@ -547,22 +473,21 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    /* Smooth scale transition for drag hover feedback */
-    transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition: transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
   .nav-tab.tab-active {
-    color: #ffffff;
+    color: rgba(30, 30, 35, 0.90);
   }
 
-  /* Drag hover: icon scales up subtly, color brightens */
+  /* Drag hover feedback */
   /* svelte-ignore css_unused_selector */
   .nav-tab.tab-drag-hover {
-    color: rgba(255, 255, 255, 0.85);
+    color: rgba(30, 30, 35, 0.65);
   }
   /* svelte-ignore css_unused_selector */
   .nav-tab.tab-drag-hover .tab-icon-wrap {
-    transform: scale(1.10);
+    transform: scale(1.08);
   }
 
   :global(.nav-tab .tab-icon) {
@@ -576,34 +501,34 @@
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.20);
+    background: rgba(0, 0, 0, 0.08);
     transform: translate(-50%, -50%) scale(0);
     pointer-events: none;
-    animation: tabRipple 500ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    animation: tabRipple 450ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
     z-index: 0;
   }
   @keyframes tabRipple {
-    0% { transform: translate(-50%, -50%) scale(0); opacity: 0.20; }
-    100% { transform: translate(-50%, -50%) scale(16); opacity: 0; }
+    0% { transform: translate(-50%, -50%) scale(0); opacity: 0.10; }
+    100% { transform: translate(-50%, -50%) scale(14); opacity: 0; }
   }
 
   /* ── Unread badge ── */
   .unread-badge {
     position: absolute;
-    top: 3px;
-    right: 6px;
-    min-width: 15px;
-    height: 15px;
+    top: 2px;
+    right: 8px;
+    min-width: 16px;
+    height: 16px;
     padding: 0 4px;
-    border-radius: 8px;
+    border-radius: 9px;
     background: var(--color-danger, #ef4444);
     color: white;
     font-size: 9px;
     font-weight: 700;
-    line-height: 15px;
+    line-height: 16px;
     text-align: center;
-    box-shadow: 0 1px 3px rgba(239, 68, 68, 0.35);
-    animation: badgeScaleIn 250ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    box-shadow: 0 1px 3px rgba(239, 68, 68, 0.40);
+    animation: badgeScaleIn 280ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
     pointer-events: none;
     z-index: 3;
   }
@@ -612,55 +537,98 @@
     100% { transform: scale(1); opacity: 1; }
   }
 
-  /* ── Theme: dark ── */
+  /* ── Dark theme ── */
   :global(.dark) .nav-capsule {
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(0, 0, 0, 0.04) 100%),
-      linear-gradient(160deg, rgba(22, 22, 26, 1), rgba(18, 18, 22, 1));
-    border-color: rgba(255, 255, 255, 0.06);
+    background: rgba(22, 27, 34, 0.55);
+    border-color: rgba(255, 255, 255, 0.08);
     box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.30),
-      0 4px 12px rgba(0, 0, 0, 0.35),
-      0 8px 24px rgba(0, 0, 0, 0.18),
-      inset 0 0.5px 0 rgba(255, 255, 255, 0.08);
+      0 1px 3px rgba(0, 0, 0, 0.18),
+      0 4px 16px rgba(0, 0, 0, 0.22),
+      0 0.5px 0 rgba(255, 255, 255, 0.05) inset;
   }
   :global(.dark) .nav-indicator {
-    background:
-      linear-gradient(160deg, rgba(50, 50, 56, 1), rgba(44, 44, 50, 1));
+    background: rgba(255, 255, 255, 0.10);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  }
+  /* svelte-ignore css_unused_selector */
+  :global(.dark) .nav-indicator.indicator-grabbed {
+    background: rgba(255, 255, 255, 0.13);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  }
+  :global(.dark) .nav-tab {
+    color: rgba(200, 200, 210, 0.40);
+  }
+  :global(.dark) .nav-tab.tab-active {
+    color: rgba(240, 240, 245, 0.92);
+  }
+  /* svelte-ignore css_unused_selector */
+  :global(.dark) .nav-tab.tab-drag-hover {
+    color: rgba(240, 240, 245, 0.70);
+  }
+  :global(.dark) .tab-ripple {
+    background: rgba(255, 255, 255, 0.06);
   }
 
-  /* ── Theme: amoled ── */
+  /* ── AMOLED theme ── */
   :global(.amoled) .nav-capsule {
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(0, 0, 0, 0.06) 100%),
-      linear-gradient(160deg, rgba(14, 14, 18, 1), rgba(10, 10, 14, 1));
+    background: rgba(12, 12, 18, 0.65);
     border-color: rgba(255, 255, 255, 0.06);
     box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.40),
-      0 4px 12px rgba(0, 0, 0, 0.45),
-      0 8px 24px rgba(0, 0, 0, 0.22),
-      inset 0 0.5px 0 rgba(255, 255, 255, 0.06);
+      0 1px 3px rgba(0, 0, 0, 0.25),
+      0 4px 16px rgba(0, 0, 0, 0.30),
+      0 0.5px 0 rgba(255, 255, 255, 0.04) inset;
   }
   :global(.amoled) .nav-indicator {
-    background:
-      linear-gradient(160deg, rgba(36, 36, 42, 1), rgba(32, 32, 38, 1));
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  }
+  /* svelte-ignore css_unused_selector */
+  :global(.amoled) .nav-indicator.indicator-grabbed {
+    background: rgba(255, 255, 255, 0.11);
+  }
+  :global(.amoled) .nav-tab {
+    color: rgba(180, 180, 190, 0.35);
+  }
+  :global(.amoled) .nav-tab.tab-active {
+    color: rgba(240, 240, 245, 0.90);
+  }
+  /* svelte-ignore css_unused_selector */
+  :global(.amoled) .nav-tab.tab-drag-hover {
+    color: rgba(240, 240, 245, 0.65);
+  }
+  :global(.amoled) .tab-ripple {
+    background: rgba(255, 255, 255, 0.05);
   }
 
-  /* ── Theme: crimson-dark ── */
+  /* ── Crimson dark theme ── */
   :global(.crimson-dark) .nav-capsule {
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(0, 0, 0, 0.06) 100%),
-      linear-gradient(160deg, rgba(28, 22, 32, 1), rgba(22, 18, 28, 1));
+    background: rgba(28, 20, 28, 0.60);
     border-color: rgba(255, 255, 255, 0.06);
     box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.35),
-      0 4px 12px rgba(0, 0, 0, 0.38),
-      0 8px 24px rgba(0, 0, 0, 0.20),
-      inset 0 0.5px 0 rgba(255, 255, 255, 0.06);
+      0 1px 3px rgba(0, 0, 0, 0.22),
+      0 4px 16px rgba(0, 0, 0, 0.28),
+      0 0.5px 0 rgba(255, 255, 255, 0.04) inset;
   }
   :global(.crimson-dark) .nav-indicator {
-    background:
-      linear-gradient(160deg, rgba(50, 40, 52, 1), rgba(44, 36, 46, 1));
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.14);
+  }
+  /* svelte-ignore css_unused_selector */
+  :global(.crimson-dark) .nav-indicator.indicator-grabbed {
+    background: rgba(255, 255, 255, 0.11);
+  }
+  :global(.crimson-dark) .nav-tab {
+    color: rgba(200, 180, 190, 0.35);
+  }
+  :global(.crimson-dark) .nav-tab.tab-active {
+    color: rgba(245, 235, 240, 0.92);
+  }
+  /* svelte-ignore css_unused_selector */
+  :global(.crimson-dark) .nav-tab.tab-drag-hover {
+    color: rgba(245, 235, 240, 0.65);
+  }
+  :global(.crimson-dark) .tab-ripple {
+    background: rgba(255, 255, 255, 0.05);
   }
 
   /* ── Reduced motion ── */

@@ -3107,3 +3107,36 @@ Stage Summary:
 - Bubble: Always visible — click to open/close player, inverted style when expanded
 - Known limitation: Cache has 42 pre-indexed search keys covering popular artists; searches outside cache return 0 results
 - Known environment issue: Cloudflare adapter dev mode causes Vite to crash after 2-3 sequential HTTP requests (pre-existing, not from our changes)
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Fix chat header "seen X days ago", remove unused glass toggle, redesign bottom nav pill
+
+Work Log:
+- Analyzed Conversation.svelte header template — found `seenText` derived showing "Seen about 4 days ago ✓✓" taking priority over online/last seen status
+- Removed `{:else if seenText}` branch from header template (lines 1073-1074)
+- Removed unused `lastReadInfo` and `seenText` derived variables from script
+- Removed unused `formatDistanceToNow` import from date-fns
+- Removed unused `.header-seen` CSS class
+- Analyzed SettingsView.svelte — found "Glass Effects" toggle (`glassEffect` pref) is NEVER consumed by any component
+- Removed Glass Effects section from SettingsView (template + glassEffects array definition)
+- Removed `GlassEffect` type from SettingsView import
+- Completely redesigned BottomNavBar.svelte:
+  - Changed from dark matte opaque capsule to frosted glass (backdrop-blur + semi-transparent)
+  - Capsule now matches header glass style (rgba(255,255,255,0.42) + blur(40px) saturate(220%))
+  - Indicator changed from solid dark to subtle semi-transparent (rgba(0,0,0,0.08)) — blends with capsule instead of looking like a separate "bubble"
+  - Widened capsule from 220px to 260px, height from 48px to 52px
+  - Enlarged indicator from 38x38 to 40x40
+  - Added bounce snap animation (cubic-bezier(0.34, 1.56, 0.64, 1))
+  - Removed capsule-highlight div (contributed to "two bubbles" look)
+  - Full theme support: light, dark, amoled, crimson-dark with proper colors
+  - Added svelte-ignore comments for dynamically-added CSS classes
+- Verified no new svelte-check errors
+- Verified app loads without browser console errors via agent-browser
+
+Stage Summary:
+- Chat header now shows: typing → online → last seen → tap for info (no more "Seen X days ago")
+- Settings is cleaner — removed unused Glass Effects toggle
+- Bottom nav pill redesigned as cohesive frosted glass capsule matching header style
+- All changes pass svelte-check with no new errors

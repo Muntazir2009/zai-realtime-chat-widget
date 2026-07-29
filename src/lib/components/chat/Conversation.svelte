@@ -21,7 +21,7 @@
   import { prefsStore } from '$lib/stores/prefs.svelte';
   import { uploadFile, getVideoMetadata, getImageMetadata, type UploadProgress } from '$lib/firebase/storage';
   import type { Message } from '$lib/types/index';
-  import { format, formatDistanceToNow, isToday, isYesterday, startOfDay } from 'date-fns';
+  import { format, isToday, isYesterday, startOfDay } from 'date-fns';
   import EasterEggFx from './EasterEggFx.svelte';
   import WallpaperPicker from './WallpaperPicker.svelte';
   import { tick } from 'svelte';
@@ -150,32 +150,6 @@
     if (!otherPresence || !otherPresence.lastSeen) return null;
     if (otherPresence.status === 'online') return null;
     return formatLastSeen(otherPresence.lastSeen, abs, h24);
-  });
-
-  // "Seen" indicator — shows when the other user's lastReadMessageId matches our last sent message
-  let lastReadInfo = $derived.by(() => {
-    void presenceTick; // re-evaluate on tick for "Seen Xm ago" updates
-    if (!chatStore.activeChatId || !authStore.user) return null;
-    const otherReadId = chatStore.otherUserReadIds.get(chatStore.activeChatId);
-    if (!otherReadId) return null;
-    const msgs = chatStore.messages;
-    // Search from end for last own message (avoid reverse copy)
-    for (let i = msgs.length - 1; i >= 0; i--) {
-      if (msgs[i]!.sid === authStore.user!.id) {
-        if (msgs[i]!.id !== otherReadId) return null;
-        return { readMsgId: otherReadId, ts: msgs[i]!.ts };
-      }
-    }
-    return null;
-  });
-
-  let seenText = $derived.by(() => {
-    if (!lastReadInfo) return null;
-    if (!lastReadInfo.ts) return 'Seen';
-    const now = Date.now();
-    const diffMs = now - lastReadInfo.ts;
-    if (diffMs < 5 * 60 * 1000) return 'Seen just now';
-    return `Seen ${formatDistanceToNow(lastReadInfo.ts, { addSuffix: true })}`;
   });
 
   // Online/offline toast notification
@@ -1070,8 +1044,6 @@
                 <span class="htd"></span><span class="htd"></span><span class="htd"></span>
               </span>
             </div>
-          {:else if seenText}
-            <p class="header-sub header-seen">{seenText} ✓✓</p>
           {:else if otherPresence?.status === 'online'}
             <p class="header-sub header-online">Online</p>
           {:else if otherPresence}
@@ -2366,11 +2338,6 @@
     align-items: center;
     justify-content: center;
     padding: 48px 24px;
-  }
-
-  .header-seen {
-    color: var(--color-primary) !important;
-    font-weight: 500;
   }
 
 
