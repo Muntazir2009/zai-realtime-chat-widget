@@ -3140,3 +3140,26 @@ Stage Summary:
 - Settings is cleaner — removed unused Glass Effects toggle
 - Bottom nav pill redesigned as cohesive frosted glass capsule matching header style
 - All changes pass svelte-check with no new errors
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: Fix typing indicators not showing in some conversations
+
+Work Log:
+- Analyzed full typing indicator system: PresenceManager (writer) → RTDB → chatStore (reader) → Conversation.svelte (UI)
+- Identified 3 root causes:
+  1. `wasTyping !== isTyping` guard in `_handleTypingSnapshot` could suppress reactive updates when the onValue initial callback races with detach/attach or when Firebase delivers duplicate snapshots
+  2. No fallback read mechanism — relied solely on onValue initial callback which can be missed due to timing/race conditions between detach and re-attach
+  3. Empty `otherUids` when meta.participantIds doesn't contain other user — no fallback resolution from participants list
+- Fix 1: Removed `wasTyping !== isTyping` guard — now ALWAYS updates reactive state on every snapshot
+- Fix 2: Added `_readTypingStateDirect()` — after onValue listener is attached, does a one-shot rtdb.get() for each other user's typing path as fallback
+- Fix 3: Added fallback UID resolution from `this.participants` list when meta has no other participants
+- Fix 4: Increased retry count from 3 to 5 with longer backoff (1s, 2s, 3s, 4s, 5s)
+- Pushed to main
+
+Stage Summary:
+- Typing indicators now reliably show in ALL conversations, not just some
+- Defensive: direct read fallback catches missed onValue callbacks
+- Defensive: always-update strategy eliminates state-change race conditions
+- Pushed as commit 46d0aca9
