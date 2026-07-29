@@ -1,7 +1,7 @@
 // ============================================================
 // youtube.ts — Client-side YouTube search via static cache
-// Loads search-cache.json from /static (served as public asset).
-// All search runs in the browser. No server API route needed.
+// Fetches /search-cache.json (served as static asset by Vite).
+// All search runs in the browser — no server route needed.
 // ============================================================
 
 import type { Track } from './player-store.svelte.js';
@@ -19,7 +19,6 @@ type CacheEntry = {
   tracks: YTSearchResult[];
 };
 
-// Cache loaded once, then kept in memory
 let _cache: Record<string, CacheEntry> | null = null;
 let _cachePromise: Promise<Record<string, CacheEntry>> | null = null;
 
@@ -131,7 +130,7 @@ export async function resolveTrack(input: string): Promise<Track | null> {
   if (videoId) {
     return {
       id: videoId,
-      title: extractTitleFromUrl(trimmed) || 'YouTube Video',
+      title: 'YouTube Video',
       artist: '',
       duration: 0,
       thumbnail: `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`,
@@ -143,7 +142,7 @@ export async function resolveTrack(input: string): Promise<Track | null> {
   const results = await searchMusic(trimmed);
   if (results.length === 0) return null;
 
-  const r = results[0];
+  const r = results[0]!;
   return {
     id: r.id,
     title: r.title,
@@ -176,8 +175,4 @@ export function clearCaches(): void {
 function extractVideoId(input: string): string | null {
   const m = input.trim().match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/);
   return m ? m[1] : (/^([a-zA-Z0-9_-]{11})$/.test(input.trim()) ? input.trim() : null);
-}
-
-function extractTitleFromUrl(url: string): string | null {
-  return null;
 }

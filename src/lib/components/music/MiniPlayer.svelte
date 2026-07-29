@@ -62,14 +62,8 @@
 <svelte:window onpointermove={handleProgressMove} onpointerup={handleProgressUp} />
 
 <div class="mp">
-  <!-- ── Header: close + track info ── -->
+  <!-- ── Header: track info (bubble acts as close button) ── -->
   <div class="mp-header">
-    <button class="mp-close" onclick={() => playerStore.collapse()} aria-label="Close player">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-        <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
-      </svg>
-    </button>
-
     {#if playerStore.currentTrack}
       <div class="mp-track-info">
         <img class="mp-thumb" src={playerStore.currentTrack.thumbnail} alt="" />
@@ -237,29 +231,8 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 12px 12px 8px 14px;
+    padding: 14px 16px 10px;
   }
-
-  .mp-close {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    border: none;
-    background: var(--bg-surface, rgba(255,255,255,0.04));
-    color: var(--text-tertiary, #666);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    flex-shrink: 0;
-    transition: all 150ms;
-    padding: 0;
-    outline: none;
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  .mp-close:hover { color: var(--text-secondary, #aaa); background: var(--bg-surface, rgba(255,255,255,0.08)); }
-  .mp-close:active { color: var(--text-primary, #fff); transform: scale(0.92); }
 
   /* ── Track info in header ── */
   .mp-track-info {

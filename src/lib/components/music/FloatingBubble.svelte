@@ -2,6 +2,7 @@
   /**
    * FloatingBubble — Premium 44px draggable orb that expands into MiniPlayer.
    * Monochrome matte aesthetic with waveform equalizer when playing.
+   * Bubble is ALWAYS visible — click it to open or close the player.
    */
 
   import { playerStore } from '$lib/music/player-store.svelte.js';
@@ -79,6 +80,7 @@
     document.removeEventListener('pointerup', onDocPointerUp);
 
     if (!dragMoved) {
+      // Toggle expand/collapse on tap
       if (!isExpanded) {
         playerStore.expand();
         if (!moduleLoaded) loadModule();
@@ -111,11 +113,14 @@
   // ── Computed expanded position (keep near bubble, clamped to viewport) ──
   const expandedX = $derived.by(() => {
     if (typeof window === 'undefined') return 0;
-    return Math.max(12, Math.min(bubbleX - 126, window.innerWidth - 320));
+    // Position above the bubble
+    const baseX = Math.max(12, Math.min(bubbleX - 126, window.innerWidth - 320));
+    return baseX;
   });
   const expandedY = $derived.by(() => {
     if (typeof window === 'undefined') return 0;
-    return Math.max(12, Math.min(bubbleY - 200, window.innerHeight - 480));
+    // Position above the bubble with gap
+    return Math.max(12, Math.min(bubbleY - 490, window.innerHeight - 500));
   });
 </script>
 
@@ -123,55 +128,60 @@
   onresize={() => { if (!isExpanded && _positionInitialized) snapToEdge(); }}
 />
 
-<!-- ── Collapsed Bubble ── -->
-{#if !isExpanded}
-  <div
-    class="fb-wrap"
-    class:fb-dragging={isDragging}
-    style="transform: translate3d({bubbleX}px, {bubbleY}px, 0);"
+<!-- ── Bubble — ALWAYS visible ── -->
+<div
+  class="fb-wrap"
+  class:fb-dragging={isDragging}
+  class:fb-active={isExpanded}
+  style="transform: translate3d({bubbleX}px, {bubbleY}px, 0); z-index: {isExpanded ? 210 : 200};"
+>
+  <!-- Progress ring -->
+  {#if hasTrack}
+    <svg class="fb-ring" viewBox="0 0 44 44">
+      <circle
+        cx="22" cy="22" r="19"
+        fill="none"
+        stroke="var(--text-primary)"
+        stroke-width="1.5"
+        stroke-dasharray={circumference}
+        stroke-dashoffset={circumference * (1 - progress)}
+        stroke-linecap="round"
+        transform="rotate(-90 22 22)"
+        opacity="0.3"
+      />
+    </svg>
+  {/if}
+
+  <!-- Bubble body -->
+  <button
+    class="fb-body"
+    onpointerdown={onBubblePointerDown}
+    aria-label={isExpanded ? 'Close music player' : 'Open music player'}
   >
-    <!-- Progress ring -->
-    {#if hasTrack}
-      <svg class="fb-ring" viewBox="0 0 44 44">
-        <circle
-          cx="22" cy="22" r="19"
-          fill="none"
-          stroke="var(--text-primary)"
-          stroke-width="1.5"
-          stroke-dasharray={circumference}
-          stroke-dashoffset={circumference * (1 - progress)}
-          stroke-linecap="round"
-          transform="rotate(-90 22 22)"
-          opacity="0.3"
-        />
+    {#if isExpanded}
+      <!-- Close icon when expanded -->
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+        <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+      </svg>
+    {:else if hasTrack && playerStore.currentTrack?.thumbnail}
+      <img class="fb-thumb" src={playerStore.currentTrack.thumbnail} alt="" />
+      <!-- Waveform overlay when playing -->
+      {#if isPlaying}
+        <span class="fb-wave-wrap">
+          <span class="fb-wave"><span></span><span></span><span></span><span></span><span></span></span>
+        </span>
+      {/if}
+    {:else}
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 18V5l12-2v13"/>
+        <circle cx="6" cy="18" r="3"/>
+        <circle cx="18" cy="16" r="3"/>
       </svg>
     {/if}
-
-    <!-- Bubble body -->
-    <button
-      class="fb-body"
-      onpointerdown={onBubblePointerDown}
-      aria-label="Music player"
-    >
-      {#if hasTrack && playerStore.currentTrack?.thumbnail}
-        <img class="fb-thumb" src={playerStore.currentTrack.thumbnail} alt="" />
-        <!-- Waveform overlay when playing -->
-        {#if isPlaying}
-          <span class="fb-wave-wrap">
-            <span class="fb-wave"><span></span><span></span><span></span><span></span><span></span></span>
-          </span>
-        {/if}
-      {:else}
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M9 18V5l12-2v13"/>
-          <circle cx="6" cy="18" r="3"/>
-          <circle cx="18" cy="16" r="3"/>
-        </svg>
-      {/if}
-    </button>
-  </div>
-{/if}
+  </button>
+</div>
 
 <!-- ── Expanded Player ── -->
 {#if isExpanded}
@@ -195,7 +205,6 @@
     position: fixed;
     top: 0;
     left: 0;
-    z-index: 200;
     width: 44px;
     height: 44px;
     touch-action: none;
@@ -203,11 +212,21 @@
     user-select: none;
     -webkit-tap-highlight-color: transparent;
     will-change: transform;
-    transition: filter 200ms ease;
+    transition: filter 200ms ease, box-shadow 250ms ease;
   }
 
   .fb-wrap:active {
     filter: brightness(0.95);
+  }
+
+  /* When player is expanded, give bubble a subtle glow */
+  .fb-active .fb-body {
+    background: var(--text-primary, #fff);
+    color: var(--bg-elevated, #1a1a1a);
+    box-shadow:
+      0 2px 8px rgba(255,255,255,0.08),
+      0 8px 24px rgba(0,0,0,0.18),
+      0 0 0 2px rgba(255,255,255,0.15);
   }
 
   /* ── Bubble body ── */
@@ -230,7 +249,7 @@
     padding: 0;
     outline: none;
     -webkit-tap-highlight-color: transparent;
-    transition: box-shadow 250ms ease, transform 150ms ease;
+    transition: box-shadow 250ms ease, transform 150ms ease, background 200ms ease, color 200ms ease;
   }
 
   .fb-body:active {
