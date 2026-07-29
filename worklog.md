@@ -3083,3 +3083,27 @@ Stage Summary:
 - Memory-cached after first load — subsequent searches are instant
 - No dependency on server API routes or ES module JSON imports
 - Build verified: zero errors
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Fix music player search, playback, and always-visible bubble
+
+Work Log:
+- Investigated search failure: player store was calling server API route that crashed due to Cloudflare adapter instability
+- Removed unstable `/api/music/search` server route that caused Vite crashes
+- Reverted youtube.ts to client-side search: fetches `/search-cache.json` static asset (214KB, 42 keys, 630 tracks)
+- 5-tier fuzzy search: exact key → partial key → word-level key → title+artist fuzzy → single-word loose match
+- Fixed FloatingBubble.svelte: removed `{#if !isExpanded}` conditional — bubble is ALWAYS visible
+- Added inverted styling (white bg, dark text) and elevated z-index when expanded
+- Shows X close icon when player is open, music note when collapsed
+- Removed close button from MiniPlayer header (bubble now handles close)
+- Verified search works: "hello" → 15 tracks, "adele" → 15 tracks via static cache
+- playFromSearch() confirmed working — creates Track from search result and plays via YouTube IFrame API
+
+Stage Summary:
+- Search: Fixed (client-side static cache search, no server route)
+- Playback: playFromSearch works for any track in the cache
+- Bubble: Always visible — click to open/close player, inverted style when expanded
+- Known limitation: Cache has 42 pre-indexed search keys covering popular artists; searches outside cache return 0 results
+- Known environment issue: Cloudflare adapter dev mode causes Vite to crash after 2-3 sequential HTTP requests (pre-existing, not from our changes)
