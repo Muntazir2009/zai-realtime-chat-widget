@@ -85,6 +85,7 @@ class ChatStore {
   private typingUnsubs: Map<string, () => void> = new Map();
   private typingSafetyTimeouts: Map<string, Map<string, ReturnType<typeof setTimeout>>> = new Map();
   private typingRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  private typingRetryCount: number = 0;
   private otherReadUnsub: (() => void) | null = null;
 
   // ---- Self profile listener ----
@@ -866,16 +867,28 @@ class ChatStore {
 
   private async attachTypingListener(chatId: string): Promise<void> {
     this.detachTypingListener();
+    this.typingRetryCount = 0; // reset retry counter on fresh attach
+    await this._doAttachTypingListener(chatId);
+  }
+
+  /** Internal: actually attach the Firebase typing listeners. Retries up to 3
+   *  times with backoff if meta is not yet available. */
+  private async _doAttachTypingListener(chatId: string): Promise<void> {
     const meta = this.chats.get(chatId);
     if (!meta || !meta.participantIds || meta.participantIds.length === 0) {
-      // Meta not loaded yet — retry after a short delay
-      console.warn('[ChatStore] attachTypingListener: meta not available for', chatId, '- retrying in 1s');
+      this.typingRetryCount++;
+      if (this.typingRetryCount > 3) {
+        console.error('[ChatStore] attachTypingListener: meta still not available after 3 retries for', chatId);
+        return;
+      }
+      const delay = 1000 * this.typingRetryCount; // 1s, 2s, 3s
+      console.warn(`[ChatStore] attachTypingListener: meta not available for ${chatId} - retry #${this.typingRetryCount} in ${delay}ms`);
       if (this.typingRetryTimer) clearTimeout(this.typingRetryTimer);
       this.typingRetryTimer = setTimeout(() => {
         if (this.activeChatId === chatId) {
-          this.attachTypingListener(chatId).catch(() => {});
+          this._doAttachTypingListener(chatId).catch(() => {});
         }
-      }, 1000);
+      }, delay);
       return;
     }
 
@@ -884,8 +897,9 @@ class ChatStore {
 
     // Only listen for OTHER users' typing (skip own UID — we already know we're typing)
     const otherUids = meta.participantIds.filter(uid => uid !== myUid);
-    console.log('[ChatStore] Attaching typing listeners for', otherUids.length, 'users in chat', chatId);
+    console.log('[ChatStore] Attaching typing listeners for', otherUids.length, 'users in chat', chatId, '- otherUids:', otherUids);
 
+    let attachedCount = 0;
     for (const uid of otherUids) {
       try {
         const r = await rtdb.ref(RTDB_PATHS.TYPING(chatId, uid));
@@ -893,9 +907,14 @@ class ChatStore {
           this._handleTypingSnapshot(chatId, uid, snap);
         });
         this.typingUnsubs.set(uid, unsub);
+        attachedCount++;
+        console.log('[ChatStore] Typing listener attached OK for uid=', uid, 'chat=', chatId);
       } catch (err) {
-        console.error('[ChatStore] Failed to attach typing listener for', uid, err);
+        console.error('[ChatStore] Failed to attach typing listener for uid=', uid, 'chat=', chatId, err);
       }
+    }
+    if (attachedCount === 0 && otherUids.length > 0) {
+      console.error('[ChatStore] WARNING: 0 typing listeners attached out of', otherUids.length, 'for chat', chatId);
     }
   }
 
@@ -909,9 +928,10 @@ class ChatStore {
       // Support both formats:
       //   - Number (timestamp): 1715234567890
       //   - Object (legacy):   { typing: true, ts: 1715234567890 }
+      // 15-second window accounts for clock skew and Firebase delivery latency.
       if (typeof raw === 'number') {
-        isTyping = raw > 0 && (Date.now() - raw) < 8000;
-      } else if (raw && (raw.typing === true || (raw.ts && typeof raw.ts === 'number' && Date.now() - raw.ts < 8000))) {
+        isTyping = raw > 0 && (Date.now() - raw) < 15000;
+      } else if (raw && (raw.typing === true || (raw.ts && typeof raw.ts === 'number' && Date.now() - raw.ts < 15000))) {
         isTyping = true;
       }
     }
@@ -962,7 +982,7 @@ class ChatStore {
         .map(uid => this.userDict.get(uid)?.displayName ?? 'Someone');
     }
 
-    // Update the Map (for inbox/other chats)
+    // Update the Map (for inbox/other chats) — persists across chat switches
     const m = new Map(this.typingDisplayNames);
     if (names.length === 0) {
       m.delete(chatId);
@@ -975,7 +995,10 @@ class ChatStore {
     // the Conversation component reads. Reassigning an array is the most
     // reliable way to trigger Svelte 5 reactivity.
     if (this.activeChatId === chatId) {
+      console.log('[ChatStore] activeTypingNames updated:', names, 'for chat', chatId, '(activeChatId:', this.activeChatId, ')');
       this.activeTypingNames = names.slice();
+    } else {
+      console.log('[ChatStore] Typing update for non-active chat', chatId, '- stored in map but not shown');
     }
   }
 
@@ -1002,12 +1025,11 @@ class ChatStore {
       clearTimeout(this.typingRetryTimer);
       this.typingRetryTimer = null;
     }
-    // Clear internal typing state
+    // Clear internal typing UIDs (non-reactive tracking)
     this._typingUids.clear();
-    // Clear the reactive state so the UI updates immediately
-    if (this.typingDisplayNames.size > 0) {
-      this.typingDisplayNames = new Map();
-    }
+    // Clear the reactive array for the active chat so the UI updates immediately.
+    // Do NOT clear the entire typingDisplayNames map — other chats' typing state
+    // is preserved so switching back can restore it from the map.
     if (this.activeTypingNames.length > 0) {
       this.activeTypingNames = [];
     }
@@ -1131,6 +1153,14 @@ class ChatStore {
     this.closeChat();
     this.detachPresenceListeners(); // Full cleanup on logout
     this.detachSelfProfileListener();
+    // Full reset: clear ALL typing state on logout
+    this._typingUids.clear();
+    if (this.typingDisplayNames.size > 0) {
+      this.typingDisplayNames = new Map();
+    }
+    if (this.activeTypingNames.length > 0) {
+      this.activeTypingNames = [];
+    }
   }
 
   // ============================================================
