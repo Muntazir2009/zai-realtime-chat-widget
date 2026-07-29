@@ -1,12 +1,10 @@
 // ============================================================
 // youtube.ts — Client-side YouTube search via static cache
+// Loads search-cache.json from /static (served as public asset).
 // All search runs in the browser. No server API route needed.
-// Playback uses YouTube IFrame Player API (client-side).
 // ============================================================
 
 import type { Track } from './player-store.svelte.js';
-// @ts-expect-error — Vite handles JSON imports natively
-import searchCache from './search-cache.json';
 
 export interface YTSearchResult {
   id: string;
@@ -21,13 +19,37 @@ type CacheEntry = {
   tracks: YTSearchResult[];
 };
 
-const cache = searchCache as Record<string, CacheEntry>;
+// Cache loaded once, then kept in memory
+let _cache: Record<string, CacheEntry> | null = null;
+let _cachePromise: Promise<Record<string, CacheEntry>> | null = null;
+
+async function getCache(): Promise<Record<string, CacheEntry>> {
+  if (_cache) return _cache;
+  if (_cachePromise) return _cachePromise;
+
+  _cachePromise = (async () => {
+    try {
+      const res = await fetch('/search-cache.json');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      _cache = data as Record<string, CacheEntry>;
+      console.log('[YouTube] Search cache loaded:', Object.keys(_cache).length, 'keys');
+      return _cache!;
+    } catch (err) {
+      console.error('[YouTube] Failed to load search cache:', err);
+      return {} as Record<string, CacheEntry>;
+    }
+  })();
+
+  return _cachePromise;
+}
 
 /** Search YouTube for music tracks using local static cache */
 export async function searchMusic(query: string): Promise<YTSearchResult[]> {
   if (!query.trim()) return [];
 
   const q = query.trim().toLowerCase();
+  const cache = await getCache();
 
   // 1. Exact key match
   if (cache[q]) {
@@ -144,8 +166,11 @@ export function ytResultToTrack(r: YTSearchResult): Track {
   };
 }
 
-/** No-op */
-export function clearCaches(): void {}
+/** Clear in-memory cache */
+export function clearCaches(): void {
+  _cache = null;
+  _cachePromise = null;
+}
 
 // ── Helpers ──
 function extractVideoId(input: string): string | null {

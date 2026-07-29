@@ -3060,3 +3060,26 @@ Stage Summary:
 - YouTube playback has automatic fallback for sandboxed environments
 - MiniPlayer UI redesigned with icon tabs and cleaner controls
 - Build verified: zero errors from modified files
+
+---
+Task ID: music-search-fix-v3
+Agent: Main Agent
+Task: Fix search still failing — Vite JSON import broken in sandbox
+
+Work Log:
+- User reported same `Error {}` / `SyntaxError` after previous fix
+- Root cause: `import searchCache from './search-cache.json'` (ES module JSON import) was failing at runtime in this sandbox environment — Vite couldn't properly resolve/bundle the JSON as a module
+- Fix: Changed approach entirely — copied `search-cache.json` to `static/` directory so it's served as a public asset
+- Rewrote `youtube.ts` to use `fetch('/search-cache.json')` at runtime instead of ES module import
+- Cache loaded once and stored in memory (`_cache` variable), subsequent searches use cached data
+- Added proper error handling: if fetch fails, returns empty array (never throws)
+- Verified: `curl http://localhost:3000/search-cache.json` returns valid JSON with all 42 keys
+- Build passes: no JSON bundled in client chunks, search-cache served from static/
+- Also verified: audio.ts has YouTube IFrame API fallback, MiniPlayer has improved UI
+
+Stage Summary:
+- Search uses `fetch('/search-cache.json')` — the most bulletproof approach that works in any environment
+- Static file is 214KB, served directly by Vite/Caddy without any processing
+- Memory-cached after first load — subsequent searches are instant
+- No dependency on server API routes or ES module JSON imports
+- Build verified: zero errors
