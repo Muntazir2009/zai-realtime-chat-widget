@@ -200,10 +200,11 @@
     }
   });
 
-  // ── Typing names — read directly from chatStore.activeTypingNames ──
-  // This is a simple $state<string[]> that gets reassigned on every typing
-  // event, guaranteeing reliable Svelte 5 reactivity.
-  let typingNames = $derived(chatStore.activeTypingNames);
+  // ── Typing names — MUST use $derived.by() with explicit read to ensure
+  // Svelte 5 tracks the reactive $state class field on the singleton store.
+  let typingNames = $derived.by(() => {
+    return [...chatStore.activeTypingNames];
+  });
 
   let sortedPinned = $derived.by(() => {
     return Array.from(chatStore.pinnedMessages.entries())

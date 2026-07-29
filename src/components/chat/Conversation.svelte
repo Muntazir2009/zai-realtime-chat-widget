@@ -24,9 +24,10 @@
     return chatStore.presence.get(otherUser.id) ?? null;
   });
 
-  let typingNames = $derived(
-    chatStore.activeChatId ? chatStore.getTypingUsersForChat(chatStore.activeChatId) : [],
-  );
+  let typingNames = $derived.by(() => {
+    if (!chatStore.activeChatId) return [];
+    return [...chatStore.activeTypingNames];
+  });
 
   // Auto-scroll on new messages
   $effect(() => {
