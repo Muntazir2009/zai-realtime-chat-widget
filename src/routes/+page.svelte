@@ -43,12 +43,6 @@
   let skipConvEnterAnim = $state(false);
   let LockScreenComp: any = $state(null);
 
-  // ── Floating Music Bubble (always visible, lazy loaded) ──
-  let MusicBubble: any = $state(null);
-  import('$lib/components/music/FloatingBubble.svelte').then(mod => {
-    MusicBubble = mod.default;
-  }).catch(() => {});
-
   // ── Double-back-to-exit state ──
   let exitBackPending = $state(false);
   let exitBackTimer: ReturnType<typeof setTimeout> | null = null;
@@ -281,11 +275,6 @@
 {/if}
 
 <ConnectionStatus />
-
-<!-- Floating Music Bubble — always visible once loaded -->
-{#if MusicBubble && view !== 'loading' && view !== 'auth'}
-  <MusicBubble />
-{/if}
 
 <!-- App Lock overlay: renders above everything when locked -->
 {#if authStore.isAuthenticated && appLockStore.isLocked && LockScreenComp}

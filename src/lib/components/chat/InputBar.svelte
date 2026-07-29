@@ -10,7 +10,6 @@
   import { uploadFile } from '$lib/firebase/storage';
   import { prefsStore } from '$lib/stores/prefs.svelte';
   import { draftStore } from '$lib/stores/draft.svelte';
-  import { playerStore } from '$lib/music/player-store.svelte.js';
 
   interface Props {
     /** Initial draft text to restore */
@@ -116,54 +115,8 @@
     const trimmed = input.trim();
     const spaceIdx = trimmed.indexOf(' ');
     const cmd = spaceIdx > 0 ? trimmed.slice(0, spaceIdx).toLowerCase() : trimmed.toLowerCase();
-    const arg = spaceIdx > 0 ? trimmed.slice(spaceIdx + 1).trim() : '';
 
     switch (cmd) {
-      case '/play': {
-        if (!arg) { toastStore.info('Usage: /play <song name>'); return true; }
-        playerStore.init();
-        const err = await playerStore.commandPlay(arg);
-        if (err) toastStore.error(err);
-        else toastStore.success('Playing...');
-        return true;
-      }
-      case '/queue': {
-        if (!arg) { toastStore.info('Usage: /queue <song name>'); return true; }
-        playerStore.init();
-        const msg = await playerStore.commandQueue(arg);
-        toastStore.success(msg);
-        return true;
-      }
-      case '/pause':
-        playerStore.init();
-        playerStore.pause();
-        toastStore.info('Paused');
-        return true;
-      case '/resume':
-        playerStore.init();
-        playerStore.resume();
-        toastStore.info('Resumed');
-        return true;
-      case '/skip':
-        playerStore.init();
-        playerStore.playNext();
-        return true;
-      case '/nowplaying': {
-        const info = playerStore.nowPlayingInfo();
-        if (info) onSend(info);
-        else toastStore.info('Nothing playing');
-        return true;
-      }
-      case '/volume': {
-        const v = parseFloat(arg);
-        if (isNaN(v) || v < 0 || v > 1) {
-          toastStore.info('Usage: /volume 0.0 to 1.0');
-        } else {
-          playerStore.setVolume(v);
-          toastStore.info(`Volume: ${Math.round(v * 100)}%`);
-        }
-        return true;
-      }
       default:
         return false;
     }
