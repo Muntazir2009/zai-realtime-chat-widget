@@ -10,20 +10,21 @@
     ArrowUpDown, Send, Users as UsersIcon,
   } from 'lucide-svelte';
   import Avatar from '$lib/components/ui/Avatar.svelte';
-  import * as rtdb from '$lib/firebase/rtdb.js';
   import { chatStore } from '$lib/stores/chat.svelte.js';
   import { uiStore } from '$lib/stores/ui.svelte.js';
   import { toastStore } from '$lib/stores/toast.svelte.js';
   import { authStore } from '$lib/stores/auth.svelte.js';
   import type { User, PresenceState } from '$lib/types/index.js';
+  import * as rtdb from '$lib/firebase/rtdb.js';
 
   interface Props {
     onBack: () => void;
   }
   let { onBack }: Props = $props();
 
-  // ── Realtime state ──
-  let presenceMap = $state<Map<string, PresenceState>>(new Map());
+  // ── Reactive state — presence comes from chatStore.presence (shared listener) ──
+  // Use $derived.by() to read from the singleton store's reactive Map
+  let presenceMap = $derived.by(() => new Map(chatStore.presence));
   let profileCache = $state<Map<string, User>>(new Map());
   let loadingProfiles = $state<Set<string>>(new Set());
   let isRefreshing = $state(false);
@@ -41,9 +42,7 @@
   const PULL_THRESHOLD = 80;
   const PULL_MAX = 100;
 
-  // ── Listener handles ──
-  let unsub: (() => void) | null = null;
-  let staleTimer: ReturnType<typeof setInterval> | null = null;
+  // ── Timer handles ──
   let searchDebounce: ReturnType<typeof setTimeout> | null = null;
   let mounted = true;
 
@@ -53,9 +52,10 @@
   let users = $derived.by(() => {
     const selfId = authStore.user?.id;
     const now = Date.now();
+    const pMap = presenceMap; // reactive read
     const entries: Array<{ uid: string; presence: PresenceState; user: User | null }> = [];
 
-    for (const [uid, raw] of presenceMap) {
+    for (const [uid, raw] of pMap) {
       if (uid === selfId) continue;
       // Stale check: online but lastSeen > 90s → treat as offline
       let effective = raw;
@@ -189,53 +189,10 @@
     }
   }
 
-  // ── Realtime listener on presence/ ──
-  async function attachListener(): Promise<void> {
-    isLoading = true;
-    try {
-      const r = await rtdb.ref('presence/');
-      unsub = await rtdb.onValue(r, (snap) => {
-        if (!mounted) return;
-        const newMap = new Map<string, PresenceState>();
-        if (snap.exists()) {
-          snap.forEach((childSnap: any) => {
-            const p = childSnap.val() as PresenceState;
-            if (p && p.uid) newMap.set(p.uid, p);
-          });
-        }
-        presenceMap = newMap;
-        isLoading = false;
-        ensureProfiles();
-      });
-    } catch (err) {
-      console.error('[OnlineUsers] Failed to attach listener:', err);
-      isLoading = false;
-      toastStore.error('Failed to load online users');
-    }
-  }
-
-  // Periodic stale re-evaluation (forces reassign so $derived recomputes)
-  function startStaleTimer(): void {
-    staleTimer = setInterval(() => {
-      if (!mounted) return;
-      presenceMap = new Map(presenceMap);
-    }, 30_000);
-  }
-
   async function handleRefresh(): Promise<void> {
     if (isRefreshing) return;
     isRefreshing = true;
     try {
-      const snap = await rtdb.get(await rtdb.ref('presence/'));
-      if (!mounted) return;
-      const newMap = new Map<string, PresenceState>();
-      if (snap.exists()) {
-        snap.forEach((childSnap: any) => {
-          const p = childSnap.val() as PresenceState;
-          if (p && p.uid) newMap.set(p.uid, p);
-        });
-      }
-      presenceMap = newMap;
       ensureProfiles();
       toastStore.success('Online users refreshed');
     } catch (err) {
@@ -317,14 +274,12 @@
 
   onMount(() => {
     mounted = true;
-    attachListener();
-    startStaleTimer();
+    ensureProfiles();
+    isLoading = false;
   });
 
   onDestroy(() => {
     mounted = false;
-    if (unsub) unsub();
-    if (staleTimer) clearInterval(staleTimer);
     if (searchDebounce) clearTimeout(searchDebounce);
   });
 

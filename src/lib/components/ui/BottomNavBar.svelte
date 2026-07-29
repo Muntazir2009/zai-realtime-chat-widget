@@ -121,7 +121,7 @@
       isGrabbed = true;
       // Record the indicator position at the moment drag engages
       const activeIdx = tabs.findIndex(t => t.id === uiStore.tab);
-      dragStartIndX = cachedCenters[activeIdx]?.centerX - IND_HALF ?? currentX;
+      dragStartIndX = (cachedCenters[activeIdx]?.centerX ?? currentX) - IND_HALF;
       dragStartX = e.clientX;
       lastDragX = e.clientX;
       lastDragT = performance.now();

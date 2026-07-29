@@ -34,6 +34,8 @@ class ToastStore {
 
   private _nextId = 0;
   private _rafId: number | null = null;
+  private _lastTick = 0;
+  private _TICK_INTERVAL = 100; // ~10fps — progress bar doesn't need 60fps
   private _pausedStart: Map<string, number> = new Map();
   private _totalPaused: Map<string, number> = new Map();
 
@@ -134,6 +136,17 @@ class ToastStore {
 
   private _tick = (): void => {
     const now = Date.now();
+    // Throttle to ~10fps — progress bar doesn't need 60fps
+    if (now - this._lastTick < this._TICK_INTERVAL) {
+      if (this.toasts.length > 0) {
+        this._rafId = requestAnimationFrame(this._tick);
+      } else {
+        this._rafId = null;
+      }
+      return;
+    }
+    this._lastTick = now;
+
     let hasActive = false;
 
     for (const toast of this.toasts) {

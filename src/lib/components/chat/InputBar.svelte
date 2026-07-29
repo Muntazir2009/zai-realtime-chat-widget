@@ -52,7 +52,7 @@
   onMount(() => {
     return () => {
       if (chatStore.activeChatId && message.trim().length > 0) {
-        draftStore.setDraft(chatStore.activeChatId, message);
+        draftStore.setDraft(chatStore.activeChatId!, message);
       }
     };
   });
@@ -64,7 +64,7 @@
     if (!chatStore.activeChatId) return;
     if (draftTimer) clearTimeout(draftTimer);
     draftTimer = setTimeout(() => {
-      draftStore.setDraft(chatStore.activeChatId, message);
+      draftStore.setDraft(chatStore.activeChatId!, message);
     }, 500);
   }
 

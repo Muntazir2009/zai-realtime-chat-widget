@@ -8,6 +8,7 @@
   import { appLockStore, type LockType } from '$lib/stores/app-lock.svelte';
   import { isBiometricAvailable } from '$lib/utils/biometric';
   import { onMount } from 'svelte';
+  import { scale } from 'svelte/transition';
 
   let pin: string = $state('');
   let isVerifying = $state(false);

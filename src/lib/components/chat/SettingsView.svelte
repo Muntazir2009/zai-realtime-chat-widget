@@ -35,7 +35,7 @@
   let lockFieldInput = $state('');
   let lockOldFieldInput = $state('');
   // Steps: 'verify' (enter old secret) → 'input' (new secret) → 'confirm' (re-enter new secret)
-  let lockSetupStep: 'verify' | 'input' | 'confirm' = $state('input');
+  let lockSetupStep = $state<'verify' | 'input' | 'confirm'>('input');
   let lockSetupError = $state('');
   let lockSetupShaking = $state(false);
   // Pending lock type — stored during 'change-type' flow, applied only after full confirmation
@@ -43,7 +43,7 @@
   let showLockSecurityPanel = $state(false);
   let bioAvail = $state(false);
   let bioBusy = $state(false);
-  let bioError = $state();
+  let bioError = $state('');
   let showBioConfirm = $state(false);
 
   // Sync the single input field to the correct variable based on step

@@ -3,68 +3,136 @@
 // Manages online/away/offline status and typing indicators.
 // Uses Firebase RTDB onDisconnect() for reliable cleanup.
 // Heartbeat every 30s updates lastSeen.
+//
+// Presence states:
+//   'online'  — tab is visible, user is actively in the app
+//   'away'    — tab is hidden / minimized / in background
+//   'offline' — explicitly disconnected or network down
 // ============================================================
 
 import * as rtdb from '$lib/firebase/rtdb.js';
 import { isReady as firebaseIsReady } from '$lib/firebase/config.js';
 import { authStore } from '$lib/stores/auth.svelte.js';
 import { prefsStore } from '$lib/stores/prefs.svelte.js';
+import { uiStore } from '$lib/stores/ui.svelte.js';
 import type { PresenceState } from '$lib/types/index.js';
 import { TYPING_DEBOUNCE_MS, RTDB_PATHS } from '$lib/types/index.js';
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
+const AWAY_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes of hidden = away
 
 class PresenceManager {
   onlineStatus: 'online' | 'offline' | 'away' = $state('online');
   isTyping = $state(false);
+
+  // Track how long the tab has been hidden
+  private hiddenSince: number | null = null;
+  private awayTimer: ReturnType<typeof setTimeout> | null = null;
 
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private typingTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
   private lastTypingEmit: Map<string, number> = new Map();
 
   private visibilityHandler: (() => void) | null = null;
-  private beforeUnloadHandler: (() => void) | null = null;
+  private blurHandler: (() => void) | null = null;
+  private focusHandler: (() => void) | null = null;
+  private pageHideHandler: (() => void) | null = null;
   private disconnectQueued = false;
 
   constructor() {
     if (typeof window !== 'undefined') {
-      // Handle visibility change for typing — presence is handled by onDisconnect
-      this.visibilityHandler = () => {
-        if (document.hidden) {
-          this.stopAllTyping();
-        }
-      };
-      document.addEventListener('visibilitychange', this.visibilityHandler);
+      this._setupPresenceListeners();
+    }
+  }
 
-      // Force-remove presence on tab close / navigation away.
-      // onDisconnect is the primary safety net, but it can fail if
-      // the RTDB WebSocket was already torn down (e.g. by NetworkManager).
-      // This fire-and-forget .remove() is the bulletproof backup.
-      this.beforeUnloadHandler = () => {
-        const uid = this.uid;
-        if (!uid) return;
-        // Use sendBeacon-style: fire a synchronous-looking remove.
-        // navigator.sendBeacon doesn't work for RTDB, but we can use
-        // the keepalive flag on fetch to ensure the request outlives the page.
-        try {
-          const body = JSON.stringify({
-            path: RTDB_PATHS.PRESENCE(uid),
-            value: { uid, status: 'offline', lastSeen: Date.now(), typing: false },
-          });
-          // Best-effort: if this fails, onDisconnect still fires
-          fetch('/api/presence/cleanup', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body,
-            keepalive: true,
-          }).catch(() => {});
-        } catch {
-          // Silently fail — onDisconnect is the real safety net
+  // ── Presence listeners ──
+
+  private _setupPresenceListeners(): void {
+    // Visibility change: tab hidden → stop typing, track away timer
+    this.visibilityHandler = () => {
+      if (document.hidden) {
+        this._onTabHidden();
+      } else {
+        this._onTabVisible();
+      }
+    };
+    document.addEventListener('visibilitychange', this.visibilityHandler);
+
+    // Window blur/focus: supplement visibility for same-tab detection
+    this.blurHandler = () => {
+      // Only trigger away if not in a conversation (user left the tab)
+      // When in a conversation, blur is normal (user is typing in input)
+      if (uiStore.view !== 'conversation') {
+        this._onTabHidden();
+      }
+    };
+    this.focusHandler = () => {
+      this._onTabVisible();
+    };
+    window.addEventListener('blur', this.blurHandler);
+    window.addEventListener('focus', this.focusHandler);
+
+    // Page hide: mobile Safari, tab close — fire cleanup once
+    this.pageHideHandler = () => {
+      this._fireCleanupBeacon();
+    };
+    window.addEventListener('pagehide', this.pageHideHandler);
+    window.addEventListener('beforeunload', this.pageHideHandler);
+  }
+
+  private _onTabHidden(): void {
+    // Stop all typing immediately — user is away
+    this.stopAllTyping();
+
+    // Track hidden duration for away status
+    this.hiddenSince = Date.now();
+
+    // Set a timer to switch to 'away' after threshold
+    if (!this.awayTimer) {
+      this.awayTimer = setTimeout(() => {
+        if (this.hiddenSince !== null && Date.now() - this.hiddenSince >= AWAY_THRESHOLD_MS * 0.9) {
+          this.goAway();
         }
-      };
-      window.addEventListener('beforeunload', this.beforeUnloadHandler);
-      // pagehide is more reliable on mobile Safari
-      window.addEventListener('pagehide', this.beforeUnloadHandler);
+        this.awayTimer = null;
+      }, AWAY_THRESHOLD_MS);
+    }
+  }
+
+  private _onTabVisible(): void {
+    // Clear away tracking
+    this.hiddenSince = null;
+    if (this.awayTimer) {
+      clearTimeout(this.awayTimer);
+      this.awayTimer = null;
+    }
+
+    // Immediately restore online status
+    const uid = this.uid;
+    if (uid && this.onlineStatus !== 'online') {
+      this.onlineStatus = 'online';
+      this.writePresence(uid, 'online').catch(() => {});
+    }
+  }
+
+  /** Fire-and-forget cleanup fetch — ensures presence is removed even if
+   *  RTDB WebSocket was already torn down (e.g. by NetworkManager).
+   *  Uses keepalive so the request outlives page unload. */
+  private _fireCleanupBeacon(): void {
+    const uid = this.uid;
+    if (!uid) return;
+    try {
+      const body = JSON.stringify({
+        path: RTDB_PATHS.PRESENCE(uid),
+        value: { uid, status: 'offline', lastSeen: Date.now(), typing: false },
+      });
+      fetch('/api/presence/cleanup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        keepalive: true,
+      }).catch(() => {});
+    } catch {
+      // Silently fail — onDisconnect is the real safety net
     }
   }
 
@@ -72,19 +140,16 @@ class PresenceManager {
     return authStore.user?.id;
   }
 
+  // ── Status transitions ──
+
   goOnline(): void {
     const uid = this.uid;
     if (!uid) return;
 
     this.onlineStatus = 'online';
 
-    // Queue the onDisconnect cleanup FIRST — this is the critical fix.
-    // Firebase guarantees this fires even if the client crashes or loses network.
-    // Guard: only attempt onDisconnect if Firebase RTDB is fully initialized.
-    // The pieceNum_ crash occurs when the SDK internals aren't ready.
     if (!firebaseIsReady()) {
       console.warn('[PresenceManager] Firebase not ready, will retry goOnline in 2s');
-      // Retry after Firebase has had time to initialize
       setTimeout(() => { if (this.uid === uid && this.onlineStatus === 'online') this.goOnline(); }, 2000);
       this.writePresence(uid, 'online');
       return;
@@ -104,19 +169,15 @@ class PresenceManager {
   private async setupOnDisconnect(uid: string): Promise<void> {
     try {
       const ref = await rtdb.ref(RTDB_PATHS.PRESENCE(uid));
-      // In Firebase v9+, onDisconnect is a standalone function (not a ref method).
-      // rtdb.onDisconnectSet handles this internally.
       await rtdb.onDisconnectSet(ref, {
         uid,
         status: 'offline',
         lastSeen: rtdb.serverTimestamp(),
         typing: false,
       });
-      // Only set to online AFTER the disconnect hook is successfully queued
       this.writePresence(uid, 'online');
     } catch (err) {
       console.warn('[PresenceManager] Failed to queue onDisconnect:', err);
-      // Retry once after 3s (RTDB WebSocket may not be connected yet)
       setTimeout(async () => {
         if (this.uid === uid && this.onlineStatus === 'online') {
           try {
@@ -129,7 +190,6 @@ class PresenceManager {
             });
             this.writePresence(uid, 'online');
           } catch {
-            // Give up on retry — write online presence anyway
             this.writePresence(uid, 'online');
           }
         }
@@ -152,6 +212,8 @@ class PresenceManager {
     this.writePresence(uid, 'offline');
     this.stopHeartbeat();
   }
+
+  // ── Typing ──
 
   setTyping(chatId: string): void {
     const uid = this.uid;
@@ -179,12 +241,10 @@ class PresenceManager {
 
     this.isTyping = false;
 
-    // Immediately remove the RTDB typing node (don't wait for the 3s safety net)
     rtdb.ref(RTDB_PATHS.TYPING(chatId, uid)).then((ref) => {
       rtdb.remove(ref).catch(() => {});
     });
 
-    // 3s delayed removal as a safety net (idempotent remove)
     this.writeTyping(chatId, uid, false);
 
     const timer = this.typingTimers.get(chatId);
@@ -194,17 +254,14 @@ class PresenceManager {
     }
   }
 
-  /** Stop typing in ALL chats and clean up all timers / RTDB nodes */
   stopAllTyping(): void {
     const uid = this.uid;
     if (!uid) return;
 
     this.isTyping = false;
 
-    // Clear all timers
     for (const [chatId, timer] of this.typingTimers) {
       clearTimeout(timer);
-      // Immediately remove the RTDB typing node
       rtdb.ref(RTDB_PATHS.TYPING(chatId, uid)).then((ref) => {
         rtdb.remove(ref).catch(() => {});
       });
@@ -213,12 +270,13 @@ class PresenceManager {
     this.lastTypingEmit.clear();
   }
 
+  // ── Lifecycle ──
+
   async disconnect(): Promise<void> {
     const uid = this.uid;
     if (uid && firebaseIsReady()) {
       try {
         const ref = await rtdb.ref(RTDB_PATHS.PRESENCE(uid));
-        // Cancel the onDisconnect hook and explicitly remove
         rtdb.onDisconnectCancel(ref).catch(() => {});
         rtdb.remove(ref).catch(() => {});
       } catch (err) {
@@ -231,16 +289,33 @@ class PresenceManager {
 
     this.stopAllTyping();
 
-    // Clean up visibility listener
+    this._removePresenceListeners();
+  }
+
+  private _removePresenceListeners(): void {
     if (this.visibilityHandler && typeof window !== 'undefined') {
       document.removeEventListener('visibilitychange', this.visibilityHandler);
       this.visibilityHandler = null;
     }
-    if (this.beforeUnloadHandler && typeof window !== 'undefined') {
-      window.removeEventListener('beforeunload', this.beforeUnloadHandler);
-      window.removeEventListener('pagehide', this.beforeUnloadHandler);
-      this.beforeUnloadHandler = null;
+    if (this.blurHandler && typeof window !== 'undefined') {
+      window.removeEventListener('blur', this.blurHandler);
+      this.blurHandler = null;
     }
+    if (this.focusHandler && typeof window !== 'undefined') {
+      window.removeEventListener('focus', this.focusHandler);
+      this.focusHandler = null;
+    }
+    if (this.pageHideHandler && typeof window !== 'undefined') {
+      window.removeEventListener('pagehide', this.pageHideHandler);
+      window.removeEventListener('beforeunload', this.pageHideHandler);
+      this.pageHideHandler = null;
+    }
+    // Clear away timer
+    if (this.awayTimer) {
+      clearTimeout(this.awayTimer);
+      this.awayTimer = null;
+    }
+    this.hiddenSince = null;
   }
 
   private stopHeartbeat(): void {
@@ -249,6 +324,8 @@ class PresenceManager {
       this.heartbeatTimer = null;
     }
   }
+
+  // ── RTDB writes ──
 
   private async writePresence(uid: string, status: PresenceState['status']): Promise<void> {
     rtdb.set(await rtdb.ref(RTDB_PATHS.PRESENCE(uid)), {
@@ -275,16 +352,11 @@ class PresenceManager {
       const ref = await rtdb.ref(RTDB_PATHS.TYPING(chatId, uid));
       if (typing) {
         const ts = Date.now();
-        // Write a timestamp number — compatible with Firebase rules expecting isNumber()
-        console.log('[PresenceManager] Writing typing indicator:', { chatId, uid, ts });
         await rtdb.set(ref, ts);
-        console.log('[PresenceManager] Typing write completed for', uid);
       } else {
-        // Remove the typing node immediately when stopping
         await rtdb.remove(ref).catch(() => {});
       }
     } catch (err) {
-      // Log but don't throw — typing is non-critical
       console.warn('[PresenceManager] writeTyping failed:', err);
     }
   }

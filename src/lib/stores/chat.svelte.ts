@@ -104,8 +104,6 @@ class ChatStore {
   // ---- Reactions ----
   reactions: Map<string, Reaction[]> = $state(new Map()); // messageId → reactions[]
   private reactionUnsubs: Map<string, () => void> = new Map();
-  private reactionChildChangedUnsubs: Map<string, () => void> = new Map();
-  private reactionChildRemovedUnsubs: Map<string, () => void> = new Map();
 
   // ---- Idempotency tracking (bounded to prevent memory leak) ----
   private sentKeys = new Set<string>();
@@ -165,14 +163,16 @@ class ChatStore {
       const metaB = this.chats.get(b[1].chatId);
 
       if (order === 'alphabetical') {
-        const nameA = this.userDict.get(metaA?.participants?.find((p: string) => p !== authStore.user?.id) ?? '')?.displayName ?? '';
-        const nameB = this.userDict.get(metaB?.participants?.find((p: string) => p !== authStore.user?.id) ?? '')?.displayName ?? '';
+        const otherA = metaA?.participantIds?.find((p: string) => p !== authStore.user?.id) ?? '';
+        const otherB = metaB?.participantIds?.find((p: string) => p !== authStore.user?.id) ?? '';
+        const nameA = this.userDict.get(otherA)?.displayName ?? '';
+        const nameB = this.userDict.get(otherB)?.displayName ?? '';
         return nameA.localeCompare(nameB);
       }
 
       if (order === 'unread') {
-        const unreadA = metaA ? ((metaA.lastMsgSid ?? '') === (authStore.user?.id ?? '') ? 0 : 1) : 0;
-        const unreadB = metaB ? ((metaB.lastMsgSid ?? '') === (authStore.user?.id ?? '') ? 0 : 1) : 0;
+        const unreadA = a[1].uc ?? 0;
+        const unreadB = b[1].uc ?? 0;
         if (unreadA !== unreadB) return unreadB - unreadA;
       }
 
@@ -1568,36 +1568,36 @@ class ChatStore {
     }
   }
 
-  /** Listen for reactions on a single message */
+  /** Listen for reactions on a single message — single onValue instead of 3 child listeners */
   private async attachSingleReactionListener(chatId: string, messageId: string): Promise<void> {
     if (this.reactionUnsubs.has(messageId)) return;
 
     const r = await rtdb.ref(RTDB_PATHS.REACTIONS(chatId, messageId));
 
-    const unsub = await rtdb.onChildAdded(r, (snap) => {
-      const emoji = snap.key;
-      if (!emoji) return;
-      const data = snap.val() as { uids?: string[] } | null;
-      const uids = data?.uids ?? [];
-      this.setReaction(messageId, emoji, uids);
+    // Single onValue listener replaces 3 separate child listeners (150 → 50 for 50 msgs)
+    const unsub = await rtdb.onValue(r, (snap) => {
+      // Clear existing reactions for this message
+      const msgs = new Map(this.reactions);
+      msgs.set(messageId, []);
+      this.reactions = msgs;
+
+      if (snap.exists()) {
+        snap.forEach((childSnap: any) => {
+          const emoji = childSnap.key;
+          if (!emoji) return;
+          const data = childSnap.val() as { uids?: string[] } | null;
+          const uids = data?.uids ?? [];
+          if (uids.length > 0) {
+            const updated = new Map(this.reactions);
+            const existing = updated.get(messageId) ?? [];
+            existing.push({ emoji, uids });
+            updated.set(messageId, existing);
+            this.reactions = updated;
+          }
+        });
+      }
     });
     this.reactionUnsubs.set(messageId, unsub);
-
-    const changedUnsub = await rtdb.onChildChanged(r, (snap) => {
-      const emoji = snap.key;
-      if (!emoji) return;
-      const data = snap.val() as { uids?: string[] } | null;
-      const uids = data?.uids ?? [];
-      this.setReaction(messageId, emoji, uids);
-    });
-    this.reactionChildChangedUnsubs.set(messageId, changedUnsub);
-
-    const removedUnsub = await rtdb.onChildRemoved(r, (snap) => {
-      const emoji = snap.key;
-      if (!emoji) return;
-      this.removeReaction(messageId, emoji);
-    });
-    this.reactionChildRemovedUnsubs.set(messageId, removedUnsub);
   }
 
   /** Update a single reaction entry in the reactions map */
@@ -1623,10 +1623,6 @@ class ChatStore {
   private detachReactionListeners(): void {
     for (const [, unsub] of this.reactionUnsubs) unsub();
     this.reactionUnsubs.clear();
-    for (const [, unsub] of this.reactionChildChangedUnsubs) unsub();
-    this.reactionChildChangedUnsubs.clear();
-    for (const [, unsub] of this.reactionChildRemovedUnsubs) unsub();
-    this.reactionChildRemovedUnsubs.clear();
     this.reactions = new Map();
   }
 

@@ -11,7 +11,6 @@
   import ReactionPicker from './ReactionPicker.svelte';
   import InputBar from './InputBar.svelte';
   import ReplyPreview from './ReplyPreview.svelte';
-  import ScrollToBottom from './ScrollToBottom.svelte';
   import TypingIndicator from '$lib/components/indicators/TypingIndicator.svelte';
   import Avatar from '$lib/components/ui/Avatar.svelte';
   import { chatStore } from '$lib/stores/chat.svelte';
@@ -137,7 +136,7 @@
     return chatStore.presence.get(otherUser.id) ?? null;
   });
 
-  // Tick every 30s so "Last seen Xm ago" re-formats without needing presence changes
+  // Single tick every 30s — drives both "Last seen" and "Seen Xm ago" re-formatting
   let presenceTick = $state(0);
   $effect(() => {
     const t = setInterval(() => { presenceTick++; }, 30_000);
@@ -146,7 +145,6 @@
 
   let formattedLastSeen = $derived.by(() => {
     void presenceTick; // track tick so this re-evaluates
-    // Read prefs at top-level of derived so Svelte 5 tracks them for reactivity
     const abs = prefsStore.showAbsoluteLastSeen;
     const h24 = prefsStore.use24HourFormat;
     if (!otherPresence || !otherPresence.lastSeen) return null;
@@ -155,14 +153,8 @@
   });
 
   // "Seen" indicator — shows when the other user's lastReadMessageId matches our last sent message
-  let seenTick = $state(0);
-  $effect(() => {
-    const t = setInterval(() => { seenTick++; }, 30_000);
-    return () => clearInterval(t);
-  });
-
   let lastReadInfo = $derived.by(() => {
-    void seenTick; // re-evaluate on tick for "Seen Xm ago" updates
+    void presenceTick; // re-evaluate on tick for "Seen Xm ago" updates
     if (!chatStore.activeChatId || !authStore.user) return null;
     const otherReadId = chatStore.otherUserReadIds.get(chatStore.activeChatId);
     if (!otherReadId) return null;
@@ -221,16 +213,14 @@
       }));
   });
 
-  // For pinned panel: who pinned each message
-  let pinnedItemAuthor = $derived.by((() => {
-    const cache = new Map<string, string>();
-    return (uid: string) => {
-      if (cache.has(uid)) return cache.get(uid)!;
-      const name = chatStore.userDict.get(uid)?.displayName ?? 'Unknown';
-      cache.set(uid, name);
-      return name;
-    };
-  })());
+  // For pinned panel: who pinned each message — factory with cache
+  const _pinnedAuthorCache = new Map<string, string>();
+  function pinnedItemAuthor(uid: string): string {
+    if (_pinnedAuthorCache.has(uid)) return _pinnedAuthorCache.get(uid)!;
+    const name = chatStore.userDict.get(uid)?.displayName ?? 'Unknown';
+    _pinnedAuthorCache.set(uid, name);
+    return name;
+  }
 
   let messageGroups = $derived.by(() => {
     const groups: Array<{ date: string; isToday: boolean; isYesterday: boolean; messages: typeof chatStore.messages }> = [];
