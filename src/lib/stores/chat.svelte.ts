@@ -869,19 +869,43 @@ class ChatStore {
     this.detachTypingListener();
     this.typingRetryCount = 0; // reset retry counter on fresh attach
     await this._doAttachTypingListener(chatId);
+    // Fallback: directly read the typing state for each other user.
+    // This catches edge cases where the onValue initial callback is missed
+    // (e.g., race between detach and attach, or Firebase SDK timing).
+    await this._readTypingStateDirect(chatId);
   }
 
-  /** Internal: actually attach the Firebase typing listeners. Retries up to 3
+  /** One-shot direct read of typing state for all other users in the chat.
+   *  Updates the internal tracking and reactive display names immediately. */
+  private async _readTypingStateDirect(chatId: string): Promise<void> {
+    const meta = this.chats.get(chatId);
+    if (!meta) return;
+    const myUid = authStore.user?.id;
+    const otherUids = meta.participantIds.filter(uid => uid !== myUid);
+    const listenUids = otherUids.length > 0 ? otherUids
+      : this.participants.filter(p => p.id !== myUid).map(p => p.id);
+    for (const uid of listenUids) {
+      try {
+        const r = await rtdb.ref(RTDB_PATHS.TYPING(chatId, uid));
+        const snap = await rtdb.get(r);
+        this._handleTypingSnapshot(chatId, uid, snap);
+      } catch {
+        // Best-effort — the onValue listener is the primary mechanism
+      }
+    }
+  }
+
+  /** Internal: actually attach the Firebase typing listeners. Retries up to 5
    *  times with backoff if meta is not yet available. */
   private async _doAttachTypingListener(chatId: string): Promise<void> {
     const meta = this.chats.get(chatId);
     if (!meta || !meta.participantIds || meta.participantIds.length === 0) {
       this.typingRetryCount++;
-      if (this.typingRetryCount > 3) {
-        console.error('[ChatStore] attachTypingListener: meta still not available after 3 retries for', chatId);
+      if (this.typingRetryCount > 5) {
+        console.error('[ChatStore] attachTypingListener: meta still not available after 5 retries for', chatId);
         return;
       }
-      const delay = 1000 * this.typingRetryCount; // 1s, 2s, 3s
+      const delay = 1000 * this.typingRetryCount; // 1s, 2s, 3s, 4s, 5s
       console.warn(`[ChatStore] attachTypingListener: meta not available for ${chatId} - retry #${this.typingRetryCount} in ${delay}ms`);
       if (this.typingRetryTimer) clearTimeout(this.typingRetryTimer);
       this.typingRetryTimer = setTimeout(() => {
@@ -899,8 +923,18 @@ class ChatStore {
     const otherUids = meta.participantIds.filter(uid => uid !== myUid);
     console.log('[ChatStore] Attaching typing listeners for', otherUids.length, 'users in chat', chatId, '- otherUids:', otherUids);
 
+    // Fallback: if no other users found (edge case), try participants list
+    const fallbackUids = otherUids.length === 0
+      ? this.participants.filter(p => p.id !== myUid).map(p => p.id)
+      : [];
+    const listenUids = otherUids.length > 0 ? otherUids : fallbackUids;
+    if (listenUids.length === 0) {
+      console.warn('[ChatStore] No other users to listen for typing in chat', chatId);
+      return;
+    }
+
     let attachedCount = 0;
-    for (const uid of otherUids) {
+    for (const uid of listenUids) {
       try {
         const r = await rtdb.ref(RTDB_PATHS.TYPING(chatId, uid));
         const unsub = await rtdb.onValue(r, (snap) => {
@@ -913,12 +947,14 @@ class ChatStore {
         console.error('[ChatStore] Failed to attach typing listener for uid=', uid, 'chat=', chatId, err);
       }
     }
-    if (attachedCount === 0 && otherUids.length > 0) {
-      console.error('[ChatStore] WARNING: 0 typing listeners attached out of', otherUids.length, 'for chat', chatId);
+    if (attachedCount === 0 && listenUids.length > 0) {
+      console.error('[ChatStore] WARNING: 0 typing listeners attached out of', listenUids.length, 'for chat', chatId);
     }
   }
 
-  /** Process a typing snapshot and update reactive display names */
+  /** Process a typing snapshot and update reactive display names.
+   *  Always updates the reactive state to prevent edge cases where the
+   *  `onValue` initial callback is missed or a state transition races. */
   private _handleTypingSnapshot(chatId: string, uid: string, snap: any): void {
     const myUid = authStore.user?.id;
     let isTyping = false;
@@ -946,8 +982,6 @@ class ChatStore {
       this._typingUids.set(chatId, uidSet);
     }
 
-    const wasTyping = uidSet.has(uid);
-
     if (isTyping) {
       uidSet.add(uid);
       // Safety timeout: auto-remove after 5s even if no stop event
@@ -963,11 +997,11 @@ class ChatStore {
       uidSet.delete(uid);
     }
 
-    // Only update reactive state if the typing status actually changed
-    if (wasTyping !== isTyping) {
-      console.log(`[ChatStore] Typing ${isTyping ? 'START' : 'STOP'}: uid=${uid} chat=${chatId}`);
-      this._updateTypingDisplayNames(chatId);
-    }
+    // Always update reactive state — never skip updates.
+    // This prevents edge cases where the `onValue` initial callback
+    // races with `detachTypingListener` or where a state transition
+    // is missed due to timing.
+    this._updateTypingDisplayNames(chatId);
   }
 
   /** Sync the internal _typingUids set to the reactive typingDisplayNames map
