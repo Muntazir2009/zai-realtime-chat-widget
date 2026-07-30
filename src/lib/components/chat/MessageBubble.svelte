@@ -4,10 +4,11 @@
   import DeliveryStatus from '$lib/components/indicators/DeliveryStatus.svelte';
   import AudioPlayer from '$lib/components/media/AudioPlayer.svelte';
   import VideoPlayer from '$lib/components/media/VideoPlayer.svelte';
-  import { Reply as ReplyIcon, EyeOff, Eye } from 'lucide-svelte';
+  import { Reply as ReplyIcon, EyeOff, Eye, ImageOff } from 'lucide-svelte';
   import { chatStore } from '$lib/stores/chat.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
   import { prefsStore } from '$lib/stores/prefs.svelte';
+  import { markConsumed, isConsumed } from '$lib/stores/view-once.svelte';
   import type { UploadProgress } from '$lib/firebase/storage';
 
   // Svelte action: non-passive touchmove so preventDefault works for swipe
@@ -342,26 +343,34 @@
     onImageTap?.(msg.mu!, msg.c || undefined);
   }
 
-  // ── View Once state (local only, not persisted) ──
+  // ── View Once state (consumed IDs persisted to localStorage) ──
   let viewOnceRevealed = $state(false);
-  let viewOnceTimer: ReturnType<typeof setTimeout> | null = null;
+  let countdownTimer: ReturnType<typeof setInterval> | null = null;
+  let countdown = $state(10);
 
   // Check if this is a view-once message (belt-and-suspenders: check both vo and md)
   const isViewOnce = $derived(msg.vo === true || (msg.md?.viewOnce === true));
+  const isConsumed_ = $derived(isViewOnce && isConsumed(msg.id));
 
   function handleViewOnceReveal() {
+    if (isConsumed_) return; // already consumed, do nothing
     viewOnceRevealed = true;
-    // Auto-hide after 10 seconds
-    viewOnceTimer = setTimeout(() => {
-      viewOnceRevealed = false;
-    }, 10000);
+    markConsumed(msg.id);
+    countdown = 10;
+    countdownTimer = setInterval(() => {
+      countdown--;
+      if (countdown <= 0) {
+        viewOnceRevealed = false;
+        if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+      }
+    }, 1000);
   }
 
-  // Reset when message changes
+  // Clean up countdown timer on unmount
   $effect(() => {
-    viewOnceRevealed = false;
-    if (viewOnceTimer) clearTimeout(viewOnceTimer);
-    void msg.id; // track msg changes
+    return () => {
+      if (countdownTimer) clearInterval(countdownTimer);
+    };
   });
 
   // --- Derived ---
@@ -612,7 +621,17 @@
       </div>
     {:else if msg.t === 'image' && msg.mu}
       <div class="bbl-img-wrap">
-        {#if isViewOnce && !isOwn && !viewOnceRevealed}
+        {#if isViewOnce && !isOwn && isConsumed_}
+          <!-- Photo consumed – can NEVER be viewed again -->
+          <div class="view-once-overlay">
+            <img src={getMediaSrc()} alt="" class="bbl-img bbl-img-blur" loading="lazy" />
+            <div class="view-once-consumed">
+              <ImageOff size={28} class="view-once-consumed-icon" />
+              <p class="view-once-consumed-label">Photo opened</p>
+              <p class="view-once-consumed-hint">This photo can only be viewed once</p>
+            </div>
+          </div>
+        {:else if isViewOnce && !isOwn && !viewOnceRevealed}
           <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
           <div class="view-once-overlay" onclick={handleViewOnceReveal}>
             <img src={getMediaSrc()} alt="" class="bbl-img bbl-img-blur" loading="lazy" />
@@ -629,11 +648,10 @@
             alt={msg.c || 'Shared image'}
             class="bbl-img"
             loading="eager"
-            onclick={handleImageClick}
           />
           <div class="view-once-timer">
             <Eye size={14} />
-            <span>Visible</span>
+            <span>{countdown}s</span>
           </div>
         {:else}
           <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
@@ -644,6 +662,9 @@
             loading={prefsStore.mediaQuality === 'high' ? 'eager' : 'lazy'}
             onclick={handleImageClick}
           />
+          {#if isViewOnce && isOwn}
+            <div class="view-once-own-badge"><EyeOff size={10} /><span>1×</span></div>
+          {/if}
           {#if !prefsStore.autoPlayMedia && msg.c === 'GIF'}
             <div class="gif-badge">GIF</div>
           {/if}
@@ -1132,6 +1153,53 @@
     backdrop-filter: blur(8px);
     padding: 3px 8px;
     border-radius: 6px;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  .view-once-consumed {
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius-md, 12px);
+  }
+
+  .view-once-consumed-icon {
+    opacity: 0.5;
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  .view-once-consumed-label {
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .view-once-consumed-hint {
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 11px;
+  }
+
+  .view-once-own-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-radius: 6px;
+    padding: 2px 6px;
+    display: flex;
+    align-items: center;
+    gap: 3px;
     color: rgba(255, 255, 255, 0.8);
     font-size: 10px;
     font-weight: 600;
