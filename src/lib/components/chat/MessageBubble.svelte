@@ -346,6 +346,9 @@
   let viewOnceRevealed = $state(false);
   let viewOnceTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // Check if this is a view-once message (belt-and-suspenders: check both vo and md)
+  const isViewOnce = $derived(msg.vo === true || (msg.md?.viewOnce === true));
+
   function handleViewOnceReveal() {
     viewOnceRevealed = true;
     // Auto-hide after 10 seconds
@@ -609,7 +612,7 @@
       </div>
     {:else if msg.t === 'image' && msg.mu}
       <div class="bbl-img-wrap">
-        {#if msg.vo && !isOwn && !viewOnceRevealed}
+        {#if isViewOnce && !isOwn && !viewOnceRevealed}
           <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
           <div class="view-once-overlay" onclick={handleViewOnceReveal}>
             <img src={getMediaSrc()} alt="" class="bbl-img bbl-img-blur" loading="lazy" />
@@ -619,7 +622,7 @@
               <p class="view-once-hint">Tap to reveal</p>
             </div>
           </div>
-        {:else if msg.vo && !isOwn && viewOnceRevealed}
+        {:else if isViewOnce && !isOwn && viewOnceRevealed}
           <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
           <img
             src={getMediaSrc()}

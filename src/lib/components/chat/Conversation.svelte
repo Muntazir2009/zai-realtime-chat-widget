@@ -17,6 +17,7 @@
   import { uiStore } from '$lib/stores/ui.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
   import { toastStore } from '$lib/stores/toast.svelte';
+  import { scheduledStore } from '$lib/stores/scheduled.svelte';
   import { draftStore } from '$lib/stores/draft.svelte';
   import { prefsStore } from '$lib/stores/prefs.svelte';
   import { uploadFile, getVideoMetadata, getImageMetadata, type UploadProgress } from '$lib/firebase/storage';
@@ -388,6 +389,16 @@
     return map[emoji] ?? null;
   }
 
+  function handleScheduleSend(content: string, sendAt: Date) {
+    if (!chatStore.activeChatId) return;
+    scheduledStore.add(chatStore.activeChatId, content, sendAt);
+    const timeStr = sendAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: !prefsStore.use24HourFormat });
+    const dateStr = sendAt.toDateString() === new Date().toDateString()
+      ? 'today'
+      : sendAt.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    toastStore.show(`Scheduled for ${dateStr} at ${timeStr}`, 'success', 3000);
+  }
+
   function handleSend(content: string) {
     if (!chatStore.activeChatId) return;
     const easter = checkEasterEgg(content);
@@ -541,8 +552,8 @@
         mu: localUrl, // local preview URL (kept alive until tracker cleanup)
         mh: isVideo ? (mediaFile.thumbnailUrl ?? null) : null,
         md: isVideo
-          ? { duration: mediaFile.duration ?? 0, thumbnailUrl: mediaFile.thumbnailUrl, isUploading: true }
-          : { isUploading: true },
+          ? { duration: mediaFile.duration ?? 0, thumbnailUrl: mediaFile.thumbnailUrl, isUploading: true, ...(viewOnce ? { viewOnce: true } : {}) }
+          : { isUploading: true, ...(viewOnce ? { viewOnce: true } : {}) },
         edited: false,
         vo: viewOnce || undefined,
       };
@@ -1219,6 +1230,7 @@
     <InputBar
       initialDraft={currentDraft}
       onSend={handleSend}
+      onScheduleSend={handleScheduleSend}
       onMediaSelect={handleMediaSelect}
       onStickerSelect={handleStickerSelect}
       onGifSelect={handleGifSelect}

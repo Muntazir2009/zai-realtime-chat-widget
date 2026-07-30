@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Send, ImagePlus, Mic, Sticker } from 'lucide-svelte';
+  import { Send, ImagePlus, Mic, Sticker, Clock } from 'lucide-svelte';
   import VoiceRecorder from '$lib/components/media/VoiceRecorder.svelte';
   import StickerPicker from '$lib/components/pickers/StickerPicker.svelte';
   import GIFPicker from '$lib/components/pickers/GIFPicker.svelte';
@@ -15,13 +15,15 @@
     /** Initial draft text to restore */
     initialDraft?: string;
     onSend: (content: string) => void;
+    /** When user long-presses send — schedule message */
+    onScheduleSend?: (content: string, sendAt: Date) => void;
     /** When user selects media files — parent opens MediaComposer */
     onMediaSelect?: (files: File[]) => void;
     onStickerSelect?: (sticker: string) => void;
     onGifSelect?: (gifUrl: string) => void;
   }
 
-  let { onSend, onMediaSelect, onStickerSelect, onGifSelect, initialDraft = '' }: Props = $props();
+  let { onSend, onMediaSelect, onStickerSelect, onGifSelect, onScheduleSend, initialDraft = '' }: Props = $props();
 
   let message = $state(initialDraft);
   let isRecording = $state(false);
@@ -33,6 +35,11 @@
   let typingTimer: ReturnType<typeof setTimeout> | null = null;
   let fileInputEl: HTMLInputElement | null = $state(null);
   let isFocused = $state(false);
+  let showSchedulePanel = $state(false);
+  let scheduleDate = $state('');
+  let scheduleTime = $state('');
+  let sendBtnLongPressed = $state(false);
+  let sendBtnTimer: ReturnType<typeof setTimeout> | null = null;
 
   const MAX_CHARS = 2000;
   let charCount = $derived(message.length);
@@ -103,6 +110,52 @@
       }
     }
   });
+
+  // ── Schedule send ──
+  function onSendBtnDown(e: PointerEvent) {
+    if (!hasText || !onScheduleSend) return;
+    sendBtnLongPressed = false;
+    sendBtnTimer = setTimeout(() => {
+      sendBtnLongPressed = true;
+      // Default to 1 hour from now
+      const future = new Date(Date.now() + 3600_000);
+      scheduleDate = future.toISOString().slice(0, 10);
+      scheduleTime = future.toTimeString().slice(0, 5);
+      showSchedulePanel = true;
+    }, 500);
+  }
+
+  function onSendBtnUp(e: PointerEvent) {
+    if (sendBtnTimer) { clearTimeout(sendBtnTimer); sendBtnTimer = null; }
+    if (sendBtnLongPressed) {
+      e.preventDefault();
+      e.stopPropagation();
+      sendBtnLongPressed = false;
+    }
+  }
+
+  function onSendBtnLeave() {
+    if (sendBtnTimer) { clearTimeout(sendBtnTimer); sendBtnTimer = null; }
+  }
+
+  function confirmSchedule() {
+    if (!scheduleDate || !scheduleTime || !chatStore.activeChatId) return;
+    const sendAt = new Date(`${scheduleDate}T${scheduleTime}`);
+    if (isNaN(sendAt.getTime()) || sendAt <= new Date()) {
+      toastStore.error('Please pick a future time');
+      return;
+    }
+    onScheduleSend?.(message.trim(), sendAt);
+    showSchedulePanel = false;
+    message = '';
+    if (textareaEl) textareaEl.style.height = 'auto';
+    clearTyping();
+    if (chatStore.activeChatId) draftStore.clearDraft(chatStore.activeChatId);
+  }
+
+  function cancelSchedule() {
+    showSchedulePanel = false;
+  }
 
   function clearTyping() {
     if (typingTimer) clearTimeout(typingTimer);
@@ -334,9 +387,40 @@
         </button>
 
         <button onclick={handleSend}
-          class="send-btn">
+          class="send-btn"
+          onpointerdown={onSendBtnDown}
+          onpointerup={onSendBtnUp}
+          onpointerleave={onSendBtnLeave}
+          onpointercancel={onSendBtnLeave}
+        >
           <Send size={18} />
         </button>
+        {#if showSchedulePanel}
+          <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+          <div class="schedule-panel glass card" onclick|stopPropagation={() => {}} role="dialog" aria-label="Schedule message">
+            <div class="sched-header">
+              <Clock size={14} style="color: var(--color-primary);" />
+              <span class="sched-title">Schedule Send</span>
+              <button class="sched-close" onclick={cancelSchedule} aria-label="Close">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+              </button>
+            </div>
+            <div class="sched-fields">
+              <div class="sched-field">
+                <label class="sched-label">Date</label>
+                <input type="date" class="sched-input" bind:value={scheduleDate} min={new Date().toISOString().slice(0, 10)} />
+              </div>
+              <div class="sched-field">
+                <label class="sched-label">Time</label>
+                <input type="time" class="sched-input" bind:value={scheduleTime} />
+              </div>
+            </div>
+            <button class="sched-send-btn" onclick={confirmSchedule}>
+              <Clock size={14} />
+              <span>Schedule</span>
+            </button>
+          </div>
+        {/if}
       {:else}
         <button
           onclick={() => openPicker('sticker')}
@@ -648,4 +732,106 @@
     from { opacity: 0; }
     to { opacity: 1; }
   }
+
+  /* ── Schedule Panel ── */
+  .schedule-panel {
+    position: absolute;
+    bottom: 54px;
+    right: 8px;
+    width: 240px;
+    padding: 12px;
+    border-radius: 16px;
+    background: var(--glass-bg, rgba(255,255,255,0.92));
+    backdrop-filter: blur(28px) saturate(200%);
+    -webkit-backdrop-filter: blur(28px) saturate(200%);
+    border: var(--glass-border, 1px solid rgba(0,0,0,0.06));
+    box-shadow:
+      0 12px 40px rgba(0,0,0,0.14),
+      0 4px 12px rgba(0,0,0,0.06),
+      inset 0 1px 0 rgba(255,255,255,0.15);
+    z-index: 70;
+    animation: schedSlideIn 250ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  @keyframes schedSlideIn {
+    from { opacity: 0; transform: translateY(8px) scale(0.95); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .sched-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .sched-title {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+  .sched-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    transition: background 150ms ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .sched-close:hover { background: var(--accent-bg, rgba(0,0,0,0.06)); }
+  .sched-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .sched-field {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .sched-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .sched-input {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: 1.5px solid var(--border-subtle);
+    background: var(--input-bg, var(--bg-secondary));
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 500;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 200ms ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .sched-input:focus { border-color: var(--color-primary); }
+  .sched-send-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    padding: 9px 0;
+    border-radius: 10px;
+    border: none;
+    background: var(--color-primary);
+    color: var(--color-primary-foreground, white);
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity 150ms ease, transform 120ms ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .sched-send-btn:active { transform: scale(0.97); opacity: 0.85; }
 </style>

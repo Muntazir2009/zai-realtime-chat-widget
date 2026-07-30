@@ -631,7 +631,9 @@ class ChatStore {
 
     const message: Message = {
       id: messageId, c: caption ?? '📷 Photo', sid: user.id, t: 'image', ts: Date.now(),
-      rk: idempotencyKey, rid: null, mu: imageUrl, mh: blurhash ?? null, md: null, edited: false,
+      rk: idempotencyKey, rid: null, mu: imageUrl, mh: blurhash ?? null,
+      md: viewOnce ? { viewOnce: true } : null,
+      edited: false,
       vo: viewOnce || undefined,
     };
 
