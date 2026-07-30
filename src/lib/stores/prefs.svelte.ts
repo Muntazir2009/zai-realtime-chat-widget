@@ -17,12 +17,14 @@ export type MediaQuality = 'low' | 'medium' | 'high';
 export type ChatSortOrder = 'recent' | 'unread' | 'alphabetical';
 export type InputBarStyle = 'opaque' | 'glass';
 export type GlassEffect = 'standard' | 'liquid';
+export type LastSeenPrivacy = 'everyone' | 'nobody';
 
 interface Prefs {
   // Privacy & Realtime
   sendReadReceipts: boolean;
   sendTypingIndicators: boolean;
   messageSound: boolean;
+  lastSeenPrivacy: LastSeenPrivacy;
   // Appearance
   fontSize: FontSize;
   bubbleStyle: BubbleStyle;
@@ -49,6 +51,7 @@ const DEFAULT_PREFS: Prefs = {
   sendReadReceipts: true,
   sendTypingIndicators: true,
   messageSound: true,
+  lastSeenPrivacy: 'everyone',
   fontSize: 'medium',
   bubbleStyle: 'round',
   compactMode: false,
@@ -91,6 +94,7 @@ class PrefsStore {
   sendReadReceipts = $state(readPrefs().sendReadReceipts);
   sendTypingIndicators = $state(readPrefs().sendTypingIndicators);
   messageSound = $state(readPrefs().messageSound);
+  lastSeenPrivacy = $state(readPrefs().lastSeenPrivacy);
   // Appearance
   fontSize = $state(readPrefs().fontSize);
   bubbleStyle = $state(readPrefs().bubbleStyle);
@@ -129,6 +133,7 @@ class PrefsStore {
       sendReadReceipts: this.sendReadReceipts,
       sendTypingIndicators: this.sendTypingIndicators,
       messageSound: this.messageSound,
+      lastSeenPrivacy: this.lastSeenPrivacy,
       fontSize: this.fontSize,
       bubbleStyle: this.bubbleStyle,
       compactMode: this.compactMode,
@@ -200,6 +205,7 @@ class PrefsStore {
   setSendReadReceipts(val: boolean): void { this.sendReadReceipts = val; this.persist(); }
   setSendTypingIndicators(val: boolean): void { this.sendTypingIndicators = val; this.persist(); }
   setMessageSound(val: boolean): void { this.messageSound = val; this.persist(); }
+  setLastSeenPrivacy(val: LastSeenPrivacy): void { this.lastSeenPrivacy = val; this.persist(); }
 
   // Time setters
   setUse24HourFormat(val: boolean): void { this.use24HourFormat = val; this.persist(); }

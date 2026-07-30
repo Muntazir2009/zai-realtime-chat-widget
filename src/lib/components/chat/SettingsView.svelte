@@ -18,7 +18,7 @@
   import { presenceManager } from '$lib/managers/PresenceManager.svelte';
   import { networkManager } from '$lib/managers/NetworkManager.svelte';
   import { cacheUserProfiles } from '$lib/managers/CacheManager';
-  import { prefsStore, type FontSize, type BubbleStyle, type TimestampFormat, type AnimationSpeed, type MediaQuality, type ChatSortOrder, type InputBarStyle } from '$lib/stores/prefs.svelte';
+  import { prefsStore, type FontSize, type BubbleStyle, type TimestampFormat, type AnimationSpeed, type MediaQuality, type ChatSortOrder, type InputBarStyle, type LastSeenPrivacy } from '$lib/stores/prefs.svelte';
   import { appLockStore, type LockType, type AutoLockDuration } from '$lib/stores/app-lock.svelte';
   import { isBiometricAvailable, registerBiometric, clearBiometric } from '$lib/utils/biometric';
   import type { ThemeMode, User } from '$lib/types/index';
@@ -962,6 +962,33 @@
           >
             <div class="toggle-thumb"></div>
           </button>
+        </div>
+
+        <div class="toggle-divider"></div>
+
+        <!-- Last Seen Privacy -->
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="toggle-icon" style="background: color-mix(in srgb, #f59e0b 12%, transparent);">
+              <EyeOff size={15} style="color: #f59e0b;" />
+            </div>
+            <div>
+              <p class="toggle-title">Last Seen</p>
+              <p class="toggle-desc">{prefsStore.lastSeenPrivacy === 'nobody' ? 'Hidden from everyone' : 'Visible to everyone'}</p>
+            </div>
+          </div>
+          <div class="segment-control">
+            <button
+              class="seg-btn"
+              class:seg-active={prefsStore.lastSeenPrivacy === 'everyone'}
+              onclick={() => prefsStore.setLastSeenPrivacy('everyone')}
+            >Everyone</button>
+            <button
+              class="seg-btn"
+              class:seg-active={prefsStore.lastSeenPrivacy === 'nobody'}
+              onclick={() => prefsStore.setLastSeenPrivacy('nobody')}
+            >Nobody</button>
+          </div>
         </div>
 
         <div class="toggle-divider"></div>
@@ -3466,6 +3493,38 @@
     color: var(--color-danger);
     margin-top: 8px;
     padding-left: 44px;
+  }
+
+  /* Segment control */
+  .segment-control {
+    display: flex;
+    background: var(--bg-secondary);
+    border-radius: 10px;
+    padding: 2px;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+
+  .seg-btn {
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    border: none;
+    background: transparent;
+    color: var(--text-tertiary);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    white-space: nowrap;
+  }
+
+  .seg-btn.seg-active {
+    background: var(--color-primary);
+    color: white;
+  }
+
+  .seg-btn:hover:not(.seg-active) {
+    color: var(--text-secondary);
   }
 
   /* Lock Now — prominent accent button */

@@ -4,7 +4,7 @@
   import DeliveryStatus from '$lib/components/indicators/DeliveryStatus.svelte';
   import AudioPlayer from '$lib/components/media/AudioPlayer.svelte';
   import VideoPlayer from '$lib/components/media/VideoPlayer.svelte';
-  import { Reply as ReplyIcon } from 'lucide-svelte';
+  import { Reply as ReplyIcon, EyeOff, Eye } from 'lucide-svelte';
   import { chatStore } from '$lib/stores/chat.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
   import { prefsStore } from '$lib/stores/prefs.svelte';
@@ -342,6 +342,25 @@
     onImageTap?.(msg.mu!, msg.c || undefined);
   }
 
+  // ── View Once state (local only, not persisted) ──
+  let viewOnceRevealed = $state(false);
+  let viewOnceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function handleViewOnceReveal() {
+    viewOnceRevealed = true;
+    // Auto-hide after 10 seconds
+    viewOnceTimer = setTimeout(() => {
+      viewOnceRevealed = false;
+    }, 10000);
+  }
+
+  // Reset when message changes
+  $effect(() => {
+    viewOnceRevealed = false;
+    if (viewOnceTimer) clearTimeout(viewOnceTimer);
+    void msg.id; // track msg changes
+  });
+
   // --- Derived ---
   const timeStr = $derived.by(() => {
     if (prefsStore.timestampFormat === 'none') return '';
@@ -590,16 +609,41 @@
       </div>
     {:else if msg.t === 'image' && msg.mu}
       <div class="bbl-img-wrap">
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
-        <img
-          src={getMediaSrc()}
-          alt={msg.c || 'Shared image'}
-          class="bbl-img"
-          loading={prefsStore.mediaQuality === 'high' ? 'eager' : 'lazy'}
-          onclick={handleImageClick}
-        />
-        {#if !prefsStore.autoPlayMedia && msg.c === 'GIF'}
-          <div class="gif-badge">GIF</div>
+        {#if msg.vo && !isOwn && !viewOnceRevealed}
+          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+          <div class="view-once-overlay" onclick={handleViewOnceReveal}>
+            <img src={getMediaSrc()} alt="" class="bbl-img bbl-img-blur" loading="lazy" />
+            <div class="view-once-cover">
+              <EyeOff size={28} style="color: rgba(255,255,255,0.9);" />
+              <p class="view-once-label">View Once</p>
+              <p class="view-once-hint">Tap to reveal</p>
+            </div>
+          </div>
+        {:else if msg.vo && !isOwn && viewOnceRevealed}
+          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+          <img
+            src={getMediaSrc()}
+            alt={msg.c || 'Shared image'}
+            class="bbl-img"
+            loading="eager"
+            onclick={handleImageClick}
+          />
+          <div class="view-once-timer">
+            <Eye size={14} />
+            <span>Visible</span>
+          </div>
+        {:else}
+          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+          <img
+            src={getMediaSrc()}
+            alt={msg.c || 'Shared image'}
+            class="bbl-img"
+            loading={prefsStore.mediaQuality === 'high' ? 'eager' : 'lazy'}
+            onclick={handleImageClick}
+          />
+          {#if !prefsStore.autoPlayMedia && msg.c === 'GIF'}
+            <div class="gif-badge">GIF</div>
+          {/if}
         {/if}
         {#if isUploading}
           <div class="upload-overlay">
@@ -1036,6 +1080,58 @@
     margin: 0;
     position: relative;
     z-index: 1;
+  }
+
+  /* === VIEW ONCE === */
+  .view-once-overlay {
+    position: relative;
+    border-radius: 12px;
+    overflow: hidden;
+    cursor: pointer;
+  }
+
+  .bbl-img-blur {
+    filter: blur(20px);
+    opacity: 0.4;
+  }
+
+  .view-once-cover {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(2px);
+  }
+
+  .view-once-label {
+    color: white;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .view-once-hint {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 11px;
+  }
+
+  .view-once-timer {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    padding: 3px 8px;
+    border-radius: 6px;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 10px;
+    font-weight: 600;
   }
 
   /* === REPLY PREVIEW === */

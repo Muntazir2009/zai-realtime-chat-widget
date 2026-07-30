@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { X, Send, Plus, Volume2, VolumeX, Play, Pause } from 'lucide-svelte';
+  import { X, Send, Plus, Volume2, VolumeX, Play, Pause, EyeOff } from 'lucide-svelte';
 
   // ── Types ──
   export interface MediaComposerFile {
@@ -15,7 +15,7 @@
   interface Props {
     files: MediaComposerFile[];
     onClose: () => void;
-    onSend: (files: MediaComposerFile[], caption: string) => void;
+    onSend: (files: MediaComposerFile[], caption: string, viewOnce?: boolean) => void;
     onAddMore: () => void;
     onRemoveFile: (index: number) => void;
   }
@@ -27,6 +27,7 @@
   let caption = $state('');
   let isExiting = $state(false);
   let isMounted = $state(false);
+  let viewOnce = $state(false);
 
   // Video state
   let videoEl: HTMLVideoElement | null = $state(null);
@@ -337,7 +338,8 @@
   // ── Actions ──
   function handleSend() {
     if (files.length === 0) return;
-    onSend(files, caption.trim());
+    onSend(files, caption.trim(), viewOnce || undefined);
+    viewOnce = false;
   }
 
   function handleRemoveFile(index: number, e: MouseEvent) {
@@ -570,6 +572,17 @@
       <button class="mc-action-btn mc-action-add" onclick={onAddMore} aria-label="Add more files">
         <Plus size={20} />
       </button>
+      {#if files.some(f => f.type === 'image')}
+        <button
+          class="composer-action-btn {viewOnce ? 'view-once-active' : ''}"
+          onclick={() => (viewOnce = !viewOnce)}
+          aria-label="Toggle view once"
+          title="View Once"
+        >
+          <EyeOff size={20} />
+          <span class="vo-label">1×</span>
+        </button>
+      {/if}
       <button class="mc-action-btn mc-action-cancel" onclick={handleClose} aria-label="Cancel">
         Cancel
       </button>
@@ -1173,5 +1186,40 @@
     font-size: 14px;
     font-weight: 600;
     letter-spacing: 0.01em;
+  }
+
+  /* ── View Once toggle ── */
+  .composer-action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    border: none;
+    background: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.7);
+    cursor: pointer;
+    transition: all 0.25s ease;
+    position: relative;
+  }
+
+  .view-once-active {
+    background: rgba(255, 59, 48, 0.3);
+    color: rgba(255, 59, 48, 1);
+    border: 1.5px solid rgba(255, 59, 48, 0.5);
+  }
+
+  .vo-label {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    font-size: 8px;
+    font-weight: 800;
+    background: rgba(255, 59, 48, 0.9);
+    color: white;
+    border-radius: 4px;
+    padding: 0 3px;
+    line-height: 14px;
   }
 </style>

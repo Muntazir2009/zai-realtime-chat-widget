@@ -86,6 +86,9 @@ class ChatStore {
   private typingSafetyTimeouts: Map<string, Map<string, ReturnType<typeof setTimeout>>> = new Map();
   private typingRetryTimer: ReturnType<typeof setTimeout> | null = null;
   private typingRetryCount: number = 0;
+  // Global typing listeners — persist across chat switches
+  private globalTypingUnsubs: Map<string, Map<string, () => void>> = new Map(); // chatId → Map<uid, unsub>
+  private globalTypingRetryTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
   private otherReadUnsub: (() => void) | null = null;
 
   // ---- Self profile listener ----
@@ -218,6 +221,9 @@ class ChatStore {
       newMap.set(data.chatId, data);
       this.userChats = newMap;
     });
+
+    // Attach global typing listeners for all inbox chats
+    this.attachAllInboxTypingListeners().catch(() => {});
   }
 
   /** Listen for chat meta changes so inbox stays sorted when new messages arrive */
@@ -230,6 +236,8 @@ class ChatStore {
         const newMap = new Map(this.chats);
         newMap.set(chatId, meta);
         this.chats = newMap;
+        // Attach global typing listener for inbox preview
+        this.attachGlobalTypingListener(chatId).catch(() => {});
         // Fetch participant profiles if not cached
         const otherIds: string[] = [];
         for (const pid of meta.participantIds) {
@@ -279,6 +287,8 @@ class ChatStore {
       const newMap = new Map(this.chats);
       newMap.set(chatId, meta);
       this.chats = newMap;
+      // Attach global typing listener for inbox preview
+      this.attachGlobalTypingListener(chatId).catch(() => {});
       for (const pid of meta.participantIds) {
         if (!this.userDict.has(pid)) {
           this.fetchUser(pid);
@@ -452,7 +462,9 @@ class ChatStore {
     this.markAsRead(chatId);
     await this.attachPresenceListeners(chatId);
     this.startPresenceStaleCheck();
-    await this.attachTypingListener(chatId);
+    // Global typing listeners are already attached via inbox/meta hooks.
+    // One-shot direct read as fallback to catch edge cases.
+    this._readTypingStateDirect(chatId).catch(() => {});
     await this.attachOtherUserReadListener(chatId);
     this.attachPinnedListener(chatId);
     this.attachReactionListeners(chatId);
@@ -474,7 +486,8 @@ class ChatStore {
       this.messageRemovedUnsub = null;
     }
     // Don't detach presence listeners — they stay global for the inbox online dots
-    this.detachTypingListener();
+    // Don't detach global typing listeners — they persist for inbox preview
+    this.activeTypingNames = [];
     this.detachOtherUserReadListener();
     this.detachPinnedListener();
     this.detachStarredListener();
@@ -520,6 +533,9 @@ class ChatStore {
         metaUnsub();
         this.chatMetaUnsubs.delete(chatId);
       }
+
+      // Clean up global typing listener for this chat
+      this.detachGlobalTypingListener(chatId);
     } catch (err: any) {
       console.error('[deleteChat] Failed:', err);
       toastStore.error(`Failed to delete chat: ${err.message?.slice(0, 80) || 'Unknown error'}`);
@@ -606,7 +622,7 @@ class ChatStore {
   }
 
   /** Send an image message */
-  async sendImageMessage(chatId: string, imageUrl: string, caption?: string, blurhash?: string): Promise<void> {
+  async sendImageMessage(chatId: string, imageUrl: string, caption?: string, blurhash?: string, viewOnce?: boolean): Promise<void> {
     const user = authStore.user;
     if (!user) return;
 
@@ -619,6 +635,7 @@ class ChatStore {
     const message: Message = {
       id: messageId, c: caption ?? '📷 Photo', sid: user.id, t: 'image', ts: Date.now(),
       rk: idempotencyKey, rid: null, mu: imageUrl, mh: blurhash ?? null, md: null, edited: false,
+      vo: viewOnce || undefined,
     };
 
     this.recordSelfMessage(chatId, message.ts);
@@ -756,6 +773,9 @@ class ChatStore {
     // Attach a real-time meta listener so the inbox stays in sync when
     // messages are sent and the chat meta (lm, ts) changes on the server.
     this.attachChatMetaListener(chatId).catch(() => {});
+
+    // Attach global typing listener for inbox preview
+    this.attachGlobalTypingListener(chatId).catch(() => {});
 
     return chatId;
   }
@@ -895,33 +915,46 @@ class ChatStore {
     }
   }
 
-  /** Internal: actually attach the Firebase typing listeners. Retries up to 5
-   *  times with backoff if meta is not yet available. */
-  private async _doAttachTypingListener(chatId: string): Promise<void> {
+  /** Internal: actually attach the Firebase typing listeners. Uses persistent retry
+   *  with capped exponential backoff (1s, 2s, 4s, 8s, 10s, 10s…). Only stops
+   *  retrying if the chat is no longer in the user's chats or userChats.
+   *  Stores unsubs in globalTypingUnsubs so they persist across chat switches. */
+  private async _doAttachTypingListener(chatId: string, retryCount = 0): Promise<void> {
+    // If already attached globally, nothing to do
+    if (this.globalTypingUnsubs.has(chatId)) return;
+
     const meta = this.chats.get(chatId);
     if (!meta || !meta.participantIds || meta.participantIds.length === 0) {
-      this.typingRetryCount++;
-      if (this.typingRetryCount > 5) {
-        console.error('[ChatStore] attachTypingListener: meta still not available after 5 retries for', chatId);
+      // Only stop retrying if the chat is no longer in any of our lists
+      const stillRelevant = this.chats.has(chatId) || this.userChats.has(chatId);
+      if (!stillRelevant) {
+        console.log('[ChatStore] Typing: chat no longer relevant, stopping retry for', chatId);
         return;
       }
-      const delay = 1000 * this.typingRetryCount; // 1s, 2s, 3s, 4s, 5s
-      console.warn(`[ChatStore] attachTypingListener: meta not available for ${chatId} - retry #${this.typingRetryCount} in ${delay}ms`);
-      if (this.typingRetryTimer) clearTimeout(this.typingRetryTimer);
-      this.typingRetryTimer = setTimeout(() => {
-        if (this.activeChatId === chatId) {
-          this._doAttachTypingListener(chatId).catch(() => {});
-        }
+      // Capped exponential backoff: 1s, 2s, 4s, 8s, 10s, 10s, 10s…
+      const delay = Math.min(1000 * Math.pow(2, retryCount), 10000);
+      console.warn(`[ChatStore] Typing: meta not available for ${chatId} - retry #${retryCount + 1} in ${delay}ms`);
+      this._clearGlobalTypingRetryTimer(chatId);
+      const timer = setTimeout(() => {
+        this.globalTypingRetryTimers.delete(chatId);
+        this._doAttachTypingListener(chatId, retryCount + 1).catch(() => {});
       }, delay);
+      this.globalTypingRetryTimers.set(chatId, timer);
       return;
     }
+
+    // Clear any pending retry timer for this chat
+    this._clearGlobalTypingRetryTimer(chatId);
+
+    // Double-check not already attached (race guard)
+    if (this.globalTypingUnsubs.has(chatId)) return;
 
     this.typingSafetyTimeouts.set(chatId, new Map());
     const myUid = authStore.user?.id;
 
-    // Only listen for OTHER users' typing (skip own UID — we already know we're typing)
+    // Only listen for OTHER users' typing (skip own UID)
     const otherUids = meta.participantIds.filter(uid => uid !== myUid);
-    console.log('[ChatStore] Attaching typing listeners for', otherUids.length, 'users in chat', chatId, '- otherUids:', otherUids);
+    console.log('[ChatStore] Attaching GLOBAL typing listeners for', otherUids.length, 'users in chat', chatId);
 
     // Fallback: if no other users found (edge case), try participants list
     const fallbackUids = otherUids.length === 0
@@ -933,22 +966,23 @@ class ChatStore {
       return;
     }
 
-    let attachedCount = 0;
+    const chatUnsubs = new Map<string, () => void>();
     for (const uid of listenUids) {
       try {
         const r = await rtdb.ref(RTDB_PATHS.TYPING(chatId, uid));
         const unsub = await rtdb.onValue(r, (snap) => {
           this._handleTypingSnapshot(chatId, uid, snap);
         });
-        this.typingUnsubs.set(uid, unsub);
-        attachedCount++;
-        console.log('[ChatStore] Typing listener attached OK for uid=', uid, 'chat=', chatId);
+        chatUnsubs.set(uid, unsub);
+        console.log('[ChatStore] Global typing listener attached OK for uid=', uid, 'chat=', chatId);
       } catch (err) {
-        console.error('[ChatStore] Failed to attach typing listener for uid=', uid, 'chat=', chatId, err);
+        console.error('[ChatStore] Failed to attach global typing listener for uid=', uid, 'chat=', chatId, err);
       }
     }
-    if (attachedCount === 0 && listenUids.length > 0) {
-      console.error('[ChatStore] WARNING: 0 typing listeners attached out of', listenUids.length, 'for chat', chatId);
+    if (chatUnsubs.size > 0) {
+      this.globalTypingUnsubs.set(chatId, chatUnsubs);
+    } else if (listenUids.length > 0) {
+      console.error('[ChatStore] WARNING: 0 global typing listeners attached out of', listenUids.length, 'for chat', chatId);
     }
   }
 
@@ -1069,6 +1103,62 @@ class ChatStore {
     }
   }
 
+  // ---- Global typing listener management ----
+
+  /** Attach a global typing listener for a chat that persists across chat switches.
+   *  Used for inbox preview and ensures typing state is always available when
+   *  opening any chat. Uses persistent retry with capped exponential backoff. */
+  async attachGlobalTypingListener(chatId: string): Promise<void> {
+    // Skip if already attached
+    if (this.globalTypingUnsubs.has(chatId)) return;
+    await this._doAttachTypingListener(chatId);
+    // One-shot fallback: directly read the typing state to catch edge cases
+    // where the onValue initial callback is missed.
+    await this._readTypingStateDirect(chatId);
+  }
+
+  /** Remove all global typing listeners for a specific chat. */
+  private detachGlobalTypingListener(chatId: string): void {
+    const chatUnsubs = this.globalTypingUnsubs.get(chatId);
+    if (chatUnsubs) {
+      for (const [, unsub] of chatUnsubs) unsub();
+      this.globalTypingUnsubs.delete(chatId);
+    }
+    this._clearGlobalTypingRetryTimer(chatId);
+    // Clear safety timeouts for this chat
+    const timeouts = this.typingSafetyTimeouts.get(chatId);
+    if (timeouts) {
+      for (const [, t] of timeouts) clearTimeout(t);
+      this.typingSafetyTimeouts.delete(chatId);
+    }
+    // Clear typing UIDs tracking for this chat
+    this._typingUids.delete(chatId);
+    // Clear display names for this chat
+    const m = new Map(this.typingDisplayNames);
+    m.delete(chatId);
+    this.typingDisplayNames = m;
+    // Clear active names if this was the active chat
+    if (this.activeChatId === chatId) {
+      this.activeTypingNames = [];
+    }
+  }
+
+  /** Clear a pending global typing retry timer for a specific chat. */
+  private _clearGlobalTypingRetryTimer(chatId: string): void {
+    const timer = this.globalTypingRetryTimers.get(chatId);
+    if (timer) {
+      clearTimeout(timer);
+      this.globalTypingRetryTimers.delete(chatId);
+    }
+  }
+
+  /** Attach global typing listeners for ALL chats currently in the inbox. */
+  async attachAllInboxTypingListeners(): Promise<void> {
+    for (const chatId of this.userChats.keys()) {
+      this.attachGlobalTypingListener(chatId).catch(() => {});
+    }
+  }
+
   // ============================================================
   // Read Receipts — listen to OTHER user's user_chats entry
   // ============================================================
@@ -1115,13 +1205,11 @@ class ChatStore {
   // ============================================================
 
   detachHighFrequencyListeners(): void {
-    this.detachTypingListener();
+    // Global typing listeners are low-frequency — keep them during dormant
   }
 
   async reattachListeners(): Promise<void> {
-    if (this.activeChatId) {
-      await this.attachTypingListener(this.activeChatId);
-    }
+    // Global typing listeners persist across network transitions — no reattach needed
   }
 
   // ============================================================
@@ -1187,6 +1275,18 @@ class ChatStore {
     this.closeChat();
     this.detachPresenceListeners(); // Full cleanup on logout
     this.detachSelfProfileListener();
+    // Clean up ALL global typing listeners
+    for (const [chatId, chatUnsubs] of this.globalTypingUnsubs) {
+      for (const [, unsub] of chatUnsubs) unsub();
+    }
+    this.globalTypingUnsubs.clear();
+    for (const [, timer] of this.globalTypingRetryTimers) clearTimeout(timer);
+    this.globalTypingRetryTimers.clear();
+    // Clean up all safety timeouts
+    for (const [, chatTimeouts] of this.typingSafetyTimeouts) {
+      for (const [, t] of chatTimeouts) clearTimeout(t);
+    }
+    this.typingSafetyTimeouts.clear();
     // Full reset: clear ALL typing state on logout
     this._typingUids.clear();
     if (this.typingDisplayNames.size > 0) {

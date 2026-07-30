@@ -172,7 +172,7 @@ class PresenceManager {
       await rtdb.onDisconnectSet(ref, {
         uid,
         status: 'offline',
-        lastSeen: rtdb.serverTimestamp(),
+        lastSeen: prefsStore.lastSeenPrivacy === 'nobody' ? 0 : rtdb.serverTimestamp(),
         typing: false,
       });
       this.writePresence(uid, 'online');
@@ -185,7 +185,7 @@ class PresenceManager {
             await rtdb.onDisconnectSet(ref, {
               uid,
               status: 'offline',
-              lastSeen: rtdb.serverTimestamp(),
+              lastSeen: prefsStore.lastSeenPrivacy === 'nobody' ? 0 : rtdb.serverTimestamp(),
               typing: false,
             });
             this.writePresence(uid, 'online');
@@ -331,7 +331,7 @@ class PresenceManager {
     rtdb.set(await rtdb.ref(RTDB_PATHS.PRESENCE(uid)), {
       uid,
       status,
-      lastSeen: rtdb.serverTimestamp(),
+      lastSeen: prefsStore.lastSeenPrivacy === 'nobody' ? 0 : rtdb.serverTimestamp(),
       typing: false,
     }).catch((err) => {
       console.warn('[PresenceManager] Failed to write presence:', err);
@@ -342,7 +342,7 @@ class PresenceManager {
     rtdb.set(await rtdb.ref(RTDB_PATHS.PRESENCE(uid)), {
       uid,
       status: this.onlineStatus,
-      lastSeen: rtdb.serverTimestamp(),
+      lastSeen: prefsStore.lastSeenPrivacy === 'nobody' ? 0 : rtdb.serverTimestamp(),
       typing: false,
     }).catch(() => {});
   }

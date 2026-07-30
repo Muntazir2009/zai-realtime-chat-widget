@@ -75,6 +75,7 @@
     retry?: () => void;
     files: MediaComposerFile[];
     caption: string;
+    viewOnce?: boolean;
   }
   let uploadTrackers = $state(new Map<string, UploadTracker>());
 
@@ -149,6 +150,7 @@
     const h24 = prefsStore.use24HourFormat;
     if (!otherPresence || !otherPresence.lastSeen) return null;
     if (otherPresence.status === 'online') return null;
+    if (otherPresence.lastSeen === 0) return null; // User has hidden their last seen
     return formatLastSeen(otherPresence.lastSeen, abs, h24);
   });
 
@@ -510,7 +512,7 @@
   }
 
   // Called when user presses Send in the MediaComposer
-  function handleComposerSend(files: MediaComposerFile[], caption: string) {
+  function handleComposerSend(files: MediaComposerFile[], caption: string, viewOnce?: boolean) {
     if (!chatStore.activeChatId) return;
     showComposer = false;
 
@@ -542,6 +544,7 @@
           ? { duration: mediaFile.duration ?? 0, thumbnailUrl: mediaFile.thumbnailUrl, isUploading: true }
           : { isUploading: true },
         edited: false,
+        vo: viewOnce || undefined,
       };
 
       // Insert optimistic message
@@ -565,12 +568,13 @@
         localUrl,
         files: [mediaFile],
         caption,
+        viewOnce,
       };
       uploadTrackers.set(tempMsgId, tracker);
       uploadTrackers = new Map(uploadTrackers);
 
       // Start upload in background (fire-and-forget; we handle errors via .catch)
-      uploadMediaFile(tempMsgId, mediaFile, caption, abortController).then(
+      uploadMediaFile(tempMsgId, mediaFile, caption, abortController, viewOnce).then(
         () => {
           // Success: nothing extra — uploadMediaFile already wrote the RTDB
           // message, replaced the optimistic temp, and scheduled tracker cleanup.
@@ -588,7 +592,7 @@
             tracker.status = 'uploading';
             tracker.progress = { percentage: 0, loaded: 0, total: mediaFile.file.size, speed: 0, eta: -1, phase: 'preparing' };
             uploadTrackers = new Map(uploadTrackers);
-            uploadMediaFile(tempMsgId, mediaFile, caption, newAbort).then(
+            uploadMediaFile(tempMsgId, mediaFile, caption, newAbort, viewOnce).then(
               () => { /* success */ },
               (retryErr) => {
                 if (retryErr instanceof DOMException && retryErr.name === 'AbortError') return;
@@ -628,6 +632,7 @@
     mediaFile: MediaComposerFile,
     caption: string,
     abortController: AbortController,
+    viewOnce?: boolean,
   ) {
     const tracker = uploadTrackers.get(msgId);
     if (!tracker) return;
@@ -669,7 +674,7 @@
         // Optimistic message already gone (e.g. user cleared chat). Still
         // need to write to RTDB so the message lands.
         if (isImage) {
-          await chatStore.sendImageMessage(chatStore.activeChatId!, result.publicUrl, caption, result.blurhash);
+          await chatStore.sendImageMessage(chatStore.activeChatId!, result.publicUrl, caption, result.blurhash, viewOnce);
         } else {
           await chatStore.sendVideoMessage(
             chatStore.activeChatId!,
@@ -707,7 +712,7 @@
 
       // Now write to RTDB via chatStore
       if (isImage) {
-        await chatStore.sendImageMessage(chatStore.activeChatId!, result.publicUrl, caption, result.blurhash);
+        await chatStore.sendImageMessage(chatStore.activeChatId!, result.publicUrl, caption, result.blurhash, viewOnce);
       } else {
         await chatStore.sendVideoMessage(
           chatStore.activeChatId!,

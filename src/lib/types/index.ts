@@ -51,6 +51,7 @@ export interface Message {
   mh: string | null;   // mediaHash (blurhash)
   md: Record<string, unknown> | null; // mediaDimensions / metadata
   edited: boolean;      // whether message has been edited
+  vo?: boolean;        // viewOnce — if true, media can only be viewed once by the recipient
 }
 
 /* ---------- Inbox (user_chats) ---------- */
