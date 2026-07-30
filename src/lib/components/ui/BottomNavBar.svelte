@@ -443,19 +443,6 @@
     transition: transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1);
     contain: layout style;
   }
-  /* Top-edge light refraction on indicator */
-  .nav-indicator::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 8%;
-    right: 8%;
-    height: 1.5px;
-    border-radius: 1px;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
-    pointer-events: none;
-  }
-
   /* svelte-ignore css_unused_selector */
   .nav-indicator.indicator-grabbed {
     box-shadow:
