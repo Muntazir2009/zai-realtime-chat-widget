@@ -3163,3 +3163,37 @@ Stage Summary:
 - Defensive: direct read fallback catches missed onValue callbacks
 - Defensive: always-update strategy eliminates state-change race conditions
 - Pushed as commit 46d0aca9
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Rewire typing indicators globally, add last seen privacy, add view once photos
+
+Work Log:
+- Analyzed typing indicator system: identified that listeners were only attached for active chat, with only 5 retries (15s max) giving up silently
+- Rewrote _doAttachTypingListener to use persistent capped exponential backoff (1s→2s→4s→8s→10s max)
+- Added globalTypingUnsubs map for per-chat per-UID unsubscribe functions that persist across chat switches
+- Added attachGlobalTypingListener method with idempotent guard
+- Added attachAllInboxTypingListeners called when inbox loads
+- Hooked into chatMeta updates (attachChatMetaListener, fetchChatMeta, createDirectChat) to auto-attach typing listeners
+- Modified openChat to only do one-shot _readTypingStateDirect fallback (global listeners already attached)
+- Modified closeChat to NOT detach global typing listeners, just clear activeTypingNames
+- Modified deleteChat to call detachGlobalTypingListener
+- Added lastSeenPrivacy pref ('everyone' | 'nobody') to prefs store
+- Modified PresenceManager writePresence/updateLastSeen/setupOnDisconnect to write lastSeen: 0 when privacy is 'nobody'
+- Added segmented control UI in Settings > Privacy & Realtime section
+- Modified Conversation formattedLastSeen to return null when lastSeen === 0
+- Added vo (viewOnce) field to Message type
+- Added View Once toggle button in MediaComposer (EyeOff icon + 1x badge, only for images)
+- Modified Conversation handleComposerSend to accept and pass viewOnce parameter
+- Modified sendImageMessage to accept and store viewOnce flag
+- Added blurred overlay with "Tap to reveal" in MessageBubble for viewOnce messages from others
+- Added 10s auto-hide timer for revealed viewOnce images
+
+Stage Summary:
+- Typing indicators now work for ALL chats (old and new) via global Firebase listeners
+- Persistent retry ensures listeners eventually attach even if chatMeta takes time to load
+- Last Seen Privacy allows hiding last seen from everyone (writes lastSeen: 0)
+- View Once photos show blurred overlay to recipients, reveals temporarily on tap
+- All changes compiled successfully (5 pre-existing errors only)
+- Pushed to git: commit 4d911809
