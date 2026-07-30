@@ -82,10 +82,7 @@ class ChatStore {
   private messageRemovedUnsub: (() => void) | null = null;
   private presenceUnsubs: Map<string, () => void> = new Map();
   private presenceStaleTimer: ReturnType<typeof setInterval> | null = null;
-  private typingUnsubs: Map<string, () => void> = new Map();
   private typingSafetyTimeouts: Map<string, Map<string, ReturnType<typeof setTimeout>>> = new Map();
-  private typingRetryTimer: ReturnType<typeof setTimeout> | null = null;
-  private typingRetryCount: number = 0;
   // Global typing listeners — persist across chat switches
   private globalTypingUnsubs: Map<string, Map<string, () => void>> = new Map(); // chatId → Map<uid, unsub>
   private globalTypingRetryTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
@@ -885,16 +882,6 @@ class ChatStore {
   // Typing
   // ============================================================
 
-  private async attachTypingListener(chatId: string): Promise<void> {
-    this.detachTypingListener();
-    this.typingRetryCount = 0; // reset retry counter on fresh attach
-    await this._doAttachTypingListener(chatId);
-    // Fallback: directly read the typing state for each other user.
-    // This catches edge cases where the onValue initial callback is missed
-    // (e.g., race between detach and attach, or Firebase SDK timing).
-    await this._readTypingStateDirect(chatId);
-  }
-
   /** One-shot direct read of typing state for all other users in the chat.
    *  Updates the internal tracking and reactive display names immediately. */
   private async _readTypingStateDirect(chatId: string): Promise<void> {
@@ -1033,7 +1020,7 @@ class ChatStore {
 
     // Always update reactive state — never skip updates.
     // This prevents edge cases where the `onValue` initial callback
-    // races with `detachTypingListener` or where a state transition
+    // races with global listener detachment or where a state transition
     // is missed due to timing.
     this._updateTypingDisplayNames(chatId);
   }
@@ -1077,29 +1064,6 @@ class ChatStore {
     if (t) {
       clearTimeout(t);
       chatTimeouts.delete(uid);
-    }
-  }
-
-  private detachTypingListener(): void {
-    for (const [, unsub] of this.typingUnsubs) unsub();
-    this.typingUnsubs.clear();
-    // Clear all safety timeouts
-    for (const [, chatTimeouts] of this.typingSafetyTimeouts) {
-      for (const [, t] of chatTimeouts) clearTimeout(t);
-    }
-    this.typingSafetyTimeouts.clear();
-    // Clear retry timer
-    if (this.typingRetryTimer) {
-      clearTimeout(this.typingRetryTimer);
-      this.typingRetryTimer = null;
-    }
-    // Clear internal typing UIDs (non-reactive tracking)
-    this._typingUids.clear();
-    // Clear the reactive array for the active chat so the UI updates immediately.
-    // Do NOT clear the entire typingDisplayNames map — other chats' typing state
-    // is preserved so switching back can restore it from the map.
-    if (this.activeTypingNames.length > 0) {
-      this.activeTypingNames = [];
     }
   }
 

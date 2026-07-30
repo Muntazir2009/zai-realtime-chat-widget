@@ -391,7 +391,7 @@
     padding: 0 max(16px, env(safe-area-inset-left, 0px)) max(14px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-right, 0px));
   }
 
-  /* ── Capsule: frosted glass container — matches header glass style ── */
+  /* ── Capsule: glass panel — matches options menu sheet style ── */
   .nav-capsule {
     position: relative;
     pointer-events: auto;
@@ -403,15 +403,12 @@
     max-width: 260px;
     width: 100%;
     height: 52px;
-    /* Frosted glass — same treatment as the header pill */
-    background: rgba(255, 255, 255, 0.42);
-    backdrop-filter: blur(40px) saturate(220%);
-    -webkit-backdrop-filter: blur(40px) saturate(220%);
-    border: 0.5px solid rgba(255, 255, 255, 0.30);
-    box-shadow:
-      0 1px 3px rgba(0, 0, 0, 0.06),
-      0 4px 16px rgba(0, 0, 0, 0.08),
-      0 0.5px 0 rgba(255, 255, 255, 0.15) inset;
+    /* Glass panel — same treatment as options menu sheet */
+    background: var(--bg-elevated);
+    backdrop-filter: blur(24px) saturate(200%);
+    -webkit-backdrop-filter: blur(24px) saturate(200%);
+    border: 1px solid var(--border-subtle);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 0 1px rgba(0, 0, 0, 0.06);
     isolation: isolate;
     touch-action: none;
     overflow: hidden;
@@ -426,9 +423,8 @@
     height: 40px;
     margin-top: -20px;
     border-radius: 20px;
-    /* Slightly more opaque glass — blends with capsule, not a separate "bubble" */
-    background: rgba(0, 0, 0, 0.08);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+    background: var(--accent-bg, rgba(0, 0, 0, 0.06));
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
     transform: translateX(0);
     transform-origin: center;
     z-index: 1;
@@ -442,8 +438,8 @@
 
   /* svelte-ignore css_unused_selector */
   .nav-indicator.indicator-grabbed {
-    background: rgba(0, 0, 0, 0.10);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.10);
+    background: var(--accent-bg, rgba(0, 0, 0, 0.09));
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   }
 
   /* ── Tabs ── */
@@ -537,99 +533,11 @@
     100% { transform: scale(1); opacity: 1; }
   }
 
-  /* ── Dark theme ── */
-  :global(.dark) .nav-capsule {
-    background: rgba(22, 27, 34, 0.55);
-    border-color: rgba(255, 255, 255, 0.08);
-    box-shadow:
-      0 1px 3px rgba(0, 0, 0, 0.18),
-      0 4px 16px rgba(0, 0, 0, 0.22),
-      0 0.5px 0 rgba(255, 255, 255, 0.05) inset;
-  }
-  :global(.dark) .nav-indicator {
-    background: rgba(255, 255, 255, 0.10);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
-  }
-  /* svelte-ignore css_unused_selector */
-  :global(.dark) .nav-indicator.indicator-grabbed {
-    background: rgba(255, 255, 255, 0.13);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
-  }
-  :global(.dark) .nav-tab {
-    color: rgba(200, 200, 210, 0.40);
-  }
-  :global(.dark) .nav-tab.tab-active {
-    color: rgba(240, 240, 245, 0.92);
-  }
-  /* svelte-ignore css_unused_selector */
-  :global(.dark) .nav-tab.tab-drag-hover {
-    color: rgba(240, 240, 245, 0.70);
-  }
-  :global(.dark) .tab-ripple {
-    background: rgba(255, 255, 255, 0.06);
-  }
 
-  /* ── AMOLED theme ── */
-  :global(.amoled) .nav-capsule {
-    background: rgba(12, 12, 18, 0.65);
-    border-color: rgba(255, 255, 255, 0.06);
-    box-shadow:
-      0 1px 3px rgba(0, 0, 0, 0.25),
-      0 4px 16px rgba(0, 0, 0, 0.30),
-      0 0.5px 0 rgba(255, 255, 255, 0.04) inset;
-  }
-  :global(.amoled) .nav-indicator {
-    background: rgba(255, 255, 255, 0.08);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
-  }
-  /* svelte-ignore css_unused_selector */
-  :global(.amoled) .nav-indicator.indicator-grabbed {
-    background: rgba(255, 255, 255, 0.11);
-  }
-  :global(.amoled) .nav-tab {
-    color: rgba(180, 180, 190, 0.35);
-  }
-  :global(.amoled) .nav-tab.tab-active {
-    color: rgba(240, 240, 245, 0.90);
-  }
-  /* svelte-ignore css_unused_selector */
-  :global(.amoled) .nav-tab.tab-drag-hover {
-    color: rgba(240, 240, 245, 0.65);
-  }
-  :global(.amoled) .tab-ripple {
-    background: rgba(255, 255, 255, 0.05);
-  }
 
-  /* ── Crimson dark theme ── */
-  :global(.crimson-dark) .nav-capsule {
-    background: rgba(28, 20, 28, 0.60);
-    border-color: rgba(255, 255, 255, 0.06);
-    box-shadow:
-      0 1px 3px rgba(0, 0, 0, 0.22),
-      0 4px 16px rgba(0, 0, 0, 0.28),
-      0 0.5px 0 rgba(255, 255, 255, 0.04) inset;
-  }
-  :global(.crimson-dark) .nav-indicator {
-    background: rgba(255, 255, 255, 0.08);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.14);
-  }
-  /* svelte-ignore css_unused_selector */
-  :global(.crimson-dark) .nav-indicator.indicator-grabbed {
-    background: rgba(255, 255, 255, 0.11);
-  }
-  :global(.crimson-dark) .nav-tab {
-    color: rgba(200, 180, 190, 0.35);
-  }
-  :global(.crimson-dark) .nav-tab.tab-active {
-    color: rgba(245, 235, 240, 0.92);
-  }
-  /* svelte-ignore css_unused_selector */
-  :global(.crimson-dark) .nav-tab.tab-drag-hover {
-    color: rgba(245, 235, 240, 0.65);
-  }
-  :global(.crimson-dark) .tab-ripple {
-    background: rgba(255, 255, 255, 0.05);
-  }
+
+
+
 
   /* ── Reduced motion ── */
   @media (prefers-reduced-motion: reduce) {
