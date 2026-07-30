@@ -964,35 +964,6 @@
           </button>
         </div>
 
-        <div class="toggle-divider"></div>
-
-        <!-- Last Seen Privacy -->
-        <div class="toggle-row">
-          <div class="toggle-info">
-            <div class="toggle-icon" style="background: color-mix(in srgb, #f59e0b 12%, transparent);">
-              <EyeOff size={15} style="color: #f59e0b;" />
-            </div>
-            <div>
-              <p class="toggle-title">Last Seen</p>
-              <p class="toggle-desc">{prefsStore.lastSeenPrivacy === 'nobody' ? 'Hidden from everyone' : 'Visible to everyone'}</p>
-            </div>
-          </div>
-          <div class="segment-control">
-            <button
-              class="seg-btn"
-              class:seg-active={prefsStore.lastSeenPrivacy === 'everyone'}
-              onclick={() => prefsStore.setLastSeenPrivacy('everyone')}
-            >Everyone</button>
-            <button
-              class="seg-btn"
-              class:seg-active={prefsStore.lastSeenPrivacy === 'nobody'}
-              onclick={() => prefsStore.setLastSeenPrivacy('nobody')}
-            >Nobody</button>
-          </div>
-        </div>
-
-        <div class="toggle-divider"></div>
-
         <!-- Online Users — opens a full-screen realtime presence overlay -->
         <button
           class="info-row action-row"

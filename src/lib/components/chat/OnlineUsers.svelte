@@ -7,7 +7,7 @@
   import { onMount, onDestroy } from 'svelte';
   import {
     ChevronLeft, Search, X, Loader2, RefreshCw,
-    ArrowUpDown, Send, Users as UsersIcon,
+    ArrowUpDown, Send, Users as UsersIcon, EyeOff,
   } from 'lucide-svelte';
   import Avatar from '$lib/components/ui/Avatar.svelte';
   import { chatStore } from '$lib/stores/chat.svelte.js';
@@ -16,6 +16,7 @@
   import { authStore } from '$lib/stores/auth.svelte.js';
   import type { User, PresenceState } from '$lib/types/index.js';
   import * as rtdb from '$lib/firebase/rtdb.js';
+  import { prefsStore } from '$lib/stores/prefs.svelte.js';
 
   interface Props {
     onBack: () => void;
@@ -335,6 +336,25 @@
         <span>{sortLabel}</span>
       </button>
     </div>
+    <!-- Last Seen Privacy Control -->
+    <div class="ou-privacy-row">
+      <div class="ou-privacy-left">
+        <EyeOff size={14} style="color: var(--color-accent); flex-shrink: 0;" />
+        <span class="ou-privacy-label">Last Seen</span>
+      </div>
+      <div class="ou-segment">
+        <button
+          class="ou-seg-btn"
+          class:ou-seg-active={prefsStore.lastSeenPrivacy === 'everyone'}
+          onclick={() => prefsStore.setLastSeenPrivacy('everyone')}
+        >Everyone</button>
+        <button
+          class="ou-seg-btn"
+          class:ou-seg-active={prefsStore.lastSeenPrivacy === 'nobody'}
+          onclick={() => prefsStore.setLastSeenPrivacy('nobody')}
+        >Nobody</button>
+      </div>
+    </div>
   </header>
 
   <!-- Pull-to-refresh indicator -->
@@ -590,6 +610,62 @@
   }
   .ou-sort-btn:active { transform: scale(0.95); }
   .ou-sort-btn:hover { color: var(--text-primary); }
+
+  /* ── Last Seen Privacy Row ── */
+  .ou-privacy-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    margin: 0 12px 4px 12px;
+    background: var(--input-bg);
+    border-radius: var(--radius-md, 12px);
+    border: 1.5px solid var(--border-subtle);
+    flex-shrink: 0;
+  }
+
+  .ou-privacy-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .ou-privacy-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .ou-segment {
+    display: flex;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 2px;
+    gap: 2px;
+  }
+
+  .ou-seg-btn {
+    padding: 5px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    border: none;
+    background: transparent;
+    color: var(--text-tertiary);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .ou-seg-btn.ou-seg-active {
+    background: var(--color-primary);
+    color: white;
+  }
+
+  .ou-seg-btn:hover:not(.ou-seg-active) {
+    color: var(--text-secondary);
+  }
 
   /* ── Pull-to-refresh indicator ── */
   .ou-pull-indicator {
