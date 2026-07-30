@@ -355,7 +355,7 @@
         onpointercancel={onTabPointerCancel}
       >
         <span class="tab-icon-wrap">
-          <tab.icon size={20} class="tab-icon" strokeWidth={isActive ? 2.2 : 1.6} />
+          <tab.icon size={22} class="tab-icon" strokeWidth={isActive ? 2 : 1.8} />
         </span>
 
         {#if tab.id === 'dms' && totalUnread > 0}
@@ -417,7 +417,7 @@
     overflow: hidden;
   }
 
-  /* ── Active indicator: cohesive sliding pill ── */
+  /* ── Active indicator: 3D raised pill with glowing outline ── */
   .nav-indicator {
     position: absolute;
     top: 50%;
@@ -426,8 +426,13 @@
     height: 40px;
     margin-top: -20px;
     border-radius: 20px;
-    background: var(--accent-bg, rgba(0, 0, 0, 0.06));
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+    background: var(--color-primary, rgba(0, 0, 0, 0.08));
+    /* 3D raised depth + colored glow outline */
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.06),
+      0 4px 12px rgba(0, 0, 0, 0.08),
+      0 0 0 1.5px rgba(0, 0, 0, 0.04),
+      0 0 16px -2px var(--color-primary, rgba(0,0,0,0.12));
     transform: translateX(0);
     transform-origin: center;
     z-index: 1;
@@ -438,11 +443,26 @@
     transition: transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1);
     contain: layout style;
   }
+  /* Top-edge light refraction on indicator */
+  .nav-indicator::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 8%;
+    right: 8%;
+    height: 1.5px;
+    border-radius: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+    pointer-events: none;
+  }
 
   /* svelte-ignore css_unused_selector */
   .nav-indicator.indicator-grabbed {
-    background: var(--accent-bg, rgba(0, 0, 0, 0.09));
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    box-shadow:
+      0 2px 4px rgba(0, 0, 0, 0.08),
+      0 6px 16px rgba(0, 0, 0, 0.10),
+      0 0 0 1.5px rgba(0, 0, 0, 0.06),
+      0 0 24px -2px var(--color-primary, rgba(0,0,0,0.15));
   }
 
   /* ── Tabs ── */
@@ -457,7 +477,7 @@
     padding: 0;
     border: none;
     background: transparent;
-    color: rgba(100, 100, 110, 0.50);
+    color: var(--text-tertiary);
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
     user-select: none;
@@ -472,17 +492,24 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    transition: transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1),
+                filter 250ms ease;
   }
 
   .nav-tab.tab-active {
-    color: rgba(30, 30, 35, 0.90);
+    color: white;
+  }
+  .nav-tab.tab-active .tab-icon-wrap {
+    transform: scale(1.12);
+    /* 3D depth glow behind active icon */
+    filter: drop-shadow(0 1px 1px rgba(0,0,0,0.15))
+           drop-shadow(0 0 4px rgba(0,0,0,0.08));
   }
 
   /* Drag hover feedback */
   /* svelte-ignore css_unused_selector */
   .nav-tab.tab-drag-hover {
-    color: rgba(30, 30, 35, 0.65);
+    color: var(--text-secondary);
   }
   /* svelte-ignore css_unused_selector */
   .nav-tab.tab-drag-hover .tab-icon-wrap {
@@ -492,6 +519,8 @@
   :global(.nav-tab .tab-icon) {
     display: block;
     shape-rendering: geometricPrecision;
+    /* Crisp strokes for 3D feel */
+    vector-effect: non-scaling-stroke;
   }
 
   /* ── Ripple ── */
