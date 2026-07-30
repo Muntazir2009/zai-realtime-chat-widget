@@ -391,7 +391,7 @@
     padding: 0 max(16px, env(safe-area-inset-left, 0px)) max(14px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-right, 0px));
   }
 
-  /* ── Capsule: glass panel — matches options menu sheet style ── */
+  /* ── Capsule: liquid glass — matches context menu light refraction ── */
   .nav-capsule {
     position: relative;
     pointer-events: auto;
@@ -403,12 +403,15 @@
     max-width: 260px;
     width: 100%;
     height: 52px;
-    /* Glass panel — same treatment as options menu sheet */
-    background: var(--bg-elevated);
-    backdrop-filter: blur(24px) saturate(200%);
-    -webkit-backdrop-filter: blur(24px) saturate(200%);
-    border: 1px solid var(--border-subtle);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 0 1px rgba(0, 0, 0, 0.06);
+    /* Liquid glass — same treatment as context menu sheet */
+    background: var(--glass-bg);
+    backdrop-filter: blur(28px) saturate(200%);
+    -webkit-backdrop-filter: blur(28px) saturate(200%);
+    border: var(--glass-border);
+    box-shadow:
+      0 12px 40px rgba(0, 0, 0, 0.12),
+      0 4px 12px rgba(0, 0, 0, 0.05),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
     isolation: isolate;
     touch-action: none;
     overflow: hidden;
