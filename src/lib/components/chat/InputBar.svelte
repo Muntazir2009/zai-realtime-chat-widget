@@ -397,7 +397,7 @@
         </button>
         {#if showSchedulePanel}
           <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-          <div class="schedule-panel glass card" onclick|stopPropagation={() => {}} role="dialog" aria-label="Schedule message">
+          <div class="schedule-panel glass card" onclick={(e) => e.stopPropagation()} role="dialog" aria-label="Schedule message">
             <div class="sched-header">
               <Clock size={14} style="color: var(--color-primary);" />
               <span class="sched-title">Schedule Send</span>
