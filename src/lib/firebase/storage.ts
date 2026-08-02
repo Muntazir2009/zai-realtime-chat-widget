@@ -549,6 +549,8 @@ export async function uploadFile(
           finalFilename = compressed.name;
           finalContentType = compressed.type;
         }
+      }).catch(() => {
+        // Compression failed — upload original file as-is
       })
     : Promise.resolve();
 
