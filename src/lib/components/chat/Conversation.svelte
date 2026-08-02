@@ -678,6 +678,33 @@
         },
       );
 
+      // For videos: upload thumbnail to R2 if it's a data URL
+      let thumbnailPublicUrl = mediaFile.thumbnailUrl;
+      if (isVideo && thumbnailPublicUrl && thumbnailPublicUrl.startsWith('data:')) {
+        try {
+          // Convert data URL to Blob
+          const byteString = atob(thumbnailPublicUrl.split(',')[1]);
+          const mimeMatch = thumbnailPublicUrl.match(/^data:([^;]+);/);
+          const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+          const ab = new ArrayBuffer(byteString.length);
+          const ia = new Uint8Array(ab);
+          for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+          const thumbBlob = new Blob([ab], { type: mime });
+
+          const thumbResult = await uploadFile(
+            thumbBlob,
+            'thumbnails',
+            `thumb_${Date.now()}.jpg`,
+            undefined, // no simple progress callback for thumbnail
+            { signal: abortController.signal },
+          );
+          thumbnailPublicUrl = thumbResult.publicUrl;
+        } catch {
+          // Thumbnail upload failed — non-critical, fall back to blurhash
+          thumbnailPublicUrl = undefined;
+        }
+      }
+
       // Upload succeeded — update the message with real URL
       const msgs = chatStore.messages;
       const idx = msgs.findIndex((m) => m.id === msgId);
@@ -691,7 +718,7 @@
             chatStore.activeChatId!,
             result.publicUrl,
             mediaFile.duration ?? 0,
-            mediaFile.thumbnailUrl,
+            thumbnailPublicUrl,
           );
         }
         tracker.status = 'done';
@@ -714,7 +741,7 @@
         updatedMsg.c = caption || '🎬 Video';
         updatedMsg.md = {
           duration: mediaFile.duration ?? 0,
-          thumbnailUrl: mediaFile.thumbnailUrl,
+          thumbnailUrl: thumbnailPublicUrl,
           width: mediaFile.width,
           height: mediaFile.height,
         };
@@ -729,7 +756,7 @@
           chatStore.activeChatId!,
           result.publicUrl,
           mediaFile.duration ?? 0,
-          mediaFile.thumbnailUrl,
+          thumbnailPublicUrl,
         );
       }
 

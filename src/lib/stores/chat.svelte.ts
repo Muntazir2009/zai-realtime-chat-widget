@@ -687,7 +687,7 @@ class ChatStore {
     const durStr = duration > 0 ? formatVideoDuration(duration) : '';
     const message: Message = {
       id: messageId, c: '🎬 Video', sid: user.id, t: 'video', ts: Date.now(),
-      rk: idempotencyKey, rid: null, mu: videoUrl, mh: thumbnailUrl ?? null,
+      rk: idempotencyKey, rid: null, mu: videoUrl, mh: null,
       md: { duration, thumbnailUrl }, edited: false,
     };
 

@@ -188,16 +188,20 @@ export async function compressImage(
     // Try WebP first
     let blob: Blob | null = null;
 
-    if (canvas instanceof OffscreenCanvas) {
-      blob = await canvas.convertToBlob({ type: mimeType, quality });
-    } else {
-      blob = await new Promise<Blob | null>((resolve) => {
-        (canvas as HTMLCanvasElement).toBlob(
-          (b) => resolve(b),
-          mimeType,
-          quality,
-        );
-      });
+    try {
+      if (canvas instanceof OffscreenCanvas) {
+        blob = await canvas.convertToBlob({ type: mimeType, quality });
+      } else {
+        blob = await new Promise<Blob | null>((resolve) => {
+          (canvas as HTMLCanvasElement).toBlob(
+            (b) => resolve(b),
+            mimeType,
+            quality,
+          );
+        });
+      }
+    } catch {
+      blob = null;
     }
 
     // Fallback to JPEG if WebP not supported or produced too large result
