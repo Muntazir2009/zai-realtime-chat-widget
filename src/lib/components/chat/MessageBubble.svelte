@@ -533,6 +533,9 @@
       onkeydown={handleBubbleKeydown}
       use:bubbleTouchAction
     >
+    {#if isOwn}
+      <div class="bbl-shimmer"></div>
+    {/if}
     <!-- Reply Preview -->
     {#if msg.rid}
       <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
@@ -767,12 +770,12 @@
     user-select: none;
     padding: var(--msg-row-pad, 6px) 0;
     align-items: flex-end;
-    animation: msgBubbleIn 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: msgBubbleIn 280ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
     contain: layout style;
   }
 
   .msg-row.msg-grouped {
-    animation: msgBubbleInGrouped 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: msgBubbleInGrouped 220ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
   }
 
   .msg-own {
@@ -859,9 +862,10 @@
   }
 
   @keyframes reactionPulse {
-    0% { transform: scale(1); }
-    30% { transform: scale(1.015); }
-    100% { transform: scale(1); }
+    0% { transform: scale(0.6); opacity: 0; }
+    50% { transform: scale(1.15); opacity: 1; }
+    75% { transform: scale(0.95); }
+    100% { transform: scale(1); opacity: 1; }
   }
 
   /* Subtle hover lift on desktop */
@@ -1479,15 +1483,40 @@
   }
 
   @keyframes msgBubbleIn {
-    from { opacity: 0; transform: translateY(6px) scale(0.99); }
-    60% { opacity: 1; }
-    to { opacity: 1; transform: translateY(0) scale(1); }
+    0% { opacity: 0; transform: translateY(8px) scale(0.96); }
+    40% { opacity: 1; transform: translateY(-1px) scale(1.005); }
+    70% { transform: translateY(0.5px) scale(0.999); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
   }
 
   @keyframes msgBubbleInGrouped {
-    from { opacity: 0; transform: translateY(3px) scale(0.995); }
-    50% { opacity: 1; }
-    to { opacity: 1; transform: translateY(0) scale(1); }
+    0% { opacity: 0; transform: translateY(4px) scale(0.98); }
+    50% { opacity: 1; transform: translateY(-0.5px) scale(1.002); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  /* Shimmer overlay on sent bubbles */
+  .bbl-shimmer {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 10;
+  }
+  .bbl-shimmer::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
+    animation: shimmerSlide 800ms 200ms ease-out forwards;
+  }
+  @keyframes shimmerSlide {
+    0% { left: -100%; }
+    100% { left: 200%; }
   }
 
   /* ── Upload Overlay ── */

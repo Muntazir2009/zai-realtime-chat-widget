@@ -1634,8 +1634,8 @@
   .htd:nth-child(3) { animation-delay: 0.3s; }
 
   @keyframes hTypingBounce {
-    0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
-    30% { transform: translateY(-4px); opacity: 1; }
+    0%, 60%, 100% { transform: translateY(0) scale(1); opacity: 0.35; }
+    30% { transform: translateY(-5px) scale(1.15); opacity: 1; }
   }
 
   /* Menu button rotation */
@@ -1764,14 +1764,18 @@
   .date-chip {
     display: flex;
     align-items: center;
-    gap: 5px;
-    padding: 3px 10px;
-    border-radius: 99px;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border-subtle);
-    color: var(--text-tertiary);
+    gap: 6px;
+    padding: 4px 14px;
+    border-radius: 20px;
+    background: var(--glass-bg, rgba(0,0,0,0.06));
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border-subtle, rgba(0,0,0,0.06));
     font-size: 11px;
-    font-weight: 500;
+    font-weight: 600;
+    color: var(--text-tertiary, #888);
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
     box-shadow: 0 1px 3px rgba(0,0,0,0.04);
   }
 
@@ -1846,13 +1850,12 @@
     margin-bottom: 20px;
     background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 10%, transparent), color-mix(in srgb, var(--color-primary) 4%, transparent));
     box-shadow: 0 4px 20px color-mix(in srgb, var(--color-primary) 8%, transparent);
-    animation: emptyFloat 5s ease-in-out infinite;
+    animation: emptyAvatarFloat 4s ease-in-out infinite;
   }
 
-  @keyframes emptyFloat {
-    0%, 100% { transform: translateY(0) rotate(0deg); }
-    25% { transform: translateY(-8px) rotate(1deg); }
-    75% { transform: translateY(-4px) rotate(-0.5deg); }
+  @keyframes emptyAvatarFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
   }
 
   .empty-avatar-fallback {

@@ -48,6 +48,8 @@ function formatVideoDuration(secs: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+const EMPTY_REACTIONS: Reaction[] = [];
+
 class ChatStore {
   // ---- Inbox ----
   chats: Map<string, ChatMeta> = $state(new Map());
@@ -433,7 +435,7 @@ class ChatStore {
       }
     });
 
-    // Listen for message changes (edits, pin state sync)
+    // Listen for message changes (edits, pin state sync, media upload echo)
     this.messageChangedUnsub = await rtdb.onChildChanged(msgRef, (snap) => {
       const raw = snap.val() as Message;
       if (!raw) return;
@@ -441,10 +443,29 @@ class ChatStore {
       const idx = this.messages.findIndex((m) => m.id === msg.id);
       if (idx !== -1) {
         const existing = this.messages[idx]!;
-        // Skip if the content already matches our optimistic update —
-        // prevents a visual flicker when our own edit echoes back from RTDB.
-        if (existing.c === msg.c && existing.edited === msg.edited) return;
-        this.messages = this.messages.map((m) => (m.id === msg.id ? msg : m));
+        // Skip if all key fields already match our local message —
+        // prevents a visual flicker when our own edit / send echoes back from RTDB.
+        if (
+          existing.c === msg.c &&
+          existing.mu === msg.mu &&
+          existing.mh === msg.mh &&
+          existing.edited === msg.edited &&
+          JSON.stringify(existing.md) === JSON.stringify(msg.md) &&
+          existing.vo === msg.vo
+        )
+          return;
+        // Smart merge: start from the existing local message and overlay only
+        // fields that RTDB has (avoids wiping local upload state / metadata).
+        const updated: Message = { ...existing };
+        for (const key of Object.keys(msg) as (keyof Message)[]) {
+          if (msg[key] !== undefined) updated[key] = msg[key];
+        }
+        // Safety: if the message lost its media URL (shouldn't happen), keep the old one
+        if (existing.mu && !updated.mu && (updated.t === 'image' || updated.t === 'video')) {
+          updated.mu = existing.mu;
+          updated.mh = existing.mh;
+        }
+        this.messages = this.messages.map((m) => (m.id === msg.id ? updated : m));
       }
     });
 
@@ -1676,11 +1697,8 @@ class ChatStore {
 
     // Single onValue listener replaces 3 separate child listeners (150 → 50 for 50 msgs)
     const unsub = await rtdb.onValue(r, (snap) => {
-      // Clear existing reactions for this message
-      const msgs = new Map(this.reactions);
-      msgs.set(messageId, []);
-      this.reactions = msgs;
-
+      // Build the complete reaction list first, then assign once
+      const newReactions: Reaction[] = [];
       if (snap.exists()) {
         snap.forEach((childSnap: any) => {
           const emoji = childSnap.key;
@@ -1688,14 +1706,20 @@ class ChatStore {
           const data = childSnap.val() as { uids?: string[] } | null;
           const uids = data?.uids ?? [];
           if (uids.length > 0) {
-            const updated = new Map(this.reactions);
-            const existing = updated.get(messageId) ?? [];
-            existing.push({ emoji, uids });
-            updated.set(messageId, existing);
-            this.reactions = updated;
+            newReactions.push({ emoji, uids });
           }
         });
       }
+
+      // Only update if something actually changed (prevents overwriting optimistic state)
+      const current = this.reactions.get(messageId);
+      const currentJson = JSON.stringify(current ?? []);
+      const newJson = JSON.stringify(newReactions);
+      if (currentJson === newJson) return;
+
+      const updated = new Map(this.reactions);
+      updated.set(messageId, newReactions);
+      this.reactions = updated;
     });
     this.reactionUnsubs.set(messageId, unsub);
   }
@@ -1767,20 +1791,20 @@ class ChatStore {
 
   /** Get reactions for a specific message */
   getReactions(messageId: string): Reaction[] {
-    return this.reactions.get(messageId) ?? [];
+    return this.reactions.get(messageId) ?? EMPTY_REACTIONS;
   }
 
   /** Check if the current user has reacted with a specific emoji on a message */
   hasReacted(messageId: string, emoji: string): boolean {
     const uid = authStore.user?.id;
     if (!uid) return false;
-    const rxs = this.reactions.get(messageId) ?? [];
+    const rxs = this.reactions.get(messageId) ?? EMPTY_REACTIONS;
     return rxs.some(r => r.emoji === emoji && r.uids.includes(uid));
   }
 
   /** Get a flat count of all reactions on a message */
   getReactionCount(messageId: string): number {
-    const rxs = this.reactions.get(messageId) ?? [];
+    const rxs = this.reactions.get(messageId) ?? EMPTY_REACTIONS;
     return rxs.reduce((sum, r) => sum + r.uids.length, 0);
   }
 }

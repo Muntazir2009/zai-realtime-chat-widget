@@ -172,7 +172,7 @@
     text-align: left;
     position: relative;
     transition: background 150ms ease;
-    animation: tileEnter 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: tileEnter 350ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 
   .tile::after {
@@ -386,7 +386,8 @@
   }
 
   @keyframes tileEnter {
-    from { opacity: 0; transform: translateX(-8px); }
-    to { opacity: 1; transform: translateX(0); }
+    0% { opacity: 0; transform: translateX(-12px) scale(0.98); }
+    60% { opacity: 1; transform: translateX(2px) scale(1.005); }
+    100% { opacity: 1; transform: translateX(0) scale(1); }
   }
 </style>
