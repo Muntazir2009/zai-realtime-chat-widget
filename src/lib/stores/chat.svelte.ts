@@ -639,6 +639,37 @@ class ChatStore {
     });
   }
 
+  /**
+   * Write an existing message (e.g. an upload temp message) directly to RTDB.
+   * Unlike sendImageMessage/sendVideoMessage, this does NOT create a new push key
+   * or add a duplicate to the messages array. It uses the message's existing ID
+   * and writes it atomically with fan-out updates.
+   *
+   * Returns true if the RTDB write succeeded, false otherwise.
+   * On failure, the message is kept in the local array (not removed).
+   */
+  async writeExistingMessage(chatId: string, message: Message, lastMessageSnippet: string): Promise<boolean> {
+    if (!authStore.user) return false;
+
+    this.recordSelfMessage(chatId, message.ts);
+
+    const updates = this.buildFanOutUpdates(chatId, message.id, message, lastMessageSnippet);
+
+    try {
+      await retryWithBackoff(
+        async () => rtdb.update(await rtdb.ref('/'), updates),
+        'writeExistingMessage'
+      );
+      return true;
+    } catch (err) {
+      console.error('[writeExistingMessage] RTDB write failed:', err);
+      // Keep the message in the array — don't remove it. The user can see
+      // that the image was uploaded even if RTDB sync failed.
+      toastStore.error('Message sent but may not sync. Tap to retry.');
+      return false;
+    }
+  }
+
   /** Send an image message */
   async sendImageMessage(chatId: string, imageUrl: string, caption?: string, blurhash?: string, viewOnce?: boolean): Promise<void> {
     const user = authStore.user;

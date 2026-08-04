@@ -3307,3 +3307,35 @@ Stage Summary:
   - MODIFIED: `src/lib/firebase/storage.ts` (switched from direct worker to server proxy)
 - Upload API verified working with both text and image files
 - App loads correctly (verified via agent-browser)
+
+---
+Task ID: 24
+Agent: Main Agent
+Task: Fix "Failed to send photo, check your connection" after upload succeeds
+
+Work Log:
+- Traced the full upload flow: uploadMediaFile → uploadFile → uploadViaServer → sendImageMessage → rtdb.update
+- Identified that the error "Failed to send photo, check your connection." comes from `chatStore.sendImageMessage` line 671 — the RTDB write step AFTER the R2 upload succeeds
+- Root cause: `sendImageMessage` creates a DUPLICATE message with a new RTDB push key, then when RTDB write fails, it removes its copy while `uploadMediaFile` removes the temp copy — the photo disappears entirely
+- Also, `sendImageMessage` was designed for direct sends (not upload-then-send), creating unnecessary duplication
+- Added new `writeExistingMessage(chatId, message, lastMessageSnippet)` method to ChatStore:
+  - Takes an existing message and writes it directly to RTDB
+  - Does NOT create a new push key (uses message's existing ID)
+  - Does NOT add to messages array (message already exists)
+  - On failure: keeps message in array (doesn't remove), shows softer error
+  - Uses `buildFanOutUpdates` + `retryWithBackoff` (same as other send methods)
+- Rewrote `uploadMediaFile` in Conversation.svelte:
+  - After R2 upload, builds fully updated message with real URL
+  - Replaces temp message in-place (or adds back if removed)
+  - Calls `writeExistingMessage` instead of `sendImageMessage`/`sendVideoMessage`
+  - No more duplicate messages
+  - Message stays visible even if RTDB sync fails
+
+Stage Summary:
+- Root cause: `sendImageMessage` created duplicate messages and removed them on RTDB failure, causing "Failed to send photo" error
+- Fix: New `writeExistingMessage` method writes existing message directly to RTDB without duplication
+- Files changed:
+  - MODIFIED: `src/lib/stores/chat.svelte.ts` (added `writeExistingMessage` method)
+  - MODIFIED: `src/lib/components/chat/Conversation.svelte` (rewrote `uploadMediaFile`)
+- Dev server compiles without errors
+- App loads correctly (verified via agent-browser)

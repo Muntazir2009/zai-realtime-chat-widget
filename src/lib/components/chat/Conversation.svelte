@@ -705,63 +705,48 @@
         }
       }
 
-      // Upload succeeded — update the message with real URL
+      // Upload succeeded — update the temp message in-place with the real URL
       const msgs = chatStore.messages;
       const idx = msgs.findIndex((m) => m.id === msgId);
-      if (idx === -1) {
-        // Optimistic message already gone (e.g. user cleared chat). Still
-        // need to write to RTDB so the message lands.
-        if (isImage) {
-          await chatStore.sendImageMessage(chatStore.activeChatId!, result.publicUrl, caption, result.blurhash, viewOnce);
-        } else {
-          await chatStore.sendVideoMessage(
-            chatStore.activeChatId!,
-            result.publicUrl,
-            mediaFile.duration ?? 0,
-            thumbnailPublicUrl,
-          );
-        }
-        tracker.status = 'done';
-        setTimeout(() => {
-          try { URL.revokeObjectURL(tracker.localUrl); } catch { /* ignore */ }
-          uploadTrackers.delete(msgId);
-          uploadTrackers = new Map(uploadTrackers);
-        }, 2000);
-        return;
+
+      // Build the updated message (whether or not it's still in the array)
+      const updatedMsg: Message = {
+        id: msgId,
+        c: caption || (isImage ? '📷 Photo' : '🎬 Video'),
+        sid: authStore.user?.id ?? '',
+        t: isImage ? 'image' : 'video',
+        ts: Date.now(),
+        rk: msgId,
+        rid: null,
+        mu: result.publicUrl,
+        mh: result.blurhash ?? null,
+        md: isImage
+          ? { width: mediaFile.width, height: mediaFile.height }
+          : { duration: mediaFile.duration ?? 0, thumbnailUrl: thumbnailPublicUrl, width: mediaFile.width, height: mediaFile.height },
+        edited: false,
+        vo: viewOnce || undefined,
+      };
+
+      if (idx !== -1) {
+        // Replace the temp message in the array with the fully updated version
+        const newMsgs = [...msgs];
+        newMsgs[idx] = updatedMsg;
+        chatStore.messages = newMsgs;
+      } else {
+        // Temp message was removed — add it back so user can see the sent photo
+        chatStore.messages = [...chatStore.messages, updatedMsg].sort((a, b) => a.ts - b.ts);
       }
 
-      const updatedMsg = { ...msgs[idx]! };
-      updatedMsg.mu = result.publicUrl;
-      if (result.blurhash) updatedMsg.mh = result.blurhash;
-
-      if (isImage) {
-        updatedMsg.c = caption || '📷 Photo';
-        updatedMsg.md = { width: mediaFile.width, height: mediaFile.height };
-      } else {
-        updatedMsg.c = caption || '🎬 Video';
-        updatedMsg.md = {
-          duration: mediaFile.duration ?? 0,
-          thumbnailUrl: thumbnailPublicUrl,
-          width: mediaFile.width,
-          height: mediaFile.height,
-        };
-      }
-      updatedMsg.rk = ''; // Will be set by sendXxxMessage
-
-      // Now write to RTDB via chatStore
-      if (isImage) {
-        await chatStore.sendImageMessage(chatStore.activeChatId!, result.publicUrl, caption, result.blurhash, viewOnce);
-      } else {
-        await chatStore.sendVideoMessage(
-          chatStore.activeChatId!,
-          result.publicUrl,
-          mediaFile.duration ?? 0,
-          thumbnailPublicUrl,
+      // Write the message directly to RTDB using the existing ID (no duplicate)
+      const chatId = chatStore.activeChatId;
+      if (chatId) {
+        await chatStore.writeExistingMessage(
+          chatId,
+          updatedMsg,
+          caption || (isImage ? '📷 Photo' : '🎬 Video'),
         );
       }
 
-      // Remove the optimistic temp message (the RTDB write will add the real one)
-      chatStore.messages = chatStore.messages.filter((m) => m.id !== msgId);
       tracker.status = 'done';
       uploadTrackers = new Map(uploadTrackers);
       // Clean up tracker after a short delay (keep it around briefly so the
