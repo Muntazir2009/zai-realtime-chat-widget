@@ -3272,3 +3272,38 @@ Stage Summary:
 - Date chips use glass morphism styling
 - Typing indicator dots pulse with scale for more liveliness
 - Build verified successfully
+
+---
+Task ID: 23
+Agent: Main Agent
+Task: Fix photo upload — images not uploading, showing "failed to upload"
+
+Work Log:
+- Investigated the full upload flow: InputBar → MediaComposer → handleComposerSend → uploadMediaFile → uploadFile → uploadViaWorker
+- Found root cause: `uploadViaWorker` was sending XHR POST directly to external Cloudflare Worker URL (`https://chatfolder.killermunu.workers.dev/`) which fails in sandbox/restricted network environments
+- Verified the external Worker is reachable via curl but not reliably from the browser in the sandbox
+- Found existing server-side R2 module (`src/lib/server/r2.ts`) with AWS SDK v3 and configured credentials
+- Created new server-side API route `/api/upload/+server.ts` that:
+  - Accepts multipart FormData (file + folder)
+  - Buffers the file and uploads to R2 via `uploadToR2()` (AWS SDK S3 PutObject)
+  - Returns JSON with `{ success, key, url, publicUrl }`
+  - Validates file size (20MB images, 100MB videos)
+- Updated `src/lib/firebase/storage.ts`:
+  - Replaced `WORKER_URL` constant with `UPLOAD_ENDPOINT = '/api/upload'`
+  - Renamed `uploadViaWorker()` to `uploadViaServer()` using same-origin endpoint
+  - Updated progress scale: 0-90% for client→server, remaining 10% for server→R2
+  - Updated all comments and docstrings to reflect server-proxy architecture
+- Tested server-side API with curl:
+  - Text file upload: ✅ success
+  - PNG image upload: ✅ success
+  - Upload through Caddy proxy: ✅ success
+- Verified dev server compiles without errors
+
+Stage Summary:
+- Root cause: Direct browser-to-Cloudflare-Worker upload fails in restricted environments
+- Fix: Route uploads through server-side proxy (`/api/upload`) which uses AWS SDK v3 to stream to R2
+- Files changed:
+  - NEW: `src/routes/api/upload/+server.ts` (server-side upload proxy)
+  - MODIFIED: `src/lib/firebase/storage.ts` (switched from direct worker to server proxy)
+- Upload API verified working with both text and image files
+- App loads correctly (verified via agent-browser)

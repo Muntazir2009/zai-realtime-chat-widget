@@ -1,9 +1,9 @@
 // ============================================================
-// Storage — Uploads to R2 via Cloudflare Worker.
+// Storage — Uploads to R2 via server-side proxy.
 //
 // All files (images, videos, voice, avatars, wallpapers) are
-// uploaded as FormData POST to the Cloudflare Worker, which
-// stores them in R2 and returns the public URL.
+// uploaded as FormData POST to /api/upload (SvelteKit server),
+// which streams them directly to Cloudflare R2 via AWS SDK v3.
 //
 // Client-side features preserved:
 //   - Image compression (WebP/JPEG with max-width scaling)
@@ -15,10 +15,12 @@
 
 import { browser } from '$app/environment';
 
-// ── Worker Configuration ─────────────────────────────────
+// ── Upload endpoint ──────────────────────────────────────
+// Uses the server-side proxy at /api/upload which streams directly
+// to Cloudflare R2. Same-origin, so XHR upload progress works reliably
+// and there are no CORS issues.
 
-const WORKER_URL = 'https://chatfolder.killermunu.workers.dev/';
-const R2_PUBLIC_URL = 'https://pub-5015d5428b174f55a02bb5e740d63919.r2.dev';
+const UPLOAD_ENDPOINT = '/api/upload';
 
 // ── Types ─────────────────────────────────────────────────
 
@@ -374,10 +376,11 @@ function createProgressReporter(
 // ── Worker Upload (single method) ────────────────────────
 
 /**
- * Upload a file to R2 via the Cloudflare Worker.
- * Uses FormData POST with XHR for progress tracking.
+ * Upload a file to R2 via the server-side proxy (/api/upload).
+ * Uses FormData POST with XHR for reliable same-origin progress tracking.
+ * The server streams the file directly to Cloudflare R2 via AWS SDK.
  */
-async function uploadViaWorker(
+async function uploadViaServer(
   file: Blob,
   filename: string,
   contentType: string,
@@ -396,19 +399,19 @@ async function uploadViaWorker(
   formData.append('folder', folder);
 
   const total = file.size;
-  // Report 0-95% during upload; remaining 5% is Worker→R2 processing
+  // Report 0-90% during client→server upload; remaining 10% is server→R2
   const reporter = createProgressReporter(
     onProgress,
     onDetailedProgress,
     total,
     'uploading',
-    0.95,
+    0.9,
     0,
   );
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', WORKER_URL);
+    xhr.open('POST', UPLOAD_ENDPOINT);
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) {
@@ -418,10 +421,10 @@ async function uploadViaWorker(
 
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
-        // Report processing phase
+        // Report processing phase (server→R2)
         if (onDetailedProgress) {
           onDetailedProgress({
-            percentage: 98,
+            percentage: 95,
             loaded: total,
             total,
             speed: 0,
@@ -429,37 +432,37 @@ async function uploadViaWorker(
             phase: 'processing',
           });
         }
-        onProgress?.(98);
+        onProgress?.(95);
 
         try {
           const data = JSON.parse(xhr.responseText);
           reporter.reportDone();
 
-          // Worker may return: publicUrl, url, key
+          // Server returns: success, key, url, publicUrl
           const key = data.key || '';
-          const publicUrl = data.publicUrl || data.url || (key ? `${R2_PUBLIC_URL}/${key}` : '');
+          const publicUrl = data.publicUrl || data.url || '';
 
           if (!publicUrl) {
-            reject(new Error('Worker returned no URL'));
+            reject(new Error('Server returned no URL'));
             return;
           }
 
           resolve({ publicUrl, key });
         } catch {
-          reject(new Error('Invalid response from upload Worker'));
+          reject(new Error('Invalid response from upload server'));
         }
       } else {
         try {
           const data = JSON.parse(xhr.responseText);
-          reject(new Error(data.error || `Upload Worker failed (HTTP ${xhr.status})`));
+          reject(new Error(data.error || `Upload failed (HTTP ${xhr.status})`));
         } catch {
-          reject(new Error(`Upload Worker failed (HTTP ${xhr.status})`));
+          reject(new Error(`Upload failed (HTTP ${xhr.status})`));
         }
       }
     };
 
-    xhr.onerror = () => reject(new Error('Upload Worker: network error'));
-    xhr.ontimeout = () => reject(new Error('Upload Worker: request timed out'));
+    xhr.onerror = () => reject(new Error('Upload failed: network error'));
+    xhr.ontimeout = () => reject(new Error('Upload failed: request timed out'));
     xhr.timeout = 120_000; // 2 minutes
 
     // Wire up abort signal via event listener (XHR has no .signal property)
@@ -480,7 +483,7 @@ async function uploadViaWorker(
 // ── Public API ────────────────────────────────────────────
 
 /**
- * Upload a file to R2 via Cloudflare Worker.
+ * Upload a file to R2 via server-side proxy (/api/upload).
  *
  * Client-side processing (image compression, blurhash) runs in parallel
  * with the upload preparation. Progress is reported via callbacks.
@@ -565,9 +568,9 @@ export async function uploadFile(
 
   reportPhase('preparing', 10);
 
-  // Upload via Worker
+  // Upload via server-side proxy
   reportPhase('uploading', 12);
-  const result = await uploadViaWorker(
+  const result = await uploadViaServer(
     fileToUpload,
     finalFilename,
     finalContentType,
