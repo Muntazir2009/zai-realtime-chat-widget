@@ -3339,3 +3339,27 @@ Stage Summary:
   - MODIFIED: `src/lib/components/chat/Conversation.svelte` (rewrote `uploadMediaFile`)
 - Dev server compiles without errors
 - App loads correctly (verified via agent-browser)
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix two critical bugs — photo upload and reaction reactivity
+
+Work Log:
+- Analyzed the photo upload flow: Conversation.svelte → uploadMediaFile() → uploadFile() → uploadViaServer() → POST /api/upload
+- Found root cause: The /api/upload SvelteKit server endpoint DID NOT EXIST. The client was POSTing to a 404 route.
+- Created src/routes/api/upload/+server.ts with: file validation (max 20MB images, 100MB videos), FormData parsing, R2 upload via uploadToR2(), proper error handling
+- Verified the endpoint works: returns proper JSON errors for missing file, wrong content type
+- Analyzed the reactions reactivity bug: MessageBubble.svelte used $derived(chatStore.reactions.get(msg.id)) to read reactions from a $state Map
+- Root cause: In Svelte 5, $derived accessing .get() on a $state Map may not reliably track cross-component reactivity changes
+- Fixed by replacing $derived with $effect + $state pattern in MessageBubble.svelte:
+  - let msgReactions: Reaction[] = $state([]);
+  - $effect(() => { msgReactions = chatStore.reactions.get(msg.id) ?? []; });
+- Verified no compilation errors — only pre-existing a11y warnings
+- Verified app loads cleanly in browser (agent-browser) with no console errors
+
+Stage Summary:
+- Photo upload: Created /api/upload/+server.ts endpoint that proxies file uploads from browser to Cloudflare R2
+- Reactions: Changed MessageBubble to use $effect+$state instead of $derived for reading reactions from chatStore
+- Files created: src/routes/api/upload/+server.ts
+- Files modified: src/lib/components/chat/MessageBubble.svelte
+

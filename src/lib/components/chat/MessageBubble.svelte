@@ -467,8 +467,14 @@
   }
 
   // --- Reactions ---
-  // Direct access to $state Map ensures Svelte 5 tracks the dependency
-  let msgReactions = $derived(chatStore.reactions.get(msg.id) ?? []);
+  // Use $effect to sync from chatStore.reactions Map (more reliable than
+  // $derived for cross-component $state Map tracking in Svelte 5)
+  let msgReactions: Reaction[] = $state([]);
+  $effect(() => {
+    // Read chatStore.reactions to create reactive dependency on the Map ref
+    const map = chatStore.reactions;
+    msgReactions = map.get(msg.id) ?? [];
+  });
   let rxnAddBtn: HTMLButtonElement | undefined;
 
   function handleReactionTap(e: MouseEvent, reaction: Reaction) {
