@@ -576,7 +576,13 @@ class ChatStore {
     const otherUid = meta?.participantIds.find((id) => id !== user.id);
 
     const updates: Record<string, unknown> = {};
-    updates[RTDB_PATHS.CHAT_MESSAGES(chatId) + '/' + messageId] = message;
+    // Firebase RTDB rejects undefined values in multi-path updates.
+    // Strip all undefined properties from the message before writing.
+    const sanitized: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(message)) {
+      if (v !== undefined) sanitized[k] = v;
+    }
+    updates[RTDB_PATHS.CHAT_MESSAGES(chatId) + '/' + messageId] = sanitized;
     // Use dot-notation to only update the fields that change — this preserves
     // wallpaper, uploadedWallpapers, and any other meta fields untouched.
     const metaPath = RTDB_PATHS.CHAT_META(chatId);

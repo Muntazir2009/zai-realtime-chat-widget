@@ -3363,3 +3363,20 @@ Stage Summary:
 - Files created: src/routes/api/upload/+server.ts
 - Files modified: src/lib/components/chat/MessageBubble.svelte
 
+---
+Task ID: 2
+Agent: Main Agent
+Task: Fix "values argument contains undefined" RTDB update error for vo property
+
+Work Log:
+- Analyzed the error: Firebase RTDB rejects undefined values in multi-path update payloads
+- Found root cause: Message objects have `vo: viewOnce || undefined` which produces `undefined` when viewOnce is false/undefined
+- The entire message object (including undefined properties) was being written directly into buildFanOutUpdates
+- Fixed by adding a sanitization step in buildFanOutUpdates that strips all undefined properties from the message before adding to the updates object
+- This fix is defensive — it prevents any future undefined property from causing the same error
+
+Stage Summary:
+- Modified src/lib/stores/chat.svelte.ts: buildFanOutUpdates now sanitizes message objects before writing to RTDB
+- The vo property (and any other optional undefined properties) will be stripped rather than causing a Firebase error
+- All compilation passed cleanly (only pre-existing a11y warnings)
+
