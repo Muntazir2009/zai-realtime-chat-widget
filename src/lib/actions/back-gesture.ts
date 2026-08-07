@@ -88,6 +88,9 @@ export function backGesture(
     if (gallery) return true;
     const search = document.querySelector('.msg-search-active');
     if (search) return true;
+    // Don't intercept when a message bubble is being swiped for reply
+    const swiping = document.querySelector('.swipe-flash');
+    if (swiping) return true;
     return false;
   }
 

@@ -3380,3 +3380,30 @@ Stage Summary:
 - The vo property (and any other optional undefined properties) will be stripped rather than causing a Firebase error
 - All compilation passed cleanly (only pre-existing a11y warnings)
 
+---
+Task ID: 3
+Agent: Main Agent
+Task: Fix typing indicator never working + swipe-to-reply causing page navigation
+
+Work Log:
+- Analyzed typing indicator flow: InputBar → PresenceManager.setTyping() → RTDB write → other client → _doAttachTypingListener → onValue → _handleTypingSnapshot → _updateTypingDisplayNames → activeTypingNames
+- Found root cause #1: _doAttachTypingListener required meta.participantIds to find other users to listen to. Old conversations (or any chat where meta lacks participantIds) would never get typing listeners attached. The retry mechanism kept trying but could never resolve participants.
+- Created _resolveOtherUids() method with 4 fallback strategies:
+  1. meta.participantIds (canonical, most reliable)
+  2. userDict scan (find exactly 1 other cached user — works for DMs)
+  3. Message senders in memory (non-self sid values)
+  4. participants array (set during openChat)
+- Rewrote _doAttachTypingListener to use _resolveOtherUids() instead of requiring meta.participantIds
+- Updated _readTypingStateDirect to use the same multi-strategy approach
+- Added auto-retry trigger: when a new message arrives from another user and typing listener is not yet attached, re-attempt attachment (since we now have the sender uid)
+- Found root cause #2: swipe-to-reply touch handlers called e.preventDefault() but NOT e.stopPropagation(), allowing touch events to propagate to the scroll container (causing scroll) and the back-gesture handler (causing page navigation)
+- Fixed swipeTouchAction in MessageBubble.svelte: added e.stopPropagation() in touchmove when isSwiping, and in touchend when isSwiping or touchMovedPastSlop
+- Changed touchend event listener from passive:true to passive:false to allow stopPropagation
+- Added safety check in back-gesture shouldIgnore(): skip when .swipe-flash element exists (message being swiped)
+
+Stage Summary:
+- Typing indicator: Now works for ALL conversations (old and new) via multi-strategy participant resolution
+- Swipe-to-reply: No longer scrolls the chat or triggers page-back navigation (stopPropagation + back-gesture guard)
+- Files modified: src/lib/stores/chat.svelte.ts, src/lib/components/chat/MessageBubble.svelte, src/lib/actions/back-gesture.ts
+- Compilation: Clean, no new errors (only pre-existing a11y warnings)
+

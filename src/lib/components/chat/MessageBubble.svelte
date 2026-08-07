@@ -22,11 +22,20 @@
     node.addEventListener('animationend', onAnimationEnd);
 
     function onTouchStart(e: TouchEvent) { handleTouchStart(e); }
-    function onTouchMove(e: TouchEvent) { handleTouchMove(e); }
-    function onTouchEnd(e: TouchEvent) { handleTouchEnd(e); }
+    function onTouchMove(e: TouchEvent) {
+      handleTouchMove(e);
+      // stopPropagation prevents the scroll container AND the back-gesture
+      // handler from also handling this touch (fixes swipe-to-reply scrolling
+      // the chat or triggering a page-back navigation).
+      if (isSwiping) e.stopPropagation();
+    }
+    function onTouchEnd(e: TouchEvent) {
+      handleTouchEnd(e);
+      if (isSwiping || touchMovedPastSlop) e.stopPropagation();
+    }
     node.addEventListener('touchstart', onTouchStart, { passive: true });
     node.addEventListener('touchmove', onTouchMove, { passive: false });
-    node.addEventListener('touchend', onTouchEnd, { passive: true });
+    node.addEventListener('touchend', onTouchEnd, { passive: false });
     return {
       destroy() {
         node.removeEventListener('animationend', onAnimationEnd);

@@ -408,6 +408,11 @@ class ChatStore {
       if (this.activeChatId) {
         this.attachSingleReactionListener(this.activeChatId, msg.id);
       }
+      // Re-try typing listener if it failed to attach (new message sender
+      // gives us a participant UID we may not have had before).
+      if (this.activeChatId && !this.globalTypingUnsubs.has(this.activeChatId)) {
+        this.attachGlobalTypingListener(this.activeChatId).catch(() => {});
+      }
       // Auto-mark as read when a new message arrives (user has chat open)
       if (this.activeChatId && msg.sid !== authStore.user?.id) {
         this.markAsRead(this.activeChatId);
@@ -945,13 +950,8 @@ class ChatStore {
   /** One-shot direct read of typing state for all other users in the chat.
    *  Updates the internal tracking and reactive display names immediately. */
   private async _readTypingStateDirect(chatId: string): Promise<void> {
-    const meta = this.chats.get(chatId);
-    if (!meta) return;
-    const myUid = authStore.user?.id;
-    const otherUids = meta.participantIds.filter(uid => uid !== myUid);
-    const listenUids = otherUids.length > 0 ? otherUids
-      : this.participants.filter(p => p.id !== myUid).map(p => p.id);
-    for (const uid of listenUids) {
+    const otherUids = this._resolveOtherUids(chatId);
+    for (const uid of otherUids) {
       try {
         const r = await rtdb.ref(RTDB_PATHS.TYPING(chatId, uid));
         const snap = await rtdb.get(r);
@@ -962,6 +962,53 @@ class ChatStore {
     }
   }
 
+  /** Resolve the other user IDs for a chat. Uses multiple fallback strategies:
+   *  1. meta.participantIds (canonical)
+   *  2. userChats entries for this chatId (finds all participant UIDs)
+   *  3. Message senders currently in memory (non-self sid values)
+   */
+  private _resolveOtherUids(chatId: string): string[] {
+    const myUid = authStore.user?.id;
+    if (!myUid) return [];
+
+    // Strategy 1: meta.participantIds
+    const meta = this.chats.get(chatId);
+    if (meta?.participantIds && meta.participantIds.length > 0) {
+      return meta.participantIds.filter(uid => uid !== myUid);
+    }
+
+    // Strategy 2: look at the userDict for users we've loaded in the context
+    // of this chat. For direct chats, we typically only have 1 other user cached.
+    // This is a best-effort heuristic — won't work for group chats with many
+    // cached users, but for DMs it's reliable.
+    const cachedOtherUsers: string[] = [];
+    for (const [uid, profile] of this.userDict) {
+      if (uid !== myUid) cachedOtherUsers.push(uid);
+    }
+    if (cachedOtherUsers.length === 1) {
+      // Exactly one other user cached → this is the DM partner
+      return cachedOtherUsers;
+    }
+
+    // Strategy 3: look at unique message senders in this chat (non-self)
+    const senderSet = new Set<string>();
+    for (const msg of this.messages) {
+      if (msg.sid && msg.sid !== myUid) {
+        senderSet.add(msg.sid);
+      }
+    }
+    if (senderSet.size > 0) {
+      return Array.from(senderSet);
+    }
+
+    // Strategy 4: participants list (set during openChat)
+    if (this.participants.length > 0) {
+      return this.participants.filter(p => p.id !== myUid).map(p => p.id);
+    }
+
+    return [];
+  }
+
   /** Internal: actually attach the Firebase typing listeners. Uses persistent retry
    *  with capped exponential backoff (1s, 2s, 4s, 8s, 10s, 10s…). Only stops
    *  retrying if the chat is no longer in the user's chats or userChats.
@@ -970,9 +1017,11 @@ class ChatStore {
     // If already attached globally, nothing to do
     if (this.globalTypingUnsubs.has(chatId)) return;
 
-    const meta = this.chats.get(chatId);
-    if (!meta || !meta.participantIds || meta.participantIds.length === 0) {
-      // Only stop retrying if the chat is no longer in any of our lists
+    // Try to resolve other user IDs using multiple strategies
+    const otherUids = this._resolveOtherUids(chatId);
+
+    if (otherUids.length === 0) {
+      // No participants found yet — retry if chat is still relevant
       const stillRelevant = this.chats.has(chatId) || this.userChats.has(chatId);
       if (!stillRelevant) {
         console.log('[ChatStore] Typing: chat no longer relevant, stopping retry for', chatId);
@@ -980,7 +1029,7 @@ class ChatStore {
       }
       // Capped exponential backoff: 1s, 2s, 4s, 8s, 10s, 10s, 10s…
       const delay = Math.min(1000 * Math.pow(2, retryCount), 10000);
-      console.warn(`[ChatStore] Typing: meta not available for ${chatId} - retry #${retryCount + 1} in ${delay}ms`);
+      console.warn(`[ChatStore] Typing: no participants for ${chatId} - retry #${retryCount + 1} in ${delay}ms`);
       this._clearGlobalTypingRetryTimer(chatId);
       const timer = setTimeout(() => {
         this.globalTypingRetryTimers.delete(chatId);
@@ -997,24 +1046,10 @@ class ChatStore {
     if (this.globalTypingUnsubs.has(chatId)) return;
 
     this.typingSafetyTimeouts.set(chatId, new Map());
-    const myUid = authStore.user?.id;
-
-    // Only listen for OTHER users' typing (skip own UID)
-    const otherUids = meta.participantIds.filter(uid => uid !== myUid);
     console.log('[ChatStore] Attaching GLOBAL typing listeners for', otherUids.length, 'users in chat', chatId);
 
-    // Fallback: if no other users found (edge case), try participants list
-    const fallbackUids = otherUids.length === 0
-      ? this.participants.filter(p => p.id !== myUid).map(p => p.id)
-      : [];
-    const listenUids = otherUids.length > 0 ? otherUids : fallbackUids;
-    if (listenUids.length === 0) {
-      console.warn('[ChatStore] No other users to listen for typing in chat', chatId);
-      return;
-    }
-
     const chatUnsubs = new Map<string, () => void>();
-    for (const uid of listenUids) {
+    for (const uid of otherUids) {
       try {
         const r = await rtdb.ref(RTDB_PATHS.TYPING(chatId, uid));
         const unsub = await rtdb.onValue(r, (snap) => {
@@ -1028,8 +1063,8 @@ class ChatStore {
     }
     if (chatUnsubs.size > 0) {
       this.globalTypingUnsubs.set(chatId, chatUnsubs);
-    } else if (listenUids.length > 0) {
-      console.error('[ChatStore] WARNING: 0 global typing listeners attached out of', listenUids.length, 'for chat', chatId);
+    } else if (otherUids.length > 0) {
+      console.error('[ChatStore] WARNING: 0 global typing listeners attached out of', otherUids.length, 'for chat', chatId);
     }
   }
 
