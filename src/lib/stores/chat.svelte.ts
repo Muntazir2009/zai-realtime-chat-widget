@@ -48,6 +48,19 @@ function formatVideoDuration(secs: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+/** Recursively strip undefined values from an object so Firebase RTDB
+ *  accepts it in multi-path updates.  Handles nested objects and arrays. */
+function sanitizeForRtdb(obj: unknown): unknown {
+  if (obj === undefined || obj === null) return null;
+  if (typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(v => sanitizeForRtdb(v));
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+    if (v !== undefined) out[k] = sanitizeForRtdb(v);
+  }
+  return out;
+}
+
 const EMPTY_REACTIONS: Reaction[] = [];
 
 class ChatStore {
@@ -235,6 +248,33 @@ class ChatStore {
         const newMap = new Map(this.chats);
         newMap.set(chatId, meta);
         this.chats = newMap;
+
+        // ── Heal corrupted participantIds ──
+        // If participantIds only contains self, it was corrupted by a previous
+        // write that used the fallback [user.id]. Try to find the other user
+        // from message senders and fix the RTDB data.
+        const myUid = authStore.user?.id;
+        if (myUid && meta.type === 'direct' && meta.participantIds) {
+          const others = meta.participantIds.filter((uid: string) => uid !== myUid);
+          if (others.length === 0) {
+            // Try to find other participant from messages
+            const senderSet = new Set<string>();
+            for (const msg of this.messages) {
+              if (msg.sid && msg.sid !== myUid) senderSet.add(msg.sid);
+            }
+            if (senderSet.size > 0) {
+              const healed = [myUid, ...Array.from(senderSet)];
+              // Update local state immediately
+              meta.participantIds = healed;
+              // Also heal RTDB in background
+              rtdb.ref(RTDB_PATHS.CHAT_META(chatId) + '/participantIds').then(ref => {
+                rtdb.set(ref, healed).catch(() => {});
+              });
+              console.log('[ChatStore] Healed corrupted participantIds for', chatId, '→', healed);
+            }
+          }
+        }
+
         // Attach global typing listener for inbox preview
         this.attachGlobalTypingListener(chatId).catch(() => {});
         // Fetch participant profiles if not cached
@@ -581,19 +621,20 @@ class ChatStore {
     const otherUid = meta?.participantIds.find((id) => id !== user.id);
 
     const updates: Record<string, unknown> = {};
-    // Firebase RTDB rejects undefined values in multi-path updates.
-    // Strip all undefined properties from the message before writing.
-    const sanitized: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(message)) {
-      if (v !== undefined) sanitized[k] = v;
-    }
+    // Firebase RTDB rejects undefined values in multi-path updates (even nested).
+    // Recursively strip all undefined properties from the message before writing.
+    const sanitized = sanitizeForRtdb(message) as Record<string, unknown>;
     updates[RTDB_PATHS.CHAT_MESSAGES(chatId) + '/' + messageId] = sanitized;
     // Use dot-notation to only update the fields that change — this preserves
     // wallpaper, uploadedWallpapers, and any other meta fields untouched.
     const metaPath = RTDB_PATHS.CHAT_META(chatId);
     updates[metaPath + '/id'] = chatId;
     updates[metaPath + '/type'] = 'direct';
-    updates[metaPath + '/participantIds'] = meta?.participantIds ?? [user.id];
+    // CRITICAL: only write participantIds if we actually have the full list.
+    // Writing [user.id] alone corrupts the list and breaks typing indicators.
+    if (meta?.participantIds && meta.participantIds.length > 1) {
+      updates[metaPath + '/participantIds'] = meta.participantIds;
+    }
     updates[metaPath + '/lm'] = lastMessageSnippet;
     updates[metaPath + '/ts'] = message.ts;
     updates[metaPath + '/updatedAt'] = message.ts;
@@ -963,34 +1004,25 @@ class ChatStore {
   }
 
   /** Resolve the other user IDs for a chat. Uses multiple fallback strategies:
-   *  1. meta.participantIds (canonical)
-   *  2. userChats entries for this chatId (finds all participant UIDs)
-   *  3. Message senders currently in memory (non-self sid values)
+   *  1. meta.participantIds (canonical, excludes self)
+   *  2. Message senders currently in memory (non-self sid values)
+   *  3. userChats entries — for DMs, scan user_chats/{chatId} across known users
+   *  4. participants list (set during openChat)
+   *  5. userDict heuristic (exactly 1 other user cached → DM partner)
    */
   private _resolveOtherUids(chatId: string): string[] {
     const myUid = authStore.user?.id;
     if (!myUid) return [];
 
-    // Strategy 1: meta.participantIds
+    // Strategy 1: meta.participantIds — filter out self
     const meta = this.chats.get(chatId);
     if (meta?.participantIds && meta.participantIds.length > 0) {
-      return meta.participantIds.filter(uid => uid !== myUid);
+      const others = meta.participantIds.filter(uid => uid !== myUid);
+      if (others.length > 0) return others;
     }
 
-    // Strategy 2: look at the userDict for users we've loaded in the context
-    // of this chat. For direct chats, we typically only have 1 other user cached.
-    // This is a best-effort heuristic — won't work for group chats with many
-    // cached users, but for DMs it's reliable.
-    const cachedOtherUsers: string[] = [];
-    for (const [uid, profile] of this.userDict) {
-      if (uid !== myUid) cachedOtherUsers.push(uid);
-    }
-    if (cachedOtherUsers.length === 1) {
-      // Exactly one other user cached → this is the DM partner
-      return cachedOtherUsers;
-    }
-
-    // Strategy 3: look at unique message senders in this chat (non-self)
+    // Strategy 2: look at unique message senders in this chat (non-self)
+    // This is the most reliable fallback for existing conversations.
     const senderSet = new Set<string>();
     for (const msg of this.messages) {
       if (msg.sid && msg.sid !== myUid) {
@@ -1001,9 +1033,20 @@ class ChatStore {
       return Array.from(senderSet);
     }
 
-    // Strategy 4: participants list (set during openChat)
+    // Strategy 3: participants list (set during openChat)
     if (this.participants.length > 0) {
-      return this.participants.filter(p => p.id !== myUid).map(p => p.id);
+      const others = this.participants.filter(p => p.id !== myUid).map(p => p.id);
+      if (others.length > 0) return others;
+    }
+
+    // Strategy 4: look at the userDict for users we've loaded in the context
+    // For direct chats, we typically only have 1 other user cached.
+    const cachedOtherUsers: string[] = [];
+    for (const [uid] of this.userDict) {
+      if (uid !== myUid) cachedOtherUsers.push(uid);
+    }
+    if (cachedOtherUsers.length === 1) {
+      return cachedOtherUsers;
     }
 
     return [];

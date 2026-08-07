@@ -721,8 +721,8 @@
         mu: result.publicUrl,
         mh: result.blurhash ?? null,
         md: isImage
-          ? { width: mediaFile.width, height: mediaFile.height }
-          : { duration: mediaFile.duration ?? 0, thumbnailUrl: thumbnailPublicUrl, width: mediaFile.width, height: mediaFile.height },
+          ? { width: mediaFile.width ?? 0, height: mediaFile.height ?? 0 }
+          : { duration: mediaFile.duration ?? 0, thumbnailUrl: thumbnailPublicUrl ?? null, width: mediaFile.width ?? 0, height: mediaFile.height ?? 0 },
         edited: false,
         vo: viewOnce || undefined,
       };
