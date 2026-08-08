@@ -476,13 +476,18 @@
   }
 
   // --- Reactions ---
-  // Use $effect to sync from chatStore.reactions Map (more reliable than
-  // $derived for cross-component $state Map tracking in Svelte 5)
+  // Depend on chatStore.reactionVersion (a simple $state number) to guarantee
+  // re-evaluation when ANY reaction changes. The Map + version pattern is the
+  // most reliable cross-component reactive signal in Svelte 5.
   let msgReactions: Reaction[] = $state([]);
   $effect(() => {
-    // Read chatStore.reactions to create reactive dependency on the Map ref
-    const map = chatStore.reactions;
-    msgReactions = map.get(msg.id) ?? [];
+    // Read the version counter to establish a hard reactive dependency.
+    // This ensures Svelte 5 always re-runs this effect when reactions change,
+    // even if the Map reference happens to be the same (which can happen if
+    // a change was applied to the same Map object).
+    const _v = chatStore.reactionVersion;
+    void _v;
+    msgReactions = chatStore.getReactions(msg.id);
   });
   let rxnAddBtn: HTMLButtonElement | undefined;
 

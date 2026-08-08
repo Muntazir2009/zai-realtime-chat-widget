@@ -118,6 +118,11 @@ class ChatStore {
 
   // ---- Reactions ----
   reactions: Map<string, Reaction[]> = $state(new Map()); // messageId → reactions[]
+  /** Incremented every time any reaction changes. Used by UI components
+   *  to guarantee their $derived/$effect re-evaluates on reaction updates.
+   *  Svelte 5 cross-component $state tracking is unreliable for Map values,
+   *  so a simple counter is the most bulletproof reactive signal. */
+  reactionVersion: number = $state(0);
   private reactionUnsubs: Map<string, () => void> = new Map();
 
   // ---- Idempotency tracking (bounded to prevent memory leak) ----
@@ -1835,6 +1840,7 @@ class ChatStore {
       const updated = new Map(this.reactions);
       updated.set(messageId, newReactions);
       this.reactions = updated;
+      this.reactionVersion++;
     });
     this.reactionUnsubs.set(messageId, unsub);
   }
@@ -1849,6 +1855,7 @@ class ChatStore {
     }
     newMap.set(messageId, filtered);
     this.reactions = newMap;
+    this.reactionVersion++;
   }
 
   /** Remove a reaction entry from the reactions map */
@@ -1857,12 +1864,14 @@ class ChatStore {
     const existing = newMap.get(messageId) ?? [];
     newMap.set(messageId, existing.filter(r => r.emoji !== emoji));
     this.reactions = newMap;
+    this.reactionVersion++;
   }
 
   private detachReactionListeners(): void {
     for (const [, unsub] of this.reactionUnsubs) unsub();
     this.reactionUnsubs.clear();
     this.reactions = new Map();
+    this.reactionVersion++;
   }
 
   /** Toggle a reaction on a message. Adds or removes based on current state. Optimistic local update. */
