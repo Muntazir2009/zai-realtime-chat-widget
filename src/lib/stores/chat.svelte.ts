@@ -1023,7 +1023,10 @@ class ChatStore {
     const meta = this.chats.get(chatId);
     if (meta?.participantIds && meta.participantIds.length > 0) {
       const others = meta.participantIds.filter(uid => uid !== myUid);
-      if (others.length > 0) return others;
+      if (others.length > 0) {
+        console.log('[TYPE-DEBUG] Strategy 1 (meta.participantIds) found:', others, 'for chat', chatId);
+        return others;
+      }
     }
 
     // Strategy 2: look at unique message senders in this chat (non-self)
@@ -1035,13 +1038,17 @@ class ChatStore {
       }
     }
     if (senderSet.size > 0) {
+      console.log('[TYPE-DEBUG] Strategy 2 (message senders) found:', Array.from(senderSet), 'for chat', chatId);
       return Array.from(senderSet);
     }
 
     // Strategy 3: participants list (set during openChat)
     if (this.participants.length > 0) {
       const others = this.participants.filter(p => p.id !== myUid).map(p => p.id);
-      if (others.length > 0) return others;
+      if (others.length > 0) {
+        console.log('[TYPE-DEBUG] Strategy 3 (participants list) found:', others, 'for chat', chatId);
+        return others;
+      }
     }
 
     // Strategy 4: look at the userDict for users we've loaded in the context
@@ -1051,9 +1058,11 @@ class ChatStore {
       if (uid !== myUid) cachedOtherUsers.push(uid);
     }
     if (cachedOtherUsers.length === 1) {
+      console.log('[TYPE-DEBUG] Strategy 4 (userDict heuristic) found:', cachedOtherUsers, 'for chat', chatId);
       return cachedOtherUsers;
     }
 
+    console.log('[TYPE-DEBUG] All strategies FAILED for chat', chatId, '| myUid:', myUid, '| meta.pids:', meta?.participantIds, '| msgs:', this.messages.length, '| participants:', this.participants.length, '| userDict:', this.userDict.size);
     return [];
   }
 
@@ -1063,7 +1072,10 @@ class ChatStore {
    *  Stores unsubs in globalTypingUnsubs so they persist across chat switches. */
   private async _doAttachTypingListener(chatId: string, retryCount = 0): Promise<void> {
     // If already attached globally, nothing to do
-    if (this.globalTypingUnsubs.has(chatId)) return;
+    if (this.globalTypingUnsubs.has(chatId)) {
+      console.log('[TYPE-DEBUG] Already attached for', chatId);
+      return;
+    }
 
     // Try to resolve other user IDs using multiple strategies
     const otherUids = this._resolveOtherUids(chatId);
@@ -1094,19 +1106,21 @@ class ChatStore {
     if (this.globalTypingUnsubs.has(chatId)) return;
 
     this.typingSafetyTimeouts.set(chatId, new Map());
-    console.log('[ChatStore] Attaching GLOBAL typing listeners for', otherUids.length, 'users in chat', chatId);
+    console.log('[TYPE-DEBUG] Attaching GLOBAL typing listeners for', otherUids.length, 'users in chat', chatId, 'otherUids:', otherUids);
 
     const chatUnsubs = new Map<string, () => void>();
     for (const uid of otherUids) {
       try {
-        const r = await rtdb.ref(RTDB_PATHS.TYPING(chatId, uid));
+        const typingPath = RTDB_PATHS.TYPING(chatId, uid);
+        console.log('[TYPE-DEBUG] Subscribing to typing path:', typingPath);
+        const r = await rtdb.ref(typingPath);
         const unsub = await rtdb.onValue(r, (snap) => {
           this._handleTypingSnapshot(chatId, uid, snap);
         });
         chatUnsubs.set(uid, unsub);
-        console.log('[ChatStore] Global typing listener attached OK for uid=', uid, 'chat=', chatId);
+        console.log('[TYPE-DEBUG] Global typing listener attached OK for uid=', uid, 'chat=', chatId);
       } catch (err) {
-        console.error('[ChatStore] Failed to attach global typing listener for uid=', uid, 'chat=', chatId, err);
+        console.error('[TYPE-DEBUG] Failed to attach global typing listener for uid=', uid, 'chat=', chatId, err);
       }
     }
     if (chatUnsubs.size > 0) {
@@ -1134,6 +1148,7 @@ class ChatStore {
       } else if (raw && (raw.typing === true || (raw.ts && typeof raw.ts === 'number' && Date.now() - raw.ts < 15000))) {
         isTyping = true;
       }
+      console.log('[TYPE-DEBUG] _handleTypingSnapshot chat:', chatId, 'uid:', uid, 'raw:', raw, 'isTyping:', isTyping);
     }
 
     // Clear existing safety timeout for this user
@@ -1179,6 +1194,7 @@ class ChatStore {
         .filter(uid => uid !== myUid)
         .map(uid => this.userDict.get(uid)?.displayName ?? 'Someone');
     }
+    console.log('[TYPE-DEBUG] _updateTypingDisplayNames chat:', chatId, 'names:', names, 'uidSet:', uidSet ? Array.from(uidSet) : 'null', 'activeChatId:', this.activeChatId);
 
     // Update the Map (for inbox/other chats) — persists across chat switches
     const m = new Map(this.typingDisplayNames);

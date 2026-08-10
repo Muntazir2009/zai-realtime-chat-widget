@@ -350,14 +350,18 @@ class PresenceManager {
   private async writeTyping(chatId: string, uid: string, typing: boolean): Promise<void> {
     try {
       const ref = await rtdb.ref(RTDB_PATHS.TYPING(chatId, uid));
+      const typingPath = RTDB_PATHS.TYPING(chatId, uid);
+      console.log('[TYPE-DEBUG] writeTyping chatId:', chatId, 'uid:', uid, 'typing:', typing, 'path:', typingPath);
       if (typing) {
         const ts = Date.now();
         await rtdb.set(ref, ts);
+        console.log('[TYPE-DEBUG] writeTyping SET timestamp:', ts);
       } else {
         await rtdb.remove(ref).catch(() => {});
+        console.log('[TYPE-DEBUG] writeTyping REMOVED');
       }
     } catch (err) {
-      console.warn('[PresenceManager] writeTyping failed:', err);
+      console.warn('[TYPE-DEBUG] writeTyping FAILED:', chatId, uid, err);
     }
   }
 }

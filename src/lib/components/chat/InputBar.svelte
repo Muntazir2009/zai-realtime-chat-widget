@@ -82,6 +82,7 @@
     if (!chatStore.activeChatId) return;
     saveDraft();
     if (!prefsStore.sendTypingIndicators) return;
+    console.log('[TYPE-DEBUG] emitTyping activeChatId:', chatStore.activeChatId);
     presenceManager.setTyping(chatStore.activeChatId);
     if (typingTimer) clearTimeout(typingTimer);
     typingTimer = setTimeout(() => {
