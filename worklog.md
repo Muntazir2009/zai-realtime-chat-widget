@@ -3407,3 +3407,29 @@ Stage Summary:
 - Files modified: src/lib/stores/chat.svelte.ts, src/lib/components/chat/MessageBubble.svelte, src/lib/actions/back-gesture.ts
 - Compilation: Clean, no new errors (only pre-existing a11y warnings)
 
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix typing indicator for old/existing chats
+
+Work Log:
+- Read and traced the complete typing indicator pipeline across 5 files
+- Identified root cause: old chats have missing or corrupted `participantIds` in RTDB
+- Analyzed `_resolveOtherUids()` 4 strategies — all fail for old chats during inbox loading
+- Found the old healing code was broken: used `this.messages` (shared active-chat state) for non-active chats
+- Found the healing only triggered when `participantIds` existed (not when missing)
+- Implemented 3-pronged fix without rewriting the chat system
+- Added `_healParticipantIdsFromRTDB()` — queries RTDB messages directly, works for any chat
+- Added `_healParticipantIdsFromMessages()` — uses in-memory messages for active chat in openChat()
+- Fixed meta listener to handle both missing AND corrupted participantIds
+- Added explicit typing listener retry in `openChat()` 
+- Fixed `fetchChatMeta()` to guard against missing participantIds
+- Added comprehensive [TYPE-DEBUG] logs throughout the pipeline
+- Compiled successfully, pushed to GitHub
+
+Stage Summary:
+- Typing indicator for old/existing chats should now work after this fix
+- The healing is self-persisting: healed participantIds are written back to RTDB
+- One-time operation per old chat — subsequent loads use healed data
+- [TYPE-DEBUG] logs available in browser console for debugging
