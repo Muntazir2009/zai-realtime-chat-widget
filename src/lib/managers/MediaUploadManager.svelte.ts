@@ -62,7 +62,17 @@ class MediaUploadManager {
 
   async uploadVoice(chatId: string, blob: Blob, duration: number): Promise<{ publicUrl: string; r2Key: string }> {
     const taskId = generateIdempotencyKey();
-    const file = new File([blob], `voice_${Date.now()}.webm`, { type: 'audio/webm' });
+
+    // Derive extension from blob type (not hardcoded)
+    const mime = blob.type || 'audio/webm';
+    let ext = 'webm';
+    if (mime.includes('mp4') || mime.includes('m4a') || mime.includes('aac')) {
+      ext = 'm4a';
+    } else if (mime.includes('ogg')) {
+      ext = 'ogg';
+    }
+    const filename = `voice_${Date.now()}.${ext}`;
+    const file = new File([blob], filename, { type: mime });
 
     const task: UploadTask = {
       id: taskId,
@@ -78,7 +88,7 @@ class MediaUploadManager {
 
     try {
       task.status = 'uploading';
-      const result = await uploadFile(blob, 'voice', `voice-${Date.now()}.webm`, (pct) => { task.progress = pct; });
+      const result = await uploadFile(blob, 'voice', filename, (pct) => { task.progress = pct; });
       task.url = result.publicUrl;
       task.status = 'done';
       return { publicUrl: result.publicUrl, r2Key: result.key };

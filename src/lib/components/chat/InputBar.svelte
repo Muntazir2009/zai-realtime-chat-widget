@@ -250,8 +250,16 @@
     isUploading = true;
     uploadProgress = 0;
     try {
-      const ext = blob.type.includes('mp4') ? 'm4a' : 'webm';
-      const result = await uploadFile(blob, 'voice', `voice-${Date.now()}.${ext}`, (pct) => { uploadProgress = pct; });
+      // Derive file extension from the blob's actual MIME type
+      const mime = blob.type || 'audio/webm';
+      let ext = 'webm';
+      if (mime.includes('mp4') || mime.includes('m4a') || mime.includes('aac')) {
+        ext = 'm4a';
+      } else if (mime.includes('ogg')) {
+        ext = 'ogg';
+      }
+      const filename = `voice_${Date.now()}.${ext}`;
+      const result = await uploadFile(blob, 'voice', filename, (pct) => { uploadProgress = pct; });
       await chatStore.sendVoiceMessage(chatStore.activeChatId, result.publicUrl, duration);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

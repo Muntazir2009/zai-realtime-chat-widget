@@ -14,6 +14,7 @@
   let mediaRecorder: MediaRecorder | null = $state(null);
   let audioChunks: Blob[] = $state([]);
   let timerInterval: ReturnType<typeof setInterval> | null = $state(null);
+  let recordMimeType = $state('audio/webm;codecs=opus');
 
   /* ── Slide-to-cancel state ── */
   let dragOffset = $state(0);
@@ -38,34 +39,93 @@
   /* ── Recording logic ── */
   async function startRecording() {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Request audio with explicit constraints for high-quality voice recording
+      // - echoCancellation: reduces feedback from speakers
+      // - noiseSuppression: reduces background noise
+      // - autoGainControl: normalizes volume levels
+      // - sampleRate: 48000 Hz (CD-quality, widely supported, matches Opus ideal)
+      // - channelCount: 1 (mono is correct for voice, reduces file size)
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: { ideal: 48000 },
+          channelCount: { ideal: 1 },
+        },
+      });
+
       audioChunks = [];
-      // Use a widely-supported MIME type. Safari doesn't support webm,
-      // so fall back to mp4/aac if available.
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : MediaRecorder.isTypeSupported('audio/mp4')
-          ? 'audio/mp4'
-          : 'audio/webm';
-      mediaRecorder = new MediaRecorder(stream, { mimeType });
+
+      // Select best MIME type for voice recording with quality in mind:
+      // 1. Opus in WebM container (best cross-platform voice codec)
+      // 2. Opus in OGG container (Firefox alternative)
+      // 3. AAC in MP4 container (iOS/Safari)
+      // 4. Fallback to whatever the browser supports
+      let mimeType = '';
+      const preferred = [
+        'audio/webm;codecs=opus',
+        'audio/ogg;codecs=opus',
+        'audio/mp4;codecs=mp4a.40.2',
+        'audio/mp4',
+        'audio/webm',
+      ];
+      for (const mt of preferred) {
+        if (MediaRecorder.isTypeSupported(mt)) {
+          mimeType = mt;
+          break;
+        }
+      }
+
+      if (!mimeType) {
+        console.warn('[VoiceRecorder] No preferred MIME type supported, using default');
+        mimeType = '';
+      }
+
+      recordMimeType = mimeType;
+
+      // Configure MediaRecorder for high quality voice:
+      // - 256 kbps audio bitrate (Opus at 48kHz sounds excellent at 64-128kbps,
+      //   but 256kbps gives headroom and the file is still small for voice)
+      // - 1000ms timeslice to reduce chunk-boundary glitches
+      const recorderOptions: MediaRecorderOptions = {};
+      if (mimeType) recorderOptions.mimeType = mimeType;
+      // audioBitsPerSecond is supported in most modern browsers
+      if (typeof MediaRecorder.prototype !== 'undefined') {
+        (recorderOptions as any).audioBitsPerSecond = 128000;
+      }
+
+      mediaRecorder = new MediaRecorder(stream, recorderOptions);
       recordingTime = 0;
 
+      // Use a longer timeslice (1000ms) to reduce audio artifacts at chunk boundaries
+      const timeslice = 1000;
+
       mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunks.push(e.data);
+        if (e.data && e.data.size > 0) audioChunks.push(e.data);
       };
 
       mediaRecorder.onstop = () => {
-        const blob = new Blob(audioChunks, { type: mimeType });
-        onSend(blob, recordingTime);
+        if (audioChunks.length === 0) {
+          stream.getTracks().forEach((t) => t.stop());
+          onCancel();
+          return;
+        }
+
+        const blob = new Blob(audioChunks, { type: mimeType || 'audio/webm' });
+        // Stop all microphone tracks
         stream.getTracks().forEach((t) => t.stop());
+        onSend(blob, recordingTime);
       };
 
-      mediaRecorder.start(100);
+      mediaRecorder.start(timeslice);
       isRecording = true;
 
+      // Track duration using the MediaRecorder's timestamp for accuracy
+      const startTime = Date.now();
       timerInterval = setInterval(() => {
-        recordingTime++;
-      }, 1000);
+        recordingTime = Math.floor((Date.now() - startTime) / 1000);
+      }, 250);
     } catch (err) {
       console.error('Microphone access denied:', err);
       onCancel();
@@ -74,6 +134,10 @@
 
   function stopRecording() {
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      // Request final data before stopping
+      if (mediaRecorder.state === 'recording') {
+        mediaRecorder.requestData();
+      }
       mediaRecorder.stop();
     }
     isRecording = false;
