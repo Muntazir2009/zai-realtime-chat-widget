@@ -254,43 +254,38 @@ class ChatStore {
         newMap.set(chatId, meta);
         this.chats = newMap;
 
-        // ── Heal corrupted participantIds ──
-        // If participantIds only contains self, it was corrupted by a previous
-        // write that used the fallback [user.id]. Try to find the other user
-        // from message senders and fix the RTDB data.
         const myUid = authStore.user?.id;
-        if (myUid && meta.type === 'direct' && meta.participantIds) {
-          const others = meta.participantIds.filter((uid: string) => uid !== myUid);
-          if (others.length === 0) {
-            // Try to find other participant from messages
-            const senderSet = new Set<string>();
-            for (const msg of this.messages) {
-              if (msg.sid && msg.sid !== myUid) senderSet.add(msg.sid);
-            }
-            if (senderSet.size > 0) {
-              const healed = [myUid, ...Array.from(senderSet)];
-              // Update local state immediately
-              meta.participantIds = healed;
-              // Also heal RTDB in background
-              rtdb.ref(RTDB_PATHS.CHAT_META(chatId) + '/participantIds').then(ref => {
-                rtdb.set(ref, healed).catch(() => {});
-              });
-              console.log('[ChatStore] Healed corrupted participantIds for', chatId, '→', healed);
-            }
+
+        // ── Heal missing/corrupted participantIds ──
+        // Covers TWO cases:
+        //   1. participantIds is MISSING entirely (old chats before field existed)
+        //   2. participantIds exists but only contains self (corrupted by old buildFanOutUpdates)
+        // Uses RTDB direct query (NOT this.messages which is shared active-chat state).
+        if (myUid && meta.type === 'direct') {
+          const hasPids = meta.participantIds && meta.participantIds.length > 0;
+          const others = hasPids ? meta.participantIds.filter((uid: string) => uid !== myUid) : [];
+          if (!hasPids || others.length === 0) {
+            console.log('[TYPE-DEBUG] Healing needed for chat', chatId, '| hasPids:', hasPids, '| pids:', meta.participantIds, '| others:', others);
+            // Query RTDB directly for recent messages to find other senders.
+            // This works for ANY chat (active or not) unlike using this.messages.
+            this._healParticipantIdsFromRTDB(chatId, myUid, meta);
           }
         }
 
         // Attach global typing listener for inbox preview
         this.attachGlobalTypingListener(chatId).catch(() => {});
-        // Fetch participant profiles if not cached
+        // Fetch participant profiles if not cached.
+        // Also re-derive otherIds from potentially-healed participantIds.
+        const currentMeta = this.chats.get(chatId);
         const otherIds: string[] = [];
-        for (const pid of meta.participantIds) {
-          if (!this.userDict.has(pid)) {
-            this.fetchUser(pid);
-          }
-          // Collect other users (not self) for presence listening
-          if (pid !== authStore.user?.id) {
-            otherIds.push(pid);
+        if (currentMeta?.participantIds) {
+          for (const pid of currentMeta.participantIds) {
+            if (!this.userDict.has(pid)) {
+              this.fetchUser(pid);
+            }
+            if (pid !== authStore.user?.id) {
+              otherIds.push(pid);
+            }
           }
         }
         // Ensure presence listeners for inbox participants (real-time online dots)
@@ -333,10 +328,119 @@ class ChatStore {
       this.chats = newMap;
       // Attach global typing listener for inbox preview
       this.attachGlobalTypingListener(chatId).catch(() => {});
-      for (const pid of meta.participantIds) {
-        if (!this.userDict.has(pid)) {
-          this.fetchUser(pid);
+      // Fetch profiles for known participants
+      if (meta.participantIds) {
+        for (const pid of meta.participantIds) {
+          if (!this.userDict.has(pid)) {
+            this.fetchUser(pid);
+          }
         }
+      }
+    }
+  }
+
+  /** Heal missing/corrupted participantIds by querying RTDB messages directly.
+   *  This is the ONLY reliable way to find other participants for non-active chats
+   *  because this.messages only holds data for the currently open conversation.
+   *  Reads the last 5 messages and extracts unique sender IDs. */
+  private _healParticipantIdsFromRTDB(chatId: string, myUid: string, meta: ChatMeta): void {
+    console.log('[TYPE-DEBUG] _healParticipantIdsFromRTDB starting for chat', chatId);
+    (async () => {
+      try {
+        const msgRef = await rtdb.ref(RTDB_PATHS.CHAT_MESSAGES(chatId));
+        const limit = await rtdb.limitToLast(5);
+        const queriedRef = await rtdb.query(msgRef, limit);
+        const snap = await rtdb.get(queriedRef);
+
+        if (!snap.exists()) {
+          console.log('[TYPE-DEBUG] _healParticipantIdsFromRTDB: no messages found for chat', chatId);
+          return;
+        }
+        const senderSet = new Set<string>();
+        snap.forEach((childSnap: any) => {
+          const msg = childSnap.val();
+          if (msg?.sid && msg.sid !== myUid) {
+            senderSet.add(msg.sid);
+          }
+        });
+        if (senderSet.size === 0) {
+          console.log('[TYPE-DEBUG] _healParticipantIdsFromRTDB: no other senders found in messages for chat', chatId);
+          return;
+        }
+        const otherUids = Array.from(senderSet);
+        const healed = [myUid, ...otherUids];
+        console.log('[TYPE-DEBUG] _healParticipantIdsFromRTDB: HEALED chat', chatId, '→', healed);
+
+        // Update local meta state immediately
+        meta.participantIds = healed;
+        const m = new Map(this.chats);
+        m.set(chatId, meta);
+        this.chats = m;
+
+        // Persist to RTDB so other clients also get the fix
+        const pidRef = await rtdb.ref(RTDB_PATHS.CHAT_META(chatId) + '/participantIds');
+        rtdb.set(pidRef, healed).catch((err) => {
+          console.warn('[TYPE-DEBUG] _healParticipantIdsFromRTDB: failed to write to RTDB', err);
+        });
+
+        // Fetch profiles for newly discovered participants
+        for (const uid of otherUids) {
+          if (!this.userDict.has(uid)) {
+            this.fetchUser(uid);
+          }
+        }
+
+        // Re-attempt typing listener attachment now that we have participantIds
+        this.attachGlobalTypingListener(chatId).catch(() => {});
+      } catch (err) {
+        console.warn('[TYPE-DEBUG] _healParticipantIdsFromRTDB failed for chat', chatId, err);
+      }
+    })();
+  }
+
+  /** Heal participantIds using in-memory messages (only valid for the ACTIVE chat).
+   *  Called from openChat() after messages are loaded. Complements the RTDB-based
+   *  healing in attachChatMetaListener which works for non-active chats. */
+  private _healParticipantIdsFromMessages(chatId: string): void {
+    const myUid = authStore.user?.id;
+    if (!myUid) return;
+    const meta = this.chats.get(chatId);
+    if (!meta || meta.type !== 'direct') return;
+
+    const hasPids = meta.participantIds && meta.participantIds.length > 0;
+    const others = hasPids ? meta.participantIds.filter((uid: string) => uid !== myUid) : [];
+    if (hasPids && others.length > 0) return; // Already good
+
+    console.log('[TYPE-DEBUG] _healParticipantIdsFromMessages: need to heal chat', chatId,
+      '| hasPids:', hasPids, '| pids:', meta.participantIds);
+
+    const senderSet = new Set<string>();
+    for (const msg of this.messages) {
+      if (msg.sid && msg.sid !== myUid) senderSet.add(msg.sid);
+    }
+    if (senderSet.size === 0) {
+      console.log('[TYPE-DEBUG] _healParticipantIdsFromMessages: no other senders in this.messages for', chatId);
+      return;
+    }
+
+    const otherUids = Array.from(senderSet);
+    const healed = [myUid, ...otherUids];
+    console.log('[TYPE-DEBUG] _healParticipantIdsFromMessages: HEALED chat', chatId, '→', healed);
+
+    meta.participantIds = healed;
+    const m = new Map(this.chats);
+    m.set(chatId, meta);
+    this.chats = m;
+
+    // Persist to RTDB
+    rtdb.ref(RTDB_PATHS.CHAT_META(chatId) + '/participantIds').then(ref => {
+      rtdb.set(ref, healed).catch(() => {});
+    });
+
+    // Fetch profiles for newly discovered participants
+    for (const uid of otherUids) {
+      if (!this.userDict.has(uid)) {
+        this.fetchUser(uid);
       }
     }
   }
@@ -530,7 +634,21 @@ class ChatStore {
     this.markAsRead(chatId);
     await this.attachPresenceListeners(chatId);
     this.startPresenceStaleCheck();
-    // Global typing listeners are already attached via inbox/meta hooks.
+
+    // ── Heal participantIds if still broken (using this.messages which is now populated) ──
+    // The RTDB-based healing in attachChatMetaListener handles non-active chats.
+    // Here we handle the active chat using the in-memory messages array.
+    this._healParticipantIdsFromMessages(chatId);
+
+    // ── Typing listener: ensure it's attached ──
+    // For old chats, the inbox-level typing listener may have failed to resolve other UIDs
+    // because messages weren't loaded yet. Now that messages are available, retry.
+    if (!this.globalTypingUnsubs.has(chatId)) {
+      console.log('[TYPE-DEBUG] openChat: typing listener NOT attached yet, retrying for', chatId);
+      this.attachGlobalTypingListener(chatId).catch(() => {});
+    } else {
+      console.log('[TYPE-DEBUG] openChat: typing listener already attached for', chatId);
+    }
     // One-shot direct read as fallback to catch edge cases.
     this._readTypingStateDirect(chatId).catch(() => {});
     await this.attachOtherUserReadListener(chatId);
