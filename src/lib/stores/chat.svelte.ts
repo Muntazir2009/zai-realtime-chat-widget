@@ -97,10 +97,9 @@ class ChatStore {
   private messageRemovedUnsub: (() => void) | null = null;
   private presenceUnsubs: Map<string, () => void> = new Map();
   private presenceStaleTimer: ReturnType<typeof setInterval> | null = null;
-  private typingSafetyTimeouts: Map<string, Map<string, ReturnType<typeof setTimeout>>> = new Map();
   // Global typing listeners — persist across chat switches
-  private globalTypingUnsubs: Map<string, Map<string, () => void>> = new Map(); // chatId → Map<uid, unsub>
-  private globalTypingRetryTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+  // One unsub per chat (subscribes to typing/{chatId}/ parent, NOT per-UID paths)
+  private globalTypingUnsubs: Map<string, () => void> = new Map();
   private otherReadUnsub: (() => void) | null = null;
 
   // ---- Self profile listener ----
@@ -257,41 +256,26 @@ class ChatStore {
         const myUid = authStore.user?.id;
 
         // ── Heal missing/corrupted participantIds ──
-        // Covers TWO cases:
-        //   1. participantIds is MISSING entirely (old chats before field existed)
-        //   2. participantIds exists but only contains self (corrupted by old buildFanOutUpdates)
-        // Uses RTDB direct query (NOT this.messages which is shared active-chat state).
+        // For read receipts, avatars, and other features that need participantIds.
+        // Typing does NOT depend on participantIds (uses parent-path listener).
         if (myUid && meta.type === 'direct') {
           const hasPids = meta.participantIds && meta.participantIds.length > 0;
           const others = hasPids ? meta.participantIds.filter((uid: string) => uid !== myUid) : [];
           if (!hasPids || others.length === 0) {
-            console.log('[TYPE-DEBUG] Healing needed for chat', chatId, '| hasPids:', hasPids, '| pids:', meta.participantIds, '| others:', others);
-            // Query RTDB directly for recent messages to find other senders.
-            // This works for ANY chat (active or not) unlike using this.messages.
             this._healParticipantIdsFromRTDB(chatId, myUid, meta);
           }
         }
 
         // Attach global typing listener for inbox preview
         this.attachGlobalTypingListener(chatId).catch(() => {});
-        // Fetch participant profiles if not cached.
-        // Also re-derive otherIds from potentially-healed participantIds.
-        const currentMeta = this.chats.get(chatId);
+        // Fetch participant profiles and attach presence listeners
         const otherIds: string[] = [];
-        if (currentMeta?.participantIds) {
-          for (const pid of currentMeta.participantIds) {
-            if (!this.userDict.has(pid)) {
-              this.fetchUser(pid);
-            }
-            if (pid !== authStore.user?.id) {
-              otherIds.push(pid);
-            }
-          }
+        const pids = meta.participantIds ?? [];
+        for (const pid of pids) {
+          if (!this.userDict.has(pid)) this.fetchUser(pid);
+          if (pid !== authStore.user?.id) otherIds.push(pid);
         }
-        // Ensure presence listeners for inbox participants (real-time online dots)
-        if (otherIds.length > 0) {
-          this.ensurePresenceListeners(otherIds);
-        }
+        if (otherIds.length > 0) this.ensurePresenceListeners(otherIds);
 
         // ── In-app message sound trigger ──
         // The chat-meta listener is attached for EVERY chat in the user's
@@ -340,11 +324,9 @@ class ChatStore {
   }
 
   /** Heal missing/corrupted participantIds by querying RTDB messages directly.
-   *  This is the ONLY reliable way to find other participants for non-active chats
-   *  because this.messages only holds data for the currently open conversation.
-   *  Reads the last 5 messages and extracts unique sender IDs. */
+   *  Reads the last 5 messages and extracts unique sender IDs.
+   *  One-time deterministic repair — persists healed data to RTDB. */
   private _healParticipantIdsFromRTDB(chatId: string, myUid: string, meta: ChatMeta): void {
-    console.log('[TYPE-DEBUG] _healParticipantIdsFromRTDB starting for chat', chatId);
     (async () => {
       try {
         const msgRef = await rtdb.ref(RTDB_PATHS.CHAT_MESSAGES(chatId));
@@ -352,24 +334,17 @@ class ChatStore {
         const queriedRef = await rtdb.query(msgRef, limit);
         const snap = await rtdb.get(queriedRef);
 
-        if (!snap.exists()) {
-          console.log('[TYPE-DEBUG] _healParticipantIdsFromRTDB: no messages found for chat', chatId);
-          return;
-        }
+        if (!snap.exists()) return;
+
         const senderSet = new Set<string>();
         snap.forEach((childSnap: any) => {
           const msg = childSnap.val();
-          if (msg?.sid && msg.sid !== myUid) {
-            senderSet.add(msg.sid);
-          }
+          if (msg?.sid && msg.sid !== myUid) senderSet.add(msg.sid);
         });
-        if (senderSet.size === 0) {
-          console.log('[TYPE-DEBUG] _healParticipantIdsFromRTDB: no other senders found in messages for chat', chatId);
-          return;
-        }
+        if (senderSet.size === 0) return;
+
         const otherUids = Array.from(senderSet);
         const healed = [myUid, ...otherUids];
-        console.log('[TYPE-DEBUG] _healParticipantIdsFromRTDB: HEALED chat', chatId, '→', healed);
 
         // Update local meta state immediately
         meta.participantIds = healed;
@@ -379,28 +354,20 @@ class ChatStore {
 
         // Persist to RTDB so other clients also get the fix
         const pidRef = await rtdb.ref(RTDB_PATHS.CHAT_META(chatId) + '/participantIds');
-        rtdb.set(pidRef, healed).catch((err) => {
-          console.warn('[TYPE-DEBUG] _healParticipantIdsFromRTDB: failed to write to RTDB', err);
-        });
+        rtdb.set(pidRef, healed).catch(() => {});
 
         // Fetch profiles for newly discovered participants
         for (const uid of otherUids) {
-          if (!this.userDict.has(uid)) {
-            this.fetchUser(uid);
-          }
+          if (!this.userDict.has(uid)) this.fetchUser(uid);
         }
-
-        // Re-attempt typing listener attachment now that we have participantIds
-        this.attachGlobalTypingListener(chatId).catch(() => {});
-      } catch (err) {
-        console.warn('[TYPE-DEBUG] _healParticipantIdsFromRTDB failed for chat', chatId, err);
+      } catch {
+        // Best-effort — participantIds repair is not blocking for typing
       }
     })();
   }
 
   /** Heal participantIds using in-memory messages (only valid for the ACTIVE chat).
-   *  Called from openChat() after messages are loaded. Complements the RTDB-based
-   *  healing in attachChatMetaListener which works for non-active chats. */
+   *  Called from openChat() after messages are loaded. */
   private _healParticipantIdsFromMessages(chatId: string): void {
     const myUid = authStore.user?.id;
     if (!myUid) return;
@@ -409,39 +376,28 @@ class ChatStore {
 
     const hasPids = meta.participantIds && meta.participantIds.length > 0;
     const others = hasPids ? meta.participantIds.filter((uid: string) => uid !== myUid) : [];
-    if (hasPids && others.length > 0) return; // Already good
-
-    console.log('[TYPE-DEBUG] _healParticipantIdsFromMessages: need to heal chat', chatId,
-      '| hasPids:', hasPids, '| pids:', meta.participantIds);
+    if (hasPids && others.length > 0) return;
 
     const senderSet = new Set<string>();
     for (const msg of this.messages) {
       if (msg.sid && msg.sid !== myUid) senderSet.add(msg.sid);
     }
-    if (senderSet.size === 0) {
-      console.log('[TYPE-DEBUG] _healParticipantIdsFromMessages: no other senders in this.messages for', chatId);
-      return;
-    }
+    if (senderSet.size === 0) return;
 
     const otherUids = Array.from(senderSet);
     const healed = [myUid, ...otherUids];
-    console.log('[TYPE-DEBUG] _healParticipantIdsFromMessages: HEALED chat', chatId, '→', healed);
 
     meta.participantIds = healed;
     const m = new Map(this.chats);
     m.set(chatId, meta);
     this.chats = m;
 
-    // Persist to RTDB
     rtdb.ref(RTDB_PATHS.CHAT_META(chatId) + '/participantIds').then(ref => {
       rtdb.set(ref, healed).catch(() => {});
     });
 
-    // Fetch profiles for newly discovered participants
     for (const uid of otherUids) {
-      if (!this.userDict.has(uid)) {
-        this.fetchUser(uid);
-      }
+      if (!this.userDict.has(uid)) this.fetchUser(uid);
     }
   }
 
@@ -635,22 +591,13 @@ class ChatStore {
     await this.attachPresenceListeners(chatId);
     this.startPresenceStaleCheck();
 
-    // ── Heal participantIds if still broken (using this.messages which is now populated) ──
-    // The RTDB-based healing in attachChatMetaListener handles non-active chats.
-    // Here we handle the active chat using the in-memory messages array.
+    // ── Heal participantIds if broken (for read receipts, avatar, etc.) ──
     this._healParticipantIdsFromMessages(chatId);
 
-    // ── Typing listener: ensure it's attached ──
-    // For old chats, the inbox-level typing listener may have failed to resolve other UIDs
-    // because messages weren't loaded yet. Now that messages are available, retry.
+    // ── Typing: ensure parent listener is attached ──
     if (!this.globalTypingUnsubs.has(chatId)) {
-      console.log('[TYPE-DEBUG] openChat: typing listener NOT attached yet, retrying for', chatId);
       this.attachGlobalTypingListener(chatId).catch(() => {});
-    } else {
-      console.log('[TYPE-DEBUG] openChat: typing listener already attached for', chatId);
     }
-    // One-shot direct read as fallback to catch edge cases.
-    this._readTypingStateDirect(chatId).catch(() => {});
     await this.attachOtherUserReadListener(chatId);
     this.attachPinnedListener(chatId);
     this.attachReactionListeners(chatId);
@@ -1108,213 +1055,86 @@ class ChatStore {
   }
 
   // ============================================================
-  // Typing
+  // Typing — deterministic, parent-path architecture
   // ============================================================
+  // Subscribes to typing/{chatId}/ (parent) instead of per-UID paths.
+  // No participant resolution needed. No retry loops. No heuristics.
+  // The parent onValue fires immediately with current state AND on
+  // every child change. We iterate children, skip currentUid, check
+  // the timestamp window (15s). This is identical for old and new chats.
 
-  /** One-shot direct read of typing state for all other users in the chat.
-   *  Updates the internal tracking and reactive display names immediately. */
-  private async _readTypingStateDirect(chatId: string): Promise<void> {
-    const otherUids = this._resolveOtherUids(chatId);
-    for (const uid of otherUids) {
-      try {
-        const r = await rtdb.ref(RTDB_PATHS.TYPING(chatId, uid));
-        const snap = await rtdb.get(r);
-        this._handleTypingSnapshot(chatId, uid, snap);
-      } catch {
-        // Best-effort — the onValue listener is the primary mechanism
-      }
-    }
-  }
-
-  /** Resolve the other user IDs for a chat. Uses multiple fallback strategies:
-   *  1. meta.participantIds (canonical, excludes self)
-   *  2. Message senders currently in memory (non-self sid values)
-   *  3. userChats entries — for DMs, scan user_chats/{chatId} across known users
-   *  4. participants list (set during openChat)
-   *  5. userDict heuristic (exactly 1 other user cached → DM partner)
-   */
-  private _resolveOtherUids(chatId: string): string[] {
-    const myUid = authStore.user?.id;
-    if (!myUid) return [];
-
-    // Strategy 1: meta.participantIds — filter out self
-    const meta = this.chats.get(chatId);
-    if (meta?.participantIds && meta.participantIds.length > 0) {
-      const others = meta.participantIds.filter(uid => uid !== myUid);
-      if (others.length > 0) {
-        console.log('[TYPE-DEBUG] Strategy 1 (meta.participantIds) found:', others, 'for chat', chatId);
-        return others;
-      }
-    }
-
-    // Strategy 2: look at unique message senders in this chat (non-self)
-    // This is the most reliable fallback for existing conversations.
-    const senderSet = new Set<string>();
-    for (const msg of this.messages) {
-      if (msg.sid && msg.sid !== myUid) {
-        senderSet.add(msg.sid);
-      }
-    }
-    if (senderSet.size > 0) {
-      console.log('[TYPE-DEBUG] Strategy 2 (message senders) found:', Array.from(senderSet), 'for chat', chatId);
-      return Array.from(senderSet);
-    }
-
-    // Strategy 3: participants list (set during openChat)
-    if (this.participants.length > 0) {
-      const others = this.participants.filter(p => p.id !== myUid).map(p => p.id);
-      if (others.length > 0) {
-        console.log('[TYPE-DEBUG] Strategy 3 (participants list) found:', others, 'for chat', chatId);
-        return others;
-      }
-    }
-
-    // Strategy 4: look at the userDict for users we've loaded in the context
-    // For direct chats, we typically only have 1 other user cached.
-    const cachedOtherUsers: string[] = [];
-    for (const [uid] of this.userDict) {
-      if (uid !== myUid) cachedOtherUsers.push(uid);
-    }
-    if (cachedOtherUsers.length === 1) {
-      console.log('[TYPE-DEBUG] Strategy 4 (userDict heuristic) found:', cachedOtherUsers, 'for chat', chatId);
-      return cachedOtherUsers;
-    }
-
-    console.log('[TYPE-DEBUG] All strategies FAILED for chat', chatId, '| myUid:', myUid, '| meta.pids:', meta?.participantIds, '| msgs:', this.messages.length, '| participants:', this.participants.length, '| userDict:', this.userDict.size);
-    return [];
-  }
-
-  /** Internal: actually attach the Firebase typing listeners. Uses persistent retry
-   *  with capped exponential backoff (1s, 2s, 4s, 8s, 10s, 10s…). Only stops
-   *  retrying if the chat is no longer in the user's chats or userChats.
-   *  Stores unsubs in globalTypingUnsubs so they persist across chat switches. */
-  private async _doAttachTypingListener(chatId: string, retryCount = 0): Promise<void> {
-    // If already attached globally, nothing to do
-    if (this.globalTypingUnsubs.has(chatId)) {
-      console.log('[TYPE-DEBUG] Already attached for', chatId);
-      return;
-    }
-
-    // Try to resolve other user IDs using multiple strategies
-    const otherUids = this._resolveOtherUids(chatId);
-
-    if (otherUids.length === 0) {
-      // No participants found yet — retry if chat is still relevant
-      const stillRelevant = this.chats.has(chatId) || this.userChats.has(chatId);
-      if (!stillRelevant) {
-        console.log('[ChatStore] Typing: chat no longer relevant, stopping retry for', chatId);
-        return;
-      }
-      // Capped exponential backoff: 1s, 2s, 4s, 8s, 10s, 10s, 10s…
-      const delay = Math.min(1000 * Math.pow(2, retryCount), 10000);
-      console.warn(`[ChatStore] Typing: no participants for ${chatId} - retry #${retryCount + 1} in ${delay}ms`);
-      this._clearGlobalTypingRetryTimer(chatId);
-      const timer = setTimeout(() => {
-        this.globalTypingRetryTimers.delete(chatId);
-        this._doAttachTypingListener(chatId, retryCount + 1).catch(() => {});
-      }, delay);
-      this.globalTypingRetryTimers.set(chatId, timer);
-      return;
-    }
-
-    // Clear any pending retry timer for this chat
-    this._clearGlobalTypingRetryTimer(chatId);
-
-    // Double-check not already attached (race guard)
+  /** Attach a global typing listener for a chat. Persists across chat switches.
+   *  Subscribes to typing/{chatId}/ (parent path). */
+  async attachGlobalTypingListener(chatId: string): Promise<void> {
     if (this.globalTypingUnsubs.has(chatId)) return;
 
-    this.typingSafetyTimeouts.set(chatId, new Map());
-    console.log('[TYPE-DEBUG] Attaching GLOBAL typing listeners for', otherUids.length, 'users in chat', chatId, 'otherUids:', otherUids);
-
-    const chatUnsubs = new Map<string, () => void>();
-    for (const uid of otherUids) {
-      try {
-        const typingPath = RTDB_PATHS.TYPING(chatId, uid);
-        console.log('[TYPE-DEBUG] Subscribing to typing path:', typingPath);
-        const r = await rtdb.ref(typingPath);
-        const unsub = await rtdb.onValue(r, (snap) => {
-          this._handleTypingSnapshot(chatId, uid, snap);
-        });
-        chatUnsubs.set(uid, unsub);
-        console.log('[TYPE-DEBUG] Global typing listener attached OK for uid=', uid, 'chat=', chatId);
-      } catch (err) {
-        console.error('[TYPE-DEBUG] Failed to attach global typing listener for uid=', uid, 'chat=', chatId, err);
-      }
-    }
-    if (chatUnsubs.size > 0) {
-      this.globalTypingUnsubs.set(chatId, chatUnsubs);
-    } else if (otherUids.length > 0) {
-      console.error('[ChatStore] WARNING: 0 global typing listeners attached out of', otherUids.length, 'for chat', chatId);
+    const parentPath = `typing/${chatId}`;
+    try {
+      const r = await rtdb.ref(parentPath);
+      const unsub = await rtdb.onValue(r, (snap) => {
+        this._handleTypingParentSnapshot(chatId, snap);
+      });
+      this.globalTypingUnsubs.set(chatId, unsub);
+    } catch (err) {
+      console.error('[TYPE] Failed to attach typing listener for', chatId, err);
     }
   }
 
-  /** Process a typing snapshot and update reactive display names.
-   *  Always updates the reactive state to prevent edge cases where the
-   *  `onValue` initial callback is missed or a state transition races. */
-  private _handleTypingSnapshot(chatId: string, uid: string, snap: any): void {
+  /** Process the parent typing snapshot. Iterates all children,
+   *  skips currentUid, checks 15s timestamp window. */
+  private _handleTypingParentSnapshot(chatId: string, snap: any): void {
     const myUid = authStore.user?.id;
-    let isTyping = false;
+    if (!myUid) return;
+
+    const typingUids: Set<string> = new Set();
 
     if (snap.exists()) {
-      const raw = snap.val();
-      // Support both formats:
-      //   - Number (timestamp): 1715234567890
-      //   - Object (legacy):   { typing: true, ts: 1715234567890 }
-      // 15-second window accounts for clock skew and Firebase delivery latency.
-      if (typeof raw === 'number') {
-        isTyping = raw > 0 && (Date.now() - raw) < 15000;
-      } else if (raw && (raw.typing === true || (raw.ts && typeof raw.ts === 'number' && Date.now() - raw.ts < 15000))) {
-        isTyping = true;
+      const data = snap.val();
+      if (data && typeof data === 'object') {
+        for (const [uid, raw] of Object.entries(data as Record<string, unknown>)) {
+          if (uid === myUid) continue;
+          const isTyping = this._isTimestampActive(raw);
+          if (isTyping) {
+            typingUids.add(uid);
+          }
+        }
       }
-      console.log('[TYPE-DEBUG] _handleTypingSnapshot chat:', chatId, 'uid:', uid, 'raw:', raw, 'isTyping:', isTyping);
     }
 
-    // Clear existing safety timeout for this user
-    this.clearTypingSafetyTimeout(chatId, uid);
+    // Update internal tracking
+    this._typingUids.set(chatId, typingUids);
 
-    // Get or create the internal typing set
-    let uidSet = this._typingUids.get(chatId);
-    if (!uidSet) {
-      uidSet = new Set();
-      this._typingUids.set(chatId, uidSet);
-    }
-
-    if (isTyping) {
-      uidSet.add(uid);
-      // Safety timeout: auto-remove after 5s even if no stop event
-      const timeout = setTimeout(() => {
-        uidSet.delete(uid);
-        this._updateTypingDisplayNames(chatId);
-        const timeouts = this.typingSafetyTimeouts.get(chatId);
-        if (timeouts) timeouts.delete(uid);
-      }, 5000);
-      const chatTimeouts = this.typingSafetyTimeouts.get(chatId);
-      if (chatTimeouts) chatTimeouts.set(uid, timeout);
-    } else {
-      uidSet.delete(uid);
-    }
-
-    // Always update reactive state — never skip updates.
-    // This prevents edge cases where the `onValue` initial callback
-    // races with global listener detachment or where a state transition
-    // is missed due to timing.
-    this._updateTypingDisplayNames(chatId);
+    // Sync to reactive state
+    this._syncTypingDisplay(chatId);
   }
 
-  /** Sync the internal _typingUids set to the reactive typingDisplayNames map
-   *  AND the activeTypingNames array (for the currently active chat) */
-  private _updateTypingDisplayNames(chatId: string): void {
-    const uidSet = this._typingUids.get(chatId);
-    const myUid = authStore.user?.id;
-    let names: string[] = [];
-    if (uidSet && uidSet.size > 0) {
-      names = Array.from(uidSet)
-        .filter(uid => uid !== myUid)
-        .map(uid => this.userDict.get(uid)?.displayName ?? 'Someone');
+  /** Check if a raw typing value indicates the user is actively typing.
+   *  Supports: number (timestamp) or object ({ typing: true, ts: ... }) */
+  private _isTimestampActive(raw: unknown): boolean {
+    if (typeof raw === 'number') {
+      return raw > 0 && (Date.now() - raw) < 15000;
     }
-    console.log('[TYPE-DEBUG] _updateTypingDisplayNames chat:', chatId, 'names:', names, 'uidSet:', uidSet ? Array.from(uidSet) : 'null', 'activeChatId:', this.activeChatId);
+    if (raw && typeof raw === 'object') {
+      const obj = raw as Record<string, unknown>;
+      if (obj.typing === true) return true;
+      if (typeof obj.ts === 'number' && (Date.now() - obj.ts) < 15000) return true;
+    }
+    return false;
+  }
 
-    // Update the Map (for inbox/other chats) — persists across chat switches
+  /** Sync the internal _typingUids to reactive state:
+   *  typingDisplayNames (Map) and activeTypingNames (array). */
+  private _syncTypingDisplay(chatId: string): void {
+    const uidSet = this._typingUids.get(chatId);
+    const names: string[] = [];
+    if (uidSet && uidSet.size > 0) {
+      for (const uid of uidSet) {
+        const name = this.userDict.get(uid)?.displayName;
+        if (name) names.push(name);
+      }
+    }
+
+    // Update map (persists across chat switches for inbox preview)
     const m = new Map(this.typingDisplayNames);
     if (names.length === 0) {
       m.delete(chatId);
@@ -1323,77 +1143,29 @@ class ChatStore {
     }
     this.typingDisplayNames = m;
 
-    // Update the simple reactive array for the ACTIVE chat — this is what
-    // the Conversation component reads. Reassigning an array is the most
-    // reliable way to trigger Svelte 5 reactivity.
+    // Update active chat array (what Conversation.svelte reads)
     if (this.activeChatId === chatId) {
-      console.log('[ChatStore] activeTypingNames updated:', names, 'for chat', chatId, '(activeChatId:', this.activeChatId, ')');
-      this.activeTypingNames = names.slice();
-    } else {
-      console.log('[ChatStore] Typing update for non-active chat', chatId, '- stored in map but not shown');
+      this.activeTypingNames = names.length > 0 ? names : [];
     }
   }
 
-  private clearTypingSafetyTimeout(chatId: string, uid: string): void {
-    const chatTimeouts = this.typingSafetyTimeouts.get(chatId);
-    if (!chatTimeouts) return;
-    const t = chatTimeouts.get(uid);
-    if (t) {
-      clearTimeout(t);
-      chatTimeouts.delete(uid);
-    }
-  }
-
-  // ---- Global typing listener management ----
-
-  /** Attach a global typing listener for a chat that persists across chat switches.
-   *  Used for inbox preview and ensures typing state is always available when
-   *  opening any chat. Uses persistent retry with capped exponential backoff. */
-  async attachGlobalTypingListener(chatId: string): Promise<void> {
-    // Skip if already attached
-    if (this.globalTypingUnsubs.has(chatId)) return;
-    await this._doAttachTypingListener(chatId);
-    // One-shot fallback: directly read the typing state to catch edge cases
-    // where the onValue initial callback is missed.
-    await this._readTypingStateDirect(chatId);
-  }
-
-  /** Remove all global typing listeners for a specific chat. */
+  /** Remove the global typing listener for a chat. */
   private detachGlobalTypingListener(chatId: string): void {
-    const chatUnsubs = this.globalTypingUnsubs.get(chatId);
-    if (chatUnsubs) {
-      for (const [, unsub] of chatUnsubs) unsub();
+    const unsub = this.globalTypingUnsubs.get(chatId);
+    if (unsub) {
+      unsub();
       this.globalTypingUnsubs.delete(chatId);
     }
-    this._clearGlobalTypingRetryTimer(chatId);
-    // Clear safety timeouts for this chat
-    const timeouts = this.typingSafetyTimeouts.get(chatId);
-    if (timeouts) {
-      for (const [, t] of timeouts) clearTimeout(t);
-      this.typingSafetyTimeouts.delete(chatId);
-    }
-    // Clear typing UIDs tracking for this chat
     this._typingUids.delete(chatId);
-    // Clear display names for this chat
     const m = new Map(this.typingDisplayNames);
     m.delete(chatId);
     this.typingDisplayNames = m;
-    // Clear active names if this was the active chat
     if (this.activeChatId === chatId) {
       this.activeTypingNames = [];
     }
   }
 
-  /** Clear a pending global typing retry timer for a specific chat. */
-  private _clearGlobalTypingRetryTimer(chatId: string): void {
-    const timer = this.globalTypingRetryTimers.get(chatId);
-    if (timer) {
-      clearTimeout(timer);
-      this.globalTypingRetryTimers.delete(chatId);
-    }
-  }
-
-  /** Attach global typing listeners for ALL chats currently in the inbox. */
+  /** Attach global typing listeners for ALL chats in the inbox. */
   async attachAllInboxTypingListeners(): Promise<void> {
     for (const chatId of this.userChats.keys()) {
       this.attachGlobalTypingListener(chatId).catch(() => {});
@@ -1517,17 +1289,8 @@ class ChatStore {
     this.detachPresenceListeners(); // Full cleanup on logout
     this.detachSelfProfileListener();
     // Clean up ALL global typing listeners
-    for (const [chatId, chatUnsubs] of this.globalTypingUnsubs) {
-      for (const [, unsub] of chatUnsubs) unsub();
-    }
+    for (const [, unsub] of this.globalTypingUnsubs) unsub();
     this.globalTypingUnsubs.clear();
-    for (const [, timer] of this.globalTypingRetryTimers) clearTimeout(timer);
-    this.globalTypingRetryTimers.clear();
-    // Clean up all safety timeouts
-    for (const [, chatTimeouts] of this.typingSafetyTimeouts) {
-      for (const [, t] of chatTimeouts) clearTimeout(t);
-    }
-    this.typingSafetyTimeouts.clear();
     // Full reset: clear ALL typing state on logout
     this._typingUids.clear();
     if (this.typingDisplayNames.size > 0) {
