@@ -3433,3 +3433,25 @@ Stage Summary:
 - The healing is self-persisting: healed participantIds are written back to RTDB
 - One-time operation per old chat — subsequent loads use healed data
 - [TYPE-DEBUG] logs available in browser console for debugging
+---
+Task ID: 2
+Agent: Main Agent
+Task: Rewrite typing indicator with deterministic parent-path architecture
+
+Work Log:
+- Analyzed full typing pipeline: InputBar → PresenceManager.writeTyping → RTDB → listener → UI
+- Identified root cause: typing listener subscribed to per-UID paths requiring participant resolution
+- Old chats had missing/corrupted participantIds → _resolveOtherUids() failed all 4 strategies
+- Removed entire old typing architecture: _resolveOtherUids, retry loops, safety timeouts, heuristics
+- Rewrote to subscribe to typing/{chatId}/ parent path — no participant resolution needed
+- Parent onValue iterates all children, skips currentUid, checks 15s timestamp window
+- Identical for old and new chats — zero dependency on participantIds, messages, or timing
+- Cleaned all TYPE-DEBUG logs, kept concise [TYPE] diagnostics
+- Restored accidentally-deleted /api/upload endpoint
+- Build verified, pushed to GitHub
+
+Stage Summary:
+- Typing architecture changed from per-UID subscription to parent-path subscription
+- ~240 lines of complex retry/heuristic code replaced with ~80 lines of deterministic code
+- Net reduction: -342 lines removed, +100 lines added
+- participantIds repair (_healParticipantIdsFromRTDB) kept for read receipts/avatars only
