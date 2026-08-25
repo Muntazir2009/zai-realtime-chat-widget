@@ -42,13 +42,10 @@ async function initFirebase() {
   }
 
   _auth = getAuth(_app);
-  _database = getDatabase(_app, {
-    // Force long-lived WebSocket — avoids repeated reconnect overhead
-    // and eliminates the 5s polling fallback latency.
-    connectTimeout: 10_000,
-    // Cache up to 100MB of RTDB data client-side for instant reads
-    cacheSizeBytes: 100 * 1024 * 1024,
-  });
+  // getDatabase second arg must be a string URL, not an options object.
+  // The databaseURL from firebaseConfig is already registered via initializeApp,
+  // so we just pass the app — Firebase picks up the URL automatically.
+  _database = getDatabase(_app);
   _storage = getStorage(_app);
 
   // Keep the WebSocket alive — prevent RTDB from going dormant
