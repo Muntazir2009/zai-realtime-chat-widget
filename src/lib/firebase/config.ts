@@ -42,10 +42,9 @@ async function initFirebase() {
   }
 
   _auth = getAuth(_app);
-  // getDatabase second arg must be a string URL, not an options object.
-  // The databaseURL from firebaseConfig is already registered via initializeApp,
-  // so we just pass the app — Firebase picks up the URL automatically.
-  _database = getDatabase(_app);
+  // Pass databaseURL explicitly to guarantee RTDB picks it up
+  // even if initializeApp config isn't fully processed yet.
+  _database = getDatabase(_app, firebaseConfig.databaseURL);
   _storage = getStorage(_app);
 
   // Keep the WebSocket alive — prevent RTDB from going dormant
@@ -84,7 +83,7 @@ export function getStorageInstance(): FirebaseStorage {
   return _storage;
 }
 
-/** Check if Firebase is ready (browser and initialized) */
+/** Check if Firebase is ready (browser, app AND database initialized) */
 export function isReady(): boolean {
-  return browser && !!_app;
+  return browser && !!_app && !!_database;
 }

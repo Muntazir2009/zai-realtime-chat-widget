@@ -838,6 +838,9 @@ class ChatStore {
     const idempotencyKey = generateIdempotencyKey();
     if (!this.addSentKey(idempotencyKey)) return;
 
+    // Ensure RTDB WebSocket is connected before sending
+    rtdb.goOnline();
+
     const msgRef = await rtdb.push(await rtdb.ref(RTDB_PATHS.CHAT_MESSAGES(chatId)));
     const messageId = msgRef.key ?? idempotencyKey;
 
@@ -859,9 +862,9 @@ class ChatStore {
       'sendMessage'
     ).catch((err) => {
       console.error('[sendMessage] All retries failed:', err);
-      toastStore.error('Failed to send message. Check your connection.');
-      this._messageIdSet.delete(message.id);
-      this.messages = this.messages.filter((m) => m.id !== message.id);
+      toastStore.error('Message may not have sent. Check your connection.');
+      // Keep the message visible — don't remove it. The RTDB echo
+      // will confirm delivery if the write eventually succeeds.
     });
   }
 
@@ -921,14 +924,13 @@ class ChatStore {
     // Optimistic: add to local array immediately
     this._messageIdSet.add(message.id);
     this.messages = this._insertSorted(this.messages, message);
+    rtdb.goOnline();
     await retryWithBackoff(
       async () => rtdb.update(await rtdb.ref('/'), updates),
       'sendImageMessage'
     ).catch((err) => {
       console.error('[sendImageMessage] All retries failed:', err);
-      toastStore.error('Failed to send photo. Check your connection.');
-      this._messageIdSet.delete(message.id);
-      this.messages = this.messages.filter((m) => m.id !== messageId);
+      toastStore.error('Photo may not have sent. Check your connection.');
     });
   }
 
@@ -955,14 +957,13 @@ class ChatStore {
     const updates = this.buildFanOutUpdates(chatId, messageId, message, `🎬 Video ${durStr}`);
     this._messageIdSet.add(message.id);
     this.messages = this._insertSorted(this.messages, message);
+    rtdb.goOnline();
     await retryWithBackoff(
       async () => rtdb.update(await rtdb.ref('/'), updates),
       'sendVideoMessage'
     ).catch((err) => {
       console.error('[sendVideoMessage] All retries failed:', err);
-      toastStore.error('Failed to send video. Check your connection.');
-      this._messageIdSet.delete(message.id);
-      this.messages = this.messages.filter((m) => m.id !== messageId);
+      toastStore.error('Video may not have sent. Check your connection.');
     });
   }
 
@@ -990,14 +991,13 @@ class ChatStore {
     // Optimistic: add to local array immediately
     this._messageIdSet.add(message.id);
     this.messages = this._insertSorted(this.messages, message);
+    rtdb.goOnline();
     await retryWithBackoff(
       async () => rtdb.update(await rtdb.ref('/'), updates),
       'sendVoiceMessage'
     ).catch((err) => {
       console.error('[sendVoiceMessage] All retries failed:', err);
-      toastStore.error('Failed to send voice message. Check your connection.');
-      this._messageIdSet.delete(message.id);
-      this.messages = this.messages.filter((m) => m.id !== messageId);
+      toastStore.error('Voice message may not have sent. Check your connection.');
     });
   }
 

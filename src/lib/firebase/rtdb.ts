@@ -28,6 +28,7 @@ let fbTransaction: ((r: any, fn: (current: any) => any) => Promise<{ committed: 
 let fbOff: ((r: any, event?: string, ...args: any[]) => void) | undefined;
 let fbOnDisconnect: ((r: any) => { set: (val: any) => Promise<void>; remove: () => Promise<void>; cancel: () => Promise<void> }) | undefined;
 let fbServerTimestamp: () => any;
+let fbGoOnline: ((db: any) => void) | undefined;
 
 let _loadPromise: Promise<void> | null = null;
 let _rtdbLoaded = false;
@@ -66,6 +67,7 @@ async function _doLoad() {
   fbOff = db.off as any;
   fbOnDisconnect = db.onDisconnect as any;
   fbServerTimestamp = db.serverTimestamp;
+  fbGoOnline = db.goOnline as any;
   _rtdbLoaded = true;
   _rtdbResolveReady?.();
 }
@@ -87,7 +89,10 @@ export async function ref(path: string): Promise<DatabaseReference> {
 }
 
 function _stubRef(path: string): DatabaseReference {
-  return { key: path, parent: null, child: () => null, set: async () => {}, update: async () => {}, push: () => null, remove: async () => {}, onValue: () => () => {}, onChildAdded: () => () => {}, onChildChanged: () => () => {}, onChildRemoved: () => () => {}, get: async () => ({ val: () => null, key: path, exists: () => false, forEach: () => false }) };
+  // Stub MUST return a ref-like object from push() — returning null
+  // crashes callers that access .key (e.g. sendMessage → msgRef.key).
+  const fakeRef = { key: '__stub__', parent: null, child: () => fakeRef };
+  return { ...fakeRef, set: async () => {}, update: async () => {}, push: () => fakeRef, remove: async () => {}, onValue: () => () => {}, onChildAdded: () => () => {}, onChildChanged: () => () => {}, onChildRemoved: () => () => {}, get: async () => ({ val: () => null, key: path, exists: () => false, forEach: () => false }) };
 }
 
 export async function set(r: DatabaseReference, value: unknown): Promise<void> {
@@ -184,4 +189,10 @@ export async function onDisconnectCancel(r: DatabaseReference): Promise<void> {
 export function serverTimestamp(): any {
   if (!fbServerTimestamp) return Date.now();
   return fbServerTimestamp();
+}
+
+/** Ensure the RTDB WebSocket is connected. Safe to call multiple times. */
+export function goOnline(): void {
+  if (!fbGoOnline || !isReady()) return;
+  try { fbGoOnline(getDatabaseInstance()); } catch {}
 }
