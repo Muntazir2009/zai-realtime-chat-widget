@@ -22,7 +22,7 @@ async function initFirebase() {
 
   const { initializeApp, getApps } = await import('firebase/app');
   const { getAuth } = await import('firebase/auth');
-  const { getDatabase } = await import('firebase/database');
+  const { getDatabase, connectDatabaseEmulator } = await import('firebase/database');
   const { getStorage } = await import('firebase/storage');
 
   const firebaseConfig = {
@@ -42,8 +42,21 @@ async function initFirebase() {
   }
 
   _auth = getAuth(_app);
-  _database = getDatabase(_app);
+  _database = getDatabase(_app, {
+    // Force long-lived WebSocket — avoids repeated reconnect overhead
+    // and eliminates the 5s polling fallback latency.
+    connectTimeout: 10_000,
+    // Cache up to 100MB of RTDB data client-side for instant reads
+    cacheSizeBytes: 100 * 1024 * 1024,
+  });
   _storage = getStorage(_app);
+
+  // Keep the WebSocket alive — prevent RTDB from going dormant
+  // when the tab is backgrounded (causes lag on return).
+  try {
+    const { goOnline } = await import('firebase/database');
+    goOnline(_database);
+  } catch {}
 }
 
 // Start initialization immediately in browser

@@ -72,6 +72,12 @@ class ChatStore {
   activeChatId: string | null = $state(null);
   messages: Message[] = $state([]);
   participants: User[] = $state([]);
+  // Fast O(1) dedup lookup — avoids Array.some() on every message
+  private _messageIdSet: Set<string> = new Set();
+  // Batch initial load: suppress per-message reactivity until all initial msgs arrive
+  private _initialLoadDone = false;
+  private _pendingInitialMessages: Message[] = [];
+  private _initialLoadFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
   // ---- Presence & typing ----
   presence: Map<string, PresenceState> = $state(new Map());
@@ -87,6 +93,8 @@ class ChatStore {
 
   // ---- User dictionary (PRD §IV.1: strip redundant user data from messages) ----
   userDict: Map<string, User> = $state(new Map());
+  // In-flight user fetches — prevents duplicate RTDB reads for the same UID
+  private _fetchingUsers: Set<string> = new Set();
 
   // ---- Listener unsubscribes ----
   private inboxUnsub: (() => void) | null = null;
@@ -123,6 +131,8 @@ class ChatStore {
    *  so a simple counter is the most bulletproof reactive signal. */
   reactionVersion: number = $state(0);
   private reactionUnsubs: Map<string, () => void> = new Map();
+  // Max concurrent reaction listeners — cap to prevent connection exhaustion
+  private static readonly MAX_REACTION_LISTENERS = 50;
 
   // ---- Idempotency tracking (bounded to prevent memory leak) ----
   private sentKeys = new Set<string>();
@@ -138,6 +148,10 @@ class ChatStore {
   // Last observed `meta.ts` per chat — used to detect when a new
   // message has arrived (i.e. when `meta.ts` increases).
   private lastMetaTsByChat = new Map<string, number>();
+
+  // ---- Read receipt debounce ----
+  private _markReadTimer: ReturnType<typeof setTimeout> | null = null;
+  private _pendingReadChatId: string | null = null;
 
   private addSentKey(key: string): boolean {
     if (this.sentKeys.has(key)) return false;
@@ -402,63 +416,55 @@ class ChatStore {
   }
 
   private async fetchUser(uid: string): Promise<void> {
-    // 1. Check IndexedDB cache — validate it's a real User (not corrupt proxy remnant)
-    const cached = await getUserProfile(uid);
-    if (cached && cached.displayName && cached.username) {
-      const m = new Map(this.userDict);
-      m.set(uid, cached);
-      this.userDict = m;
-      return;
-    }
+    // Skip if already known OR already being fetched
+    if (this.userDict.has(uid)) return;
+    if (this._fetchingUsers.has(uid)) return;
+    this._fetchingUsers.add(uid);
 
-    // 2. Primary lookup: user_index/{uid} → username → users/{username}
-    //    (users are stored under their username, NOT their uid)
-    const indexSnap = await rtdb.get(await rtdb.ref(`user_index/${uid}`));
-    if (indexSnap.exists()) {
-      const username = indexSnap.val() as string;
-      if (username) {
-        const userSnap = await rtdb.get(await rtdb.ref(`users/${username}`));
-        if (userSnap.exists()) {
-          const user = userSnap.val() as User;
-          if (user && user.displayName) {
-            const m = new Map(this.userDict);
-            m.set(uid, user);
-            this.userDict = m;
-            cacheUserProfiles([user]);
-            return;
+    try {
+      // 1. Check IndexedDB cache — validate it's a real User (not corrupt proxy remnant)
+      const cached = await getUserProfile(uid);
+      if (cached && cached.displayName && cached.username) {
+        const m = new Map(this.userDict);
+        m.set(uid, cached);
+        this.userDict = m;
+        return;
+      }
+
+      // 2. Primary lookup: user_index/{uid} → username → users/{username}
+      //    (users are stored under their username, NOT their uid)
+      const indexSnap = await rtdb.get(await rtdb.ref(`user_index/${uid}`));
+      if (indexSnap.exists()) {
+        const username = indexSnap.val() as string;
+        if (username) {
+          const userSnap = await rtdb.get(await rtdb.ref(`users/${username}`));
+          if (userSnap.exists()) {
+            const user = userSnap.val() as User;
+            if (user && user.displayName) {
+              const m = new Map(this.userDict);
+              m.set(uid, user);
+              this.userDict = m;
+              cacheUserProfiles([user]);
+              return;
+            }
           }
         }
       }
-    }
 
-    // 3. Fallback: try direct users/{uid} path (for alternative schemas)
-    const directSnap = await rtdb.get(await rtdb.ref(RTDB_PATHS.USER_PROFILE(uid)));
-    if (directSnap.exists()) {
-      const user = directSnap.val() as User;
-      if (user && user.displayName) {
-        const m = new Map(this.userDict);
-        m.set(uid, user);
-        this.userDict = m;
-        cacheUserProfiles([user]);
-        return;
-      }
-    }
-
-    // 4. Last resort: scan the entire users node (expensive, rarely needed)
-    const allSnap = await rtdb.get(await rtdb.ref('users'));
-    if (allSnap.exists()) {
-      let found = false;
-      allSnap.forEach((childSnap: any) => {
-        const u = childSnap.val() as User;
-        if (u && u.id === uid && u.displayName) {
+      // 3. Fallback: try direct users/{uid} path (for alternative schemas)
+      const directSnap = await rtdb.get(await rtdb.ref(RTDB_PATHS.USER_PROFILE(uid)));
+      if (directSnap.exists()) {
+        const user = directSnap.val() as User;
+        if (user && user.displayName) {
           const m = new Map(this.userDict);
-          m.set(uid, u);
+          m.set(uid, user);
           this.userDict = m;
-          cacheUserProfiles([u]);
-          found = true;
+          cacheUserProfiles([user]);
+          return;
         }
-      });
-      if (found) return;
+      }
+    } finally {
+      this._fetchingUsers.delete(uid);
     }
   }
 
@@ -470,6 +476,11 @@ class ChatStore {
     await this.closeChat();
     this.activeChatId = chatId;
     this.reactions = new Map();
+
+    // Reset batch loading state
+    this._initialLoadDone = false;
+    this._pendingInitialMessages = [];
+    if (this._initialLoadFlushTimer) { clearTimeout(this._initialLoadFlushTimer); this._initialLoadFlushTimer = null; }
 
     // Refresh activeTypingNames from existing map (if typing was tracked before open)
     this.activeTypingNames = (this.typingDisplayNames.get(chatId) ?? []).slice();
@@ -491,57 +502,74 @@ class ChatStore {
     const cached = await getCachedMessages(chatId);
     if (cached.length > 0) {
       this.messages = cached;
+      this._messageIdSet = new Set(cached.map(m => m.id));
     }
 
-    // Attach RTDB listener — PRD §IV.2: limitToLast(50)
+    // Attach RTDB listener — uses limitToLast(MAX_MESSAGES_IN_MEMORY)
     const msgRef = await rtdb.query(
       await rtdb.ref(RTDB_PATHS.CHAT_MESSAGES(chatId)),
       await rtdb.limitToLast(MAX_MESSAGES_IN_MEMORY),
     );
 
+    // Schedule the batch flush — after this timer fires, we switch to
+    // per-message reactive updates. The 150ms window captures all initial
+    // onChildAdded callbacks that Firebase fires synchronously/synchronously.
+    this._initialLoadFlushTimer = setTimeout(() => {
+      this._initialLoadDone = true;
+      this._initialLoadFlushTimer = null;
+      // Flush any remaining batched messages
+      if (this._pendingInitialMessages.length > 0) {
+        this._flushPendingMessages();
+      }
+      // Now attach reaction listeners for the loaded messages (capped)
+      this.attachReactionListenersForVisible(chatId);
+    }, 150);
+
     this.messageUnsub = await rtdb.onChildAdded(msgRef, (snap) => {
       const raw = snap.val() as Message;
       if (!raw) return;
       const msg: Message = { ...raw, edited: raw.edited ?? false };
-      if (this.messages.some((m) => m.id === msg.id)) return;
 
-      this.messages = [...this.messages, msg].sort((a, b) => a.ts - b.ts);
-      if (this.messages.length > MAX_MESSAGES_IN_MEMORY) {
-        this.messages = this.messages.slice(-MAX_MESSAGES_IN_MEMORY);
-      }
-      // Attach reaction listener for new messages
-      if (this.activeChatId) {
-        this.attachSingleReactionListener(this.activeChatId, msg.id);
-      }
-      // Re-try typing listener if it failed to attach (new message sender
-      // gives us a participant UID we may not have had before).
-      if (this.activeChatId && !this.globalTypingUnsubs.has(this.activeChatId)) {
-        this.attachGlobalTypingListener(this.activeChatId).catch(() => {});
-      }
-      // Auto-mark as read when a new message arrives (user has chat open)
-      if (this.activeChatId && msg.sid !== authStore.user?.id) {
-        this.markAsRead(this.activeChatId);
-      }
+      // O(1) dedup via Set instead of O(n) Array.some()
+      if (this._messageIdSet.has(msg.id)) return;
+      this._messageIdSet.add(msg.id);
 
-      // ── Message sound (defensive double-trigger) ──
-      // The primary sound trigger lives in `attachChatMetaListener`,
-      // which fires for ALL inbox chats (including the active one).
-      // For the active chat the meta-listener's `isViewingThisChat`
-      // check correctly suppresses the sound. We keep this explicit
-      // per-message check here as a defensive guard for the rare case
-      // where the meta listener's `meta.ts` comparison misses (e.g.
-      // clock-skew edge cases) — when the user is actively viewing
-      // this chat we never want a sound.
-      if (
-        msg.sid !== authStore.user?.id &&
-        msg.t !== 'system' &&
-        prefsStore.messageSound
-      ) {
-        const isViewingThisChat =
-          uiStore.view === 'conversation' && this.activeChatId === chatId;
-        if (!isViewingThisChat) {
-          playMessageSound();
+      if (this._initialLoadDone) {
+        // ── Streaming mode: single-message reactive update ──
+        this.messages = this._insertSorted(this.messages, msg);
+        if (this.messages.length > MAX_MESSAGES_IN_MEMORY) {
+          const removed = this.messages.slice(0, this.messages.length - MAX_MESSAGES_IN_MEMORY);
+          this.messages = this.messages.slice(-MAX_MESSAGES_IN_MEMORY);
+          for (const r of removed) this._messageIdSet.delete(r.id);
         }
+        // Attach reaction listener for the new message (capped)
+        if (this.activeChatId) {
+          this.attachSingleReactionListener(this.activeChatId, msg.id);
+        }
+        // Re-try typing listener if it failed to attach
+        if (this.activeChatId && !this.globalTypingUnsubs.has(this.activeChatId)) {
+          this.attachGlobalTypingListener(this.activeChatId).catch(() => {});
+        }
+        // Debounced mark-as-read
+        if (this.activeChatId && msg.sid !== authStore.user?.id) {
+          this.debouncedMarkAsRead(this.activeChatId);
+        }
+
+        // ── Message sound (defensive double-trigger) ──
+        if (
+          msg.sid !== authStore.user?.id &&
+          msg.t !== 'system' &&
+          prefsStore.messageSound
+        ) {
+          const isViewingThisChat =
+            uiStore.view === 'conversation' && this.activeChatId === chatId;
+          if (!isViewingThisChat) {
+            playMessageSound();
+          }
+        }
+      } else {
+        // ── Batch mode: collect without triggering reactivity ──
+        this._pendingInitialMessages.push(msg);
       }
     });
 
@@ -583,6 +611,7 @@ class ChatStore {
     this.messageRemovedUnsub = await rtdb.onChildRemoved(msgRef, (snap) => {
       const msgId = snap.key;
       if (msgId) {
+        this._messageIdSet.delete(msgId);
         this.messages = this.messages.filter(m => m.id !== msgId);
       }
     });
@@ -606,6 +635,20 @@ class ChatStore {
   }
 
   async closeChat(): Promise<void> {
+    // Cancel pending batch flush
+    if (this._initialLoadFlushTimer) {
+      clearTimeout(this._initialLoadFlushTimer);
+      this._initialLoadFlushTimer = null;
+    }
+    this._initialLoadDone = false;
+    this._pendingInitialMessages = [];
+    // Cancel pending read receipt
+    if (this._markReadTimer) {
+      clearTimeout(this._markReadTimer);
+      this._markReadTimer = null;
+      this._pendingReadChatId = null;
+    }
+
     if (this.messageUnsub) {
       this.messageUnsub();
       this.messageUnsub = null;
@@ -632,7 +675,69 @@ class ChatStore {
 
     this.activeChatId = null;
     this.messages = [];
+    this._messageIdSet = new Set();
     this.participants = [];
+  }
+
+  // ── Performance helpers ──
+
+  /** Binary-insert a message into a sorted array (O(log n) find + O(n) shift).
+   *  Messages are sorted by `ts` ascending. */
+  private _insertSorted(arr: Message[], msg: Message): Message[] {
+    const ts = msg.ts;
+    let lo = 0, hi = arr.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (arr[mid]!.ts < ts) lo = mid + 1; else hi = mid;
+    }
+    // Insert at position `lo`
+    const result = new Array(arr.length + 1);
+    result.set(arr.slice(0, lo), 0);
+    result[lo] = msg;
+    result.set(arr.slice(lo), lo + 1);
+    return result;
+  }
+
+  /** Flush all batched initial messages into reactive state in one shot.
+   *  Called once after the initial load window closes. */
+  private _flushPendingMessages(): void {
+    const pending = this._pendingInitialMessages;
+    if (pending.length === 0) return;
+    this._pendingInitialMessages = [];
+
+    // Merge with cached messages, dedup via Set
+    const merged = new Map<string, Message>();
+    for (const m of this.messages) merged.set(m.id, m);
+    for (const m of pending) {
+      if (!merged.has(m.id)) {
+        merged.set(m.id, m);
+        this._messageIdSet.add(m.id);
+      }
+    }
+
+    // Sort once and trim
+    let sorted = Array.from(merged.values()).sort((a, b) => a.ts - b.ts);
+    if (sorted.length > MAX_MESSAGES_IN_MEMORY) {
+      const removed = sorted.slice(0, sorted.length - MAX_MESSAGES_IN_MEMORY);
+      sorted = sorted.slice(-MAX_MESSAGES_IN_MEMORY);
+      for (const r of removed) this._messageIdSet.delete(r.id);
+    }
+
+    this.messages = sorted;
+  }
+
+  /** Debounced markAsRead — coalesces rapid incoming messages into one RTDB write. */
+  private debouncedMarkAsRead(chatId: string): void {
+    if (this._markReadTimer) {
+      clearTimeout(this._markReadTimer);
+    }
+    this._pendingReadChatId = chatId;
+    this._markReadTimer = setTimeout(() => {
+      this._markReadTimer = null;
+      const cid = this._pendingReadChatId;
+      this._pendingReadChatId = null;
+      if (cid) this.markAsRead(cid);
+    }, 300);
   }
 
   /** Delete a chat: removes user_chats entry for current user (leaves the chat for them) */
@@ -750,14 +855,16 @@ class ChatStore {
 
     const updates = this.buildFanOutUpdates(chatId, messageId, message, content.slice(0, 100));
     // Optimistic: add to local array immediately so UI updates instantly
-    this.messages = [...this.messages, message].sort((a, b) => a.ts - b.ts);
+    this._messageIdSet.add(message.id);
+    this.messages = this._insertSorted(this.messages, message);
     await retryWithBackoff(
       async () => rtdb.update(await rtdb.ref('/'), updates),
       'sendMessage'
     ).catch((err) => {
       console.error('[sendMessage] All retries failed:', err);
       toastStore.error('Failed to send message. Check your connection.');
-      this.messages = this.messages.filter((m) => m.id !== messageId);
+      this._messageIdSet.delete(message.id);
+      this.messages = this.messages.filter((m) => m.id !== message.id);
     });
   }
 
@@ -815,13 +922,15 @@ class ChatStore {
 
     const updates = this.buildFanOutUpdates(chatId, messageId, message, caption ?? '📷 Photo');
     // Optimistic: add to local array immediately
-    this.messages = [...this.messages, message].sort((a, b) => a.ts - b.ts);
+    this._messageIdSet.add(message.id);
+    this.messages = this._insertSorted(this.messages, message);
     await retryWithBackoff(
       async () => rtdb.update(await rtdb.ref('/'), updates),
       'sendImageMessage'
     ).catch((err) => {
       console.error('[sendImageMessage] All retries failed:', err);
       toastStore.error('Failed to send photo. Check your connection.');
+      this._messageIdSet.delete(message.id);
       this.messages = this.messages.filter((m) => m.id !== messageId);
     });
   }
@@ -847,13 +956,15 @@ class ChatStore {
     this.recordSelfMessage(chatId, message.ts);
 
     const updates = this.buildFanOutUpdates(chatId, messageId, message, `🎬 Video ${durStr}`);
-    this.messages = [...this.messages, message].sort((a, b) => a.ts - b.ts);
+    this._messageIdSet.add(message.id);
+    this.messages = this._insertSorted(this.messages, message);
     await retryWithBackoff(
       async () => rtdb.update(await rtdb.ref('/'), updates),
       'sendVideoMessage'
     ).catch((err) => {
       console.error('[sendVideoMessage] All retries failed:', err);
       toastStore.error('Failed to send video. Check your connection.');
+      this._messageIdSet.delete(message.id);
       this.messages = this.messages.filter((m) => m.id !== messageId);
     });
   }
@@ -880,13 +991,15 @@ class ChatStore {
 
     const updates = this.buildFanOutUpdates(chatId, messageId, message, '🎙 Voice message');
     // Optimistic: add to local array immediately
-    this.messages = [...this.messages, message].sort((a, b) => a.ts - b.ts);
+    this._messageIdSet.add(message.id);
+    this.messages = this._insertSorted(this.messages, message);
     await retryWithBackoff(
       async () => rtdb.update(await rtdb.ref('/'), updates),
       'sendVoiceMessage'
     ).catch((err) => {
       console.error('[sendVoiceMessage] All retries failed:', err);
       toastStore.error('Failed to send voice message. Check your connection.');
+      this._messageIdSet.delete(message.id);
       this.messages = this.messages.filter((m) => m.id !== messageId);
     });
   }
@@ -1697,13 +1810,21 @@ class ChatStore {
   // Reactions
   // ============================================================
 
-  /** Attach per-message reaction listeners for all current messages */
-  private async attachReactionListeners(chatId: string): Promise<void> {
+  /** Attach reaction listeners for the most recent visible messages only.
+   *  Caps at MAX_REACTION_LISTENERS to prevent connection exhaustion with 450 messages. */
+  private async attachReactionListenersForVisible(chatId: string): Promise<void> {
     this.detachReactionListeners();
-    // Listen for reactions on each message we currently have
-    for (const msg of this.messages) {
+    // Only listen to reactions for the LAST N messages (most likely to be visible/interacted with)
+    const visible = this.messages.slice(-ChatStore.MAX_REACTION_LISTENERS);
+    for (const msg of visible) {
       this.attachSingleReactionListener(chatId, msg.id);
     }
+  }
+
+  /** Attach per-message reaction listeners for all current messages */
+  private async attachReactionListeners(chatId: string): Promise<void> {
+    // Delegate to the capped version
+    return this.attachReactionListenersForVisible(chatId);
   }
 
   /** Listen for reactions on a single message — single onValue instead of 3 child listeners */

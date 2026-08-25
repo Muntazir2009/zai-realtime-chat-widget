@@ -31,10 +31,12 @@ let fbServerTimestamp: () => any;
 
 let _loadPromise: Promise<void> | null = null;
 let _rtdbLoaded = false;
+let _rtdbResolveReady: (() => void) | null = null;
+const _rtdbReady = new Promise<void>(resolve => { _rtdbResolveReady = resolve; });
 
-/** Ensures both the Firebase app is initialized AND the database module is loaded */
+/** Fast path: once loaded, skip the async overhead entirely. */
 function ensureLoaded(): Promise<void> {
-  if (_rtdbLoaded && isReady()) return Promise.resolve();
+  if (_rtdbLoaded && isReady()) return _rtdbReady;
   if (_loadPromise) return _loadPromise;
   _loadPromise = _doLoad();
   return _loadPromise;
@@ -65,6 +67,7 @@ async function _doLoad() {
   fbOnDisconnect = db.onDisconnect as any;
   fbServerTimestamp = db.serverTimestamp;
   _rtdbLoaded = true;
+  _rtdbResolveReady?.();
 }
 
 // Eagerly start loading in browser
@@ -76,12 +79,8 @@ export async function ref(path: string): Promise<DatabaseReference> {
   if (!browser) {
     return _stubRef(path);
   }
-  // Always await full initialization — do NOT early-return with stub
-  // when Firebase is still loading (that was the root cause of all
-  // real-time features silently failing).
   await ensureLoaded();
   if (!isReady() || !fbRef) {
-    console.warn('[rtdb] ref() called but Firebase not ready, returning stub for:', path);
     return _stubRef(path);
   }
   return fbRef(getDatabaseInstance(), path);
@@ -92,62 +91,62 @@ function _stubRef(path: string): DatabaseReference {
 }
 
 export async function set(r: DatabaseReference, value: unknown): Promise<void> {
-  await ensureLoaded();
+  if (!_rtdbLoaded) await ensureLoaded();
   return fbSet(r, value);
 }
 
 export async function update(r: DatabaseReference, values: Record<string, unknown>): Promise<void> {
-  await ensureLoaded();
+  if (!_rtdbLoaded) await ensureLoaded();
   return fbUpdate(r, values);
 }
 
 export async function push(r: DatabaseReference, value?: unknown): Promise<DatabaseReference> {
-  await ensureLoaded();
+  if (!_rtdbLoaded) await ensureLoaded();
   return fbPush(r, value);
 }
 
 export async function remove(r: DatabaseReference): Promise<void> {
-  await ensureLoaded();
+  if (!_rtdbLoaded) await ensureLoaded();
   return fbRemove(r);
 }
 
 export async function onValue(r: DatabaseReference, cb: (snap: DataSnapshot) => void): Promise<Unsubscribe> {
-  await ensureLoaded();
+  if (!_rtdbLoaded) await ensureLoaded();
   return fbOnValue!(r, cb);
 }
 
 export async function onChildAdded(r: DatabaseReference, cb: (snap: DataSnapshot, prev?: string | null) => void): Promise<Unsubscribe> {
-  await ensureLoaded();
+  if (!_rtdbLoaded) await ensureLoaded();
   return fbOnChildAdded!(r, cb);
 }
 
 export async function onChildChanged(r: DatabaseReference, cb: (snap: DataSnapshot, prev?: string | null) => void): Promise<Unsubscribe> {
-  await ensureLoaded();
+  if (!_rtdbLoaded) await ensureLoaded();
   return fbOnChildChanged!(r, cb);
 }
 
 export async function onChildRemoved(r: DatabaseReference, cb: (snap: DataSnapshot) => void): Promise<Unsubscribe> {
-  await ensureLoaded();
+  if (!_rtdbLoaded) await ensureLoaded();
   return fbOnChildRemoved!(r, cb);
 }
 
 export async function get(r: DatabaseReference): Promise<DataSnapshot> {
-  await ensureLoaded();
+  if (!_rtdbLoaded) await ensureLoaded();
   return fbGet(r);
 }
 
 export async function query(ref: DatabaseReference, ...constraints: any[]): Promise<DatabaseReference> {
-  await ensureLoaded();
+  if (!_rtdbLoaded) await ensureLoaded();
   return fbQuery(ref, ...constraints);
 }
 
 export async function limitToLast(count: number): Promise<any> {
-  await ensureLoaded();
+  if (!_rtdbLoaded) await ensureLoaded();
   return fbLimitToLast(count);
 }
 
 export async function startAt(value: any, key?: string): Promise<any> {
-  await ensureLoaded();
+  if (!_rtdbLoaded) await ensureLoaded();
   return fbStartAt(value, key);
 }
 
@@ -160,24 +159,24 @@ export async function transaction(
   r: DatabaseReference,
   updateFn: (current: unknown) => unknown,
 ): Promise<{ committed: boolean; snapshot: DataSnapshot }> {
-  await ensureLoaded();
+  if (!_rtdbLoaded) await ensureLoaded();
   return fbTransaction!(r, updateFn);
 }
 
 export async function onDisconnectSet(r: DatabaseReference, value: unknown): Promise<void> {
-  await ensureLoaded();
+  if (!_rtdbLoaded) await ensureLoaded();
   if (!fbOnDisconnect) return;
   return fbOnDisconnect(r).set(value);
 }
 
 export async function onDisconnectRemove(r: DatabaseReference): Promise<void> {
-  await ensureLoaded();
+  if (!_rtdbLoaded) await ensureLoaded();
   if (!fbOnDisconnect) return;
   return fbOnDisconnect(r).remove();
 }
 
 export async function onDisconnectCancel(r: DatabaseReference): Promise<void> {
-  await ensureLoaded();
+  if (!_rtdbLoaded) await ensureLoaded();
   if (!fbOnDisconnect) return;
   return fbOnDisconnect(r).cancel();
 }
