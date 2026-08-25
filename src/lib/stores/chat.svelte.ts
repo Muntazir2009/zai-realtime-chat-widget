@@ -687,12 +687,8 @@ class ChatStore {
       const mid = (lo + hi) >>> 1;
       if (arr[mid]!.ts < ts) lo = mid + 1; else hi = mid;
     }
-    // Insert at position `lo`
-    const result = new Array(arr.length + 1);
-    result.set(arr.slice(0, lo), 0);
-    result[lo] = msg;
-    result.set(arr.slice(lo), lo + 1);
-    return result;
+    // Insert at position `lo` using spread (Array.set is TypedArray-only)
+    return [...arr.slice(0, lo), msg, ...arr.slice(lo)];
   }
 
   /** Flush all batched initial messages into reactive state in one shot.

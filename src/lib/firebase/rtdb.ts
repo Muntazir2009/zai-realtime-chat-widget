@@ -97,11 +97,14 @@ function _stubRef(path: string): DatabaseReference {
 
 export async function set(r: DatabaseReference, value: unknown): Promise<void> {
   if (!_rtdbLoaded) await ensureLoaded();
+  // Guard: if ref is a stub (SSR or pre-init), call its no-op .set()
+  if ((r as any).key === '__stub__') return (r as any).set(value);
   return fbSet(r, value);
 }
 
 export async function update(r: DatabaseReference, values: Record<string, unknown>): Promise<void> {
   if (!_rtdbLoaded) await ensureLoaded();
+  if ((r as any).key === '__stub__') return (r as any).update(values);
   return fbUpdate(r, values);
 }
 
