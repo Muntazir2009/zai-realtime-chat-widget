@@ -241,11 +241,11 @@ class PresenceManager {
 
     this.isTyping = false;
 
+    // Just remove the node — the parent-path typing listener in ChatStore
+    // treats absence as "not typing". No need for writeTyping(false).
     rtdb.ref(RTDB_PATHS.TYPING(chatId, uid)).then((ref) => {
       rtdb.remove(ref).catch(() => {});
     });
-
-    this.writeTyping(chatId, uid, false);
 
     const timer = this.typingTimers.get(chatId);
     if (timer) {

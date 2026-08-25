@@ -130,9 +130,7 @@ class ChatStore {
    *  Svelte 5 cross-component $state tracking is unreliable for Map values,
    *  so a simple counter is the most bulletproof reactive signal. */
   reactionVersion: number = $state(0);
-  private reactionUnsubs: Map<string, () => void> = new Map();
-  // Max concurrent reaction listeners — cap to prevent connection exhaustion
-  private static readonly MAX_REACTION_LISTENERS = 50;
+  private reactionUnsub: (() => void) | null = null; // Single parent listener
 
   // ---- Idempotency tracking (bounded to prevent memory leak) ----
   private sentKeys = new Set<string>();
@@ -252,8 +250,8 @@ class ChatStore {
       this.userChats = newMap;
     });
 
-    // Attach global typing listeners for all inbox chats
-    this.attachAllInboxTypingListeners().catch(() => {});
+    // Typing listeners are now lazy — only attached when a chat is opened.
+    // This eliminates N listeners on inbox load where N = number of chats.
   }
 
   /** Listen for chat meta changes so inbox stays sorted when new messages arrive */
@@ -280,8 +278,6 @@ class ChatStore {
           }
         }
 
-        // Attach global typing listener for inbox preview
-        this.attachGlobalTypingListener(chatId).catch(() => {});
         // Fetch participant profiles and attach presence listeners
         const otherIds: string[] = [];
         const pids = meta.participantIds ?? [];
@@ -324,8 +320,6 @@ class ChatStore {
       const newMap = new Map(this.chats);
       newMap.set(chatId, meta);
       this.chats = newMap;
-      // Attach global typing listener for inbox preview
-      this.attachGlobalTypingListener(chatId).catch(() => {});
       // Fetch profiles for known participants
       if (meta.participantIds) {
         for (const pid of meta.participantIds) {
@@ -521,8 +515,7 @@ class ChatStore {
       if (this._pendingInitialMessages.length > 0) {
         this._flushPendingMessages();
       }
-      // Now attach reaction listeners for the loaded messages (capped)
-      this.attachReactionListenersForVisible(chatId);
+      // Reactions are handled by the parent listener attached below
     }, 150);
 
     this.messageUnsub = await rtdb.onChildAdded(msgRef, (snap) => {
@@ -542,10 +535,7 @@ class ChatStore {
           this.messages = this.messages.slice(-MAX_MESSAGES_IN_MEMORY);
           for (const r of removed) this._messageIdSet.delete(r.id);
         }
-        // Attach reaction listener for the new message (capped)
-        if (this.activeChatId) {
-          this.attachSingleReactionListener(this.activeChatId, msg.id);
-        }
+        // Reaction listener is parent-level — no per-message attach needed
         // Re-try typing listener if it failed to attach
         if (this.activeChatId && !this.globalTypingUnsubs.has(this.activeChatId)) {
           this.attachGlobalTypingListener(this.activeChatId).catch(() => {});
@@ -616,22 +606,26 @@ class ChatStore {
       }
     });
 
+    // ── Fire-and-forget all secondary listeners in parallel ──
+    // These are non-blocking — messages are already streaming via the 3 listeners above.
+    // Previously sequential (await chain), now parallel for faster chat open.
     this.markAsRead(chatId);
-    await this.attachPresenceListeners(chatId);
     this.startPresenceStaleCheck();
-
-    // ── Heal participantIds if broken (for read receipts, avatar, etc.) ──
     this._healParticipantIdsFromMessages(chatId);
 
-    // ── Typing: ensure parent listener is attached ──
-    if (!this.globalTypingUnsubs.has(chatId)) {
-      this.attachGlobalTypingListener(chatId).catch(() => {});
-    }
-    await this.attachOtherUserReadListener(chatId);
-    this.attachPinnedListener(chatId);
-    this.attachReactionListeners(chatId);
+    // Attach all secondary listeners concurrently — no sequential await
+    const secondaryListeners: Promise<void>[] = [
+      this.attachPresenceListeners(chatId),
+      this.attachGlobalTypingListener(chatId),
+      this.attachOtherUserReadListener(chatId),
+      this.attachPinnedListener(chatId),
+      this.attachReactionListeners(chatId),
+    ];
     const user = authStore.user;
-    if (user) this.attachStarredListener(user.id, chatId);
+    if (user) secondaryListeners.push(this.attachStarredListener(user.id, chatId));
+
+    // Fire all in parallel, don't block the chat open on these
+    Promise.allSettled(secondaryListeners).catch(() => {});
   }
 
   async closeChat(): Promise<void> {
@@ -662,7 +656,10 @@ class ChatStore {
       this.messageRemovedUnsub = null;
     }
     // Don't detach presence listeners — they stay global for the inbox online dots
-    // Don't detach global typing listeners — they persist for inbox preview
+    // Detach typing listener for this chat (now per-chat, not global)
+    if (this.activeChatId) {
+      this.detachGlobalTypingListener(this.activeChatId);
+    }
     this.activeTypingNames = [];
     this.detachOtherUserReadListener();
     this.detachPinnedListener();
@@ -1060,9 +1057,7 @@ class ChatStore {
     // messages are sent and the chat meta (lm, ts) changes on the server.
     this.attachChatMetaListener(chatId).catch(() => {});
 
-    // Attach global typing listener for inbox preview
-    this.attachGlobalTypingListener(chatId).catch(() => {});
-
+    // Typing listener will be attached when the user opens this chat
     return chatId;
   }
 
@@ -1157,7 +1152,7 @@ class ChatStore {
         }
       }
       if (changed) this.presence = newMap;
-    }, 15_000);
+    }, 30_000); // 30s — was 15s, reduced timer overhead
   }
 
   private stopPresenceStaleCheck(): void {
@@ -1278,12 +1273,8 @@ class ChatStore {
     }
   }
 
-  /** Attach global typing listeners for ALL chats in the inbox. */
-  async attachAllInboxTypingListeners(): Promise<void> {
-    for (const chatId of this.userChats.keys()) {
-      this.attachGlobalTypingListener(chatId).catch(() => {});
-    }
-  }
+  // attachAllInboxTypingListeners removed — typing listeners are now
+  // attached lazily only when opening a specific chat.
 
   // ============================================================
   // Read Receipts — listen to OTHER user's user_chats entry
@@ -1810,57 +1801,45 @@ class ChatStore {
   // Reactions
   // ============================================================
 
-  /** Attach reaction listeners for the most recent visible messages only.
-   *  Caps at MAX_REACTION_LISTENERS to prevent connection exhaustion with 450 messages. */
-  private async attachReactionListenersForVisible(chatId: string): Promise<void> {
-    this.detachReactionListeners();
-    // Only listen to reactions for the LAST N messages (most likely to be visible/interacted with)
-    const visible = this.messages.slice(-ChatStore.MAX_REACTION_LISTENERS);
-    for (const msg of visible) {
-      this.attachSingleReactionListener(chatId, msg.id);
-    }
-  }
-
-  /** Attach per-message reaction listeners for all current messages */
+  /** Attach a SINGLE parent reaction listener for the active chat.
+   *  Replaces up to 50 individual per-message listeners.
+   *  One onValue on reactions/{chatId} handles all messages at once. */
   private async attachReactionListeners(chatId: string): Promise<void> {
-    // Delegate to the capped version
-    return this.attachReactionListenersForVisible(chatId);
-  }
+    this.detachReactionListeners();
 
-  /** Listen for reactions on a single message — single onValue instead of 3 child listeners */
-  private async attachSingleReactionListener(chatId: string, messageId: string): Promise<void> {
-    if (this.reactionUnsubs.has(messageId)) return;
+    const r = await rtdb.ref(`reactions/${chatId}`);
+    this.reactionUnsub = await rtdb.onValue(r, (snap) => {
+      if (!snap.exists()) return;
 
-    const r = await rtdb.ref(RTDB_PATHS.REACTIONS(chatId, messageId));
-
-    // Single onValue listener replaces 3 separate child listeners (150 → 50 for 50 msgs)
-    const unsub = await rtdb.onValue(r, (snap) => {
-      // Build the complete reaction list first, then assign once
-      const newReactions: Reaction[] = [];
-      if (snap.exists()) {
-        snap.forEach((childSnap: any) => {
-          const emoji = childSnap.key;
+      // Build a complete map of messageId → reactions from the single snapshot
+      const newMap = new Map<string, Reaction[]>();
+      snap.forEach((msgSnap: any) => {
+        const messageId = msgSnap.key;
+        if (!messageId) return;
+        const reactions: Reaction[] = [];
+        msgSnap.forEach((emojiSnap: any) => {
+          const emoji = emojiSnap.key;
           if (!emoji) return;
-          const data = childSnap.val() as { uids?: string[] } | null;
+          const data = emojiSnap.val() as { uids?: string[] } | null;
           const uids = data?.uids ?? [];
           if (uids.length > 0) {
-            newReactions.push({ emoji, uids });
+            reactions.push({ emoji, uids });
           }
         });
-      }
+        if (reactions.length > 0) {
+          newMap.set(messageId, reactions);
+        }
+      });
 
-      // Only update if something actually changed (prevents overwriting optimistic state)
-      const current = this.reactions.get(messageId);
-      const currentJson = JSON.stringify(current ?? []);
-      const newJson = JSON.stringify(newReactions);
+      // Only update if something changed
+      if (newMap.size === 0 && this.reactions.size === 0) return;
+      const currentJson = JSON.stringify(Array.from(this.reactions.entries()));
+      const newJson = JSON.stringify(Array.from(newMap.entries()));
       if (currentJson === newJson) return;
 
-      const updated = new Map(this.reactions);
-      updated.set(messageId, newReactions);
-      this.reactions = updated;
+      this.reactions = newMap;
       this.reactionVersion++;
     });
-    this.reactionUnsubs.set(messageId, unsub);
   }
 
   /** Update a single reaction entry in the reactions map */
@@ -1871,23 +1850,20 @@ class ChatStore {
     if (uids.length > 0) {
       filtered.push({ emoji, uids });
     }
-    newMap.set(messageId, filtered);
-    this.reactions = newMap;
-    this.reactionVersion++;
-  }
-
-  /** Remove a reaction entry from the reactions map */
-  private removeReaction(messageId: string, emoji: string): void {
-    const newMap = new Map(this.reactions);
-    const existing = newMap.get(messageId) ?? [];
-    newMap.set(messageId, existing.filter(r => r.emoji !== emoji));
+    if (filtered.length > 0) {
+      newMap.set(messageId, filtered);
+    } else {
+      newMap.delete(messageId);
+    }
     this.reactions = newMap;
     this.reactionVersion++;
   }
 
   private detachReactionListeners(): void {
-    for (const [, unsub] of this.reactionUnsubs) unsub();
-    this.reactionUnsubs.clear();
+    if (this.reactionUnsub) {
+      this.reactionUnsub();
+      this.reactionUnsub = null;
+    }
     this.reactions = new Map();
     this.reactionVersion++;
   }
